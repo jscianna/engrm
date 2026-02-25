@@ -1,9 +1,20 @@
 import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
-import { PlusCircle } from "lucide-react";
+import { Database, HardDrive, PlusCircle } from "lucide-react";
 import { MemoryCard } from "@/components/memory-card";
 import { Button } from "@/components/ui/button";
-import { getMemories } from "@/lib/memories";
+import { Card, CardContent } from "@/components/ui/card";
+import { getMemories, getMemoryStats } from "@/lib/memories";
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
 
 export default async function DashboardPage() {
   const { userId } = await auth();
@@ -12,6 +23,7 @@ export default async function DashboardPage() {
   }
 
   const memories = getMemories(userId);
+  const stats = getMemoryStats(userId);
 
   return (
     <div className="space-y-6">
@@ -19,7 +31,7 @@ export default async function DashboardPage() {
         <div>
           <p className="text-xs uppercase tracking-[0.22em] text-zinc-500">Dashboard</p>
           <h1 className="text-2xl font-semibold text-zinc-100">Your Permanent Memories</h1>
-          <p className="text-sm text-zinc-400">{memories.length} memories indexed across your personal vault.</p>
+          <p className="text-sm text-zinc-400">{stats.totalMemories} memories indexed across your personal vault.</p>
         </div>
         <Button asChild className="bg-cyan-400 text-zinc-950 hover:bg-cyan-300">
           <Link href="/dashboard/add">
@@ -27,6 +39,34 @@ export default async function DashboardPage() {
             Add Memory
           </Link>
         </Button>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-3">
+        <Card className="border-zinc-800 bg-zinc-900/60">
+          <CardContent className="p-5">
+            <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Memory Count</p>
+            <p className="flex items-center gap-2 text-2xl font-semibold text-zinc-100">
+              <Database className="h-5 w-5 text-cyan-300" />
+              {stats.totalMemories}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-zinc-800 bg-zinc-900/60">
+          <CardContent className="p-5">
+            <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Storage Usage</p>
+            <p className="flex items-center gap-2 text-2xl font-semibold text-zinc-100">
+              <HardDrive className="h-5 w-5 text-cyan-300" />
+              {formatBytes(stats.storageBytes)}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-zinc-800 bg-zinc-900/60">
+          <CardContent className="p-5">
+            <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Arweave Status</p>
+            <p className="text-2xl font-semibold text-zinc-100">{stats.committedMemories} committed</p>
+            <p className="text-sm text-zinc-400">{stats.pendingMemories} pending</p>
+          </CardContent>
+        </Card>
       </section>
 
       {memories.length === 0 ? (

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
-import type { MemoryListItem, MemoryRecord, MemorySourceType } from "@/lib/types";
+import type { MemoryDashboardStats, MemoryKind, MemoryListItem, MemoryRecord, MemorySourceType } from "@/lib/types";
 
 const dataDir = path.join(process.cwd(), "data");
 fs.mkdirSync(dataDir, { recursive: true });
@@ -24,6 +24,9 @@ function ensureInitialized() {
       user_id TEXT NOT NULL,
       title TEXT NOT NULL,
       source_type TEXT NOT NULL,
+      memory_type TEXT NOT NULL DEFAULT 'episodic',
+      importance INTEGER NOT NULL DEFAULT 5,
+      tags_csv TEXT NOT NULL DEFAULT '',
       source_url TEXT,
       file_name TEXT,
       content_text TEXT NOT NULL,
@@ -36,6 +39,19 @@ function ensureInitialized() {
     ON memories(user_id, created_at DESC);
   `);
 
+  const columns = db.prepare("PRAGMA table_info(memories)").all() as Array<{ name: string }>;
+  const columnNames = new Set(columns.map((column) => column.name));
+
+  if (!columnNames.has("memory_type")) {
+    db.exec("ALTER TABLE memories ADD COLUMN memory_type TEXT NOT NULL DEFAULT 'episodic'");
+  }
+  if (!columnNames.has("importance")) {
+    db.exec("ALTER TABLE memories ADD COLUMN importance INTEGER NOT NULL DEFAULT 5");
+  }
+  if (!columnNames.has("tags_csv")) {
+    db.exec("ALTER TABLE memories ADD COLUMN tags_csv TEXT NOT NULL DEFAULT ''");
+  }
+
   initialized = true;
 }
 
@@ -44,6 +60,9 @@ type MemoryRow = {
   user_id: string;
   title: string;
   source_type: MemorySourceType;
+  memory_type: MemoryKind;
+  importance: number;
+  tags_csv: string;
   source_url: string | null;
   file_name: string | null;
   content_text: string;
@@ -52,12 +71,22 @@ type MemoryRow = {
   created_at: string;
 };
 
+function parseTags(tagsCsv: string): string[] {
+  return tagsCsv
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
+
 function mapRow(row: MemoryRow): MemoryRecord {
   return {
     id: row.id,
     userId: row.user_id,
     title: row.title,
     sourceType: row.source_type,
+    memoryType: row.memory_type,
+    importance: row.importance,
+    tags: parseTags(row.tags_csv),
     sourceUrl: row.source_url,
     fileName: row.file_name,
     contentText: row.content_text,
@@ -76,19 +105,25 @@ export function insertMemory(memory: MemoryRecord): void {
         user_id,
         title,
         source_type,
+        memory_type,
+        importance,
+        tags_csv,
         source_url,
         file_name,
         content_text,
         content_hash,
         arweave_tx_id,
         created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
   ).run(
     memory.id,
     memory.userId,
     memory.title,
     memory.sourceType,
+    memory.memoryType,
+    memory.importance,
+    memory.tags.join(","),
     memory.sourceUrl,
     memory.fileName,
     memory.contentText,
@@ -104,6 +139,7 @@ export function listMemoriesByUser(userId: string, limit = 100): MemoryListItem[
     .prepare(
       `
       SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, arweave_tx_id, created_at
+      , memory_type, importance, tags_csv
       FROM memories
       WHERE user_id = ?
       ORDER BY datetime(created_at) DESC
@@ -119,6 +155,9 @@ export function listMemoriesByUser(userId: string, limit = 100): MemoryListItem[
       userId: record.userId,
       title: record.title,
       sourceType: record.sourceType,
+      memoryType: record.memoryType,
+      importance: record.importance,
+      tags: record.tags,
       sourceUrl: record.sourceUrl,
       fileName: record.fileName,
       contentHash: record.contentHash,
@@ -133,7 +172,7 @@ export function getMemoryById(id: string): MemoryRecord | null {
   const row = db
     .prepare(
       `
-      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, arweave_tx_id, created_at
+      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, arweave_tx_id, created_at, memory_type, importance, tags_csv
       FROM memories
       WHERE id = ?
     `,
@@ -153,7 +192,7 @@ export function getMemoriesByIds(ids: string[]): MemoryListItem[] {
   const rows = db
     .prepare(
       `
-      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, arweave_tx_id, created_at
+      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, arweave_tx_id, created_at, memory_type, importance, tags_csv
       FROM memories
       WHERE id IN (${placeholders})
     `,
@@ -167,6 +206,9 @@ export function getMemoriesByIds(ids: string[]): MemoryListItem[] {
       userId: record.userId,
       title: record.title,
       sourceType: record.sourceType,
+      memoryType: record.memoryType,
+      importance: record.importance,
+      tags: record.tags,
       sourceUrl: record.sourceUrl,
       fileName: record.fileName,
       contentHash: record.contentHash,
@@ -174,4 +216,36 @@ export function getMemoriesByIds(ids: string[]): MemoryListItem[] {
       createdAt: record.createdAt,
     };
   });
+}
+
+export function getDashboardStatsByUser(userId: string): MemoryDashboardStats {
+  ensureInitialized();
+  const row = db
+    .prepare(
+      `
+      SELECT
+        COUNT(*) AS total_memories,
+        SUM(CASE WHEN arweave_tx_id IS NOT NULL AND arweave_tx_id != '' THEN 1 ELSE 0 END) AS committed_memories,
+        SUM(LENGTH(content_text)) AS storage_bytes
+      FROM memories
+      WHERE user_id = ?
+    `,
+    )
+    .get(userId) as
+    | {
+        total_memories: number;
+        committed_memories: number;
+        storage_bytes: number | null;
+      }
+    | undefined;
+
+  const totalMemories = row?.total_memories ?? 0;
+  const committedMemories = row?.committed_memories ?? 0;
+
+  return {
+    totalMemories,
+    committedMemories,
+    pendingMemories: Math.max(totalMemories - committedMemories, 0),
+    storageBytes: row?.storage_bytes ?? 0,
+  };
 }

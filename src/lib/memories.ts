@@ -1,9 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { embedText } from "@/lib/embeddings";
 import { cleanText, extractUrlContent, hashContent } from "@/lib/content";
-import { getMemoriesByIds, getMemoryById, insertMemory, listMemoriesByUser } from "@/lib/db";
+import { getDashboardStatsByUser, getMemoriesByIds, getMemoryById, insertMemory, listMemoriesByUser } from "@/lib/db";
 import { uploadTextToArweave } from "@/lib/turbo";
-import type { MemoryListItem, MemoryRecord, MemorySearchResult, MemorySourceType } from "@/lib/types";
+import type {
+  MemoryDashboardStats,
+  MemoryKind,
+  MemoryListItem,
+  MemoryRecord,
+  MemorySearchResult,
+  MemorySourceType,
+} from "@/lib/types";
 import { semanticSearchVectors, upsertMemoryVector } from "@/lib/vector";
 
 export function getMemory(id: string): MemoryRecord | null {
@@ -12,6 +19,31 @@ export function getMemory(id: string): MemoryRecord | null {
 
 export function getMemories(userId: string): MemoryListItem[] {
   return listMemoriesByUser(userId, 200);
+}
+
+export function getMemoryStats(userId: string): MemoryDashboardStats {
+  return getDashboardStatsByUser(userId);
+}
+
+function normalizeImportance(input: number | undefined): number {
+  const value = Number.isFinite(input) ? Math.round(input as number) : 5;
+  return Math.max(1, Math.min(10, value));
+}
+
+function normalizeTags(tags?: string[] | string): string[] {
+  if (!tags) {
+    return [];
+  }
+
+  const raw = Array.isArray(tags) ? tags : tags.split(",");
+  const unique = new Set<string>();
+  for (const tag of raw) {
+    const cleaned = cleanText(tag).toLowerCase();
+    if (cleaned) {
+      unique.add(cleaned);
+    }
+  }
+  return Array.from(unique).slice(0, 12);
 }
 
 async function parseMemoryContent(input: {
@@ -64,6 +96,9 @@ export async function createMemory(params: {
   userId: string;
   title?: string;
   sourceType: MemorySourceType;
+  memoryType?: MemoryKind;
+  importance?: number;
+  tags?: string[] | string;
   text?: string;
   url?: string;
   file?: File;
@@ -78,11 +113,17 @@ export async function createMemory(params: {
   const memoryId = randomUUID();
   const title = cleanText(params.title ?? "") || parsed.fileName || "Untitled Memory";
   const contentHash = hashContent(parsed.contentText);
+  const memoryType = params.memoryType ?? "episodic";
+  const importance = normalizeImportance(params.importance);
+  const tags = normalizeTags(params.tags);
 
   const arweaveTxId = await uploadTextToArweave({
     title,
     content: parsed.contentText,
     sourceType: params.sourceType,
+    memoryType,
+    importance,
+    tags,
   });
 
   const memory: MemoryRecord = {
@@ -90,6 +131,9 @@ export async function createMemory(params: {
     userId: params.userId,
     title,
     sourceType: params.sourceType,
+    memoryType,
+    importance,
+    tags,
     sourceUrl: parsed.sourceUrl,
     fileName: parsed.fileName,
     contentText: parsed.contentText,
@@ -107,6 +151,8 @@ export async function createMemory(params: {
       userId: memory.userId,
       title: memory.title,
       sourceType: memory.sourceType,
+      memoryType: memory.memoryType,
+      importance: memory.importance,
       vector,
     });
   } catch (error) {
@@ -135,6 +181,33 @@ export async function searchMemories(userId: string, query: string): Promise<Mem
   const memoryById = new Map(memories.map((memory) => [memory.id, memory]));
 
   return hits
+    .map((hit) => ({
+      score: hit.score,
+      memory: memoryById.get(hit.item.id),
+    }))
+    .filter((result): result is { score: number; memory: MemoryListItem } => Boolean(result.memory));
+}
+
+export async function getRelatedMemories(params: {
+  userId: string;
+  memoryId: string;
+  contentText: string;
+  topK?: number;
+}): Promise<MemorySearchResult[]> {
+  const vector = await embedText(params.contentText.slice(0, 6000));
+  const hits = await semanticSearchVectors({
+    userId: params.userId,
+    query: params.contentText.slice(0, 600),
+    vector,
+    topK: (params.topK ?? 5) + 1,
+  });
+
+  const filtered = hits.filter((hit) => hit.item.id !== params.memoryId).slice(0, params.topK ?? 5);
+  const ids = filtered.map((hit) => hit.item.id);
+  const memories = getMemoriesByIds(ids);
+  const memoryById = new Map(memories.map((memory) => [memory.id, memory]));
+
+  return filtered
     .map((hit) => ({
       score: hit.score,
       memory: memoryById.get(hit.item.id),

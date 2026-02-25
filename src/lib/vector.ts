@@ -7,6 +7,8 @@ type MemoryVectorMetadata = {
   memoryId: string;
   title: string;
   sourceType: string;
+  memoryType: string;
+  importance: number;
 };
 
 const indexPath = path.join(process.cwd(), "data", "vectra");
@@ -38,6 +40,8 @@ export async function upsertMemoryVector(params: {
   userId: string;
   title: string;
   sourceType: string;
+  memoryType: string;
+  importance: number;
   vector: number[];
 }) {
   const index = await getIndex();
@@ -49,6 +53,8 @@ export async function upsertMemoryVector(params: {
       userId: params.userId,
       title: params.title,
       sourceType: params.sourceType,
+      memoryType: params.memoryType,
+      importance: params.importance,
     },
   });
 }

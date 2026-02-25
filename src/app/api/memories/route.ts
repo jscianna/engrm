@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { createMemory, getMemories } from "@/lib/memories";
-import type { MemorySourceType } from "@/lib/types";
+import type { MemoryKind, MemorySourceType } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -25,6 +25,12 @@ export async function POST(request: Request) {
     const formData = await request.formData();
 
     const sourceType = (formData.get("sourceType") || "text") as MemorySourceType;
+    const memoryType = (formData.get("memoryType") || "episodic") as MemoryKind;
+    const importance = Number(formData.get("importance") || 5);
+    const tags = ((formData.get("tags") as string) || "")
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean);
     const title = (formData.get("title") as string) || undefined;
     const text = (formData.get("text") as string) || undefined;
     const url = (formData.get("url") as string) || undefined;
@@ -33,6 +39,9 @@ export async function POST(request: Request) {
     const memory = await createMemory({
       userId,
       sourceType,
+      memoryType,
+      importance,
+      tags,
       title,
       text,
       url,

@@ -9,10 +9,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import type { MemoryKind } from "@/lib/types";
+
+const memoryTypes: MemoryKind[] = ["episodic", "semantic", "procedural", "self-model"];
 
 export default function AddMemoryPage() {
   const router = useRouter();
   const [sourceType, setSourceType] = useState<"text" | "url" | "file">("text");
+  const [memoryType, setMemoryType] = useState<MemoryKind>("episodic");
+  const [importance, setImportance] = useState(5);
+  const [tags, setTags] = useState("");
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [url, setUrl] = useState("");
@@ -26,6 +32,9 @@ export default function AddMemoryPage() {
     try {
       const formData = new FormData();
       formData.set("sourceType", sourceType);
+      formData.set("memoryType", memoryType);
+      formData.set("importance", String(importance));
+      formData.set("tags", tags);
       formData.set("title", title);
 
       if (sourceType === "text") {
@@ -77,6 +86,49 @@ export default function AddMemoryPage() {
               placeholder="Memory title (optional)"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
+              className="border-zinc-700 bg-zinc-900 text-zinc-100"
+            />
+
+            <div className="space-y-2">
+              <p className="text-xs uppercase tracking-wide text-zinc-500">Memory Type</p>
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                {memoryTypes.map((type) => (
+                  <Button
+                    key={type}
+                    type="button"
+                    variant={memoryType === type ? "default" : "outline"}
+                    onClick={() => setMemoryType(type)}
+                    className={
+                      memoryType === type
+                        ? "bg-cyan-400 text-zinc-950 hover:bg-cyan-300"
+                        : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+                    }
+                  >
+                    {type}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs uppercase tracking-wide text-zinc-500">Importance</p>
+                <p className="text-sm text-zinc-300">{importance}/10</p>
+              </div>
+              <input
+                type="range"
+                min={1}
+                max={10}
+                value={importance}
+                onChange={(event) => setImportance(Number(event.target.value))}
+                className="h-2 w-full cursor-pointer appearance-none rounded-full bg-zinc-800 accent-cyan-300"
+              />
+            </div>
+
+            <Input
+              placeholder="Tags (comma separated): work, arweave, research"
+              value={tags}
+              onChange={(event) => setTags(event.target.value)}
               className="border-zinc-700 bg-zinc-900 text-zinc-100"
             />
 

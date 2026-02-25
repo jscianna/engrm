@@ -19,10 +19,16 @@ export async function uploadTextToArweave({
   title,
   content,
   sourceType,
+  memoryType,
+  importance,
+  tags,
 }: {
   title: string;
   content: string;
   sourceType: "text" | "url" | "file";
+  memoryType: "episodic" | "semantic" | "procedural" | "self-model";
+  importance: number;
+  tags: string[];
 }): Promise<string | null> {
   const privateKey = getArweaveKey();
 
@@ -42,7 +48,10 @@ export async function uploadTextToArweave({
         { name: "App-Name", value: "MEMRY" },
         { name: "Content-Type", value: "text/plain; charset=utf-8" },
         { name: "Memory-Title", value: title.slice(0, 120) },
-        { name: "Memory-Type", value: sourceType },
+        { name: "Memory-Source-Type", value: sourceType },
+        { name: "Memory-Type", value: memoryType },
+        { name: "Memory-Importance", value: String(importance) },
+        { name: "Memory-Tags", value: tags.join(",").slice(0, 240) },
       ],
     },
   });

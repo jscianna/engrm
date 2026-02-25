@@ -14,6 +14,12 @@ export function MemoryCard({ memory }: { memory: MemoryListItem }) {
             <Badge variant="outline" className="border-zinc-700 text-zinc-300">
               {memory.sourceType}
             </Badge>
+            <Badge variant="outline" className="border-cyan-800/70 text-cyan-200">
+              {memory.memoryType}
+            </Badge>
+            <Badge variant="outline" className="border-zinc-700 text-zinc-300">
+              Importance {memory.importance}/10
+            </Badge>
             <span>{new Date(memory.createdAt).toLocaleString()}</span>
           </div>
         </CardHeader>
@@ -25,6 +31,15 @@ export function MemoryCard({ memory }: { memory: MemoryListItem }) {
             </div>
           ) : (
             <div className="text-amber-300">Arweave upload pending (set `ARWEAVE_JWK`)</div>
+          )}
+          {memory.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {memory.tags.slice(0, 4).map((tag) => (
+                <Badge key={tag} variant="secondary" className="bg-zinc-800 text-zinc-200">
+                  #{tag}
+                </Badge>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>
