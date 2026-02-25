@@ -1,18 +1,21 @@
 import { TurboFactory, type ArweaveJWK, type TokenType } from "@ardrive/turbo-sdk";
 
-const token = (process.env.TURBO_TOKEN as TokenType | undefined) ?? "arweave";
+export const turboToken = (process.env.TURBO_TOKEN as TokenType | undefined) ?? "arweave";
 
-function getArweaveKey(): ArweaveJWK | null {
+export function parseArweaveJwk(raw: string): ArweaveJWK {
+  try {
+    return JSON.parse(raw) as ArweaveJWK;
+  } catch {
+    throw new Error("Arweave JWK is not valid JSON");
+  }
+}
+
+export function getArweaveKeyFromEnv(): ArweaveJWK | null {
   const raw = process.env.ARWEAVE_JWK;
   if (!raw) {
     return null;
   }
-
-  try {
-    return JSON.parse(raw) as ArweaveJWK;
-  } catch {
-    throw new Error("ARWEAVE_JWK is not valid JSON");
-  }
+  return parseArweaveJwk(raw);
 }
 
 export async function uploadTextToArweave({
@@ -22,6 +25,7 @@ export async function uploadTextToArweave({
   memoryType,
   importance,
   tags,
+  jwk,
 }: {
   title: string;
   content: string;
@@ -29,8 +33,9 @@ export async function uploadTextToArweave({
   memoryType: "episodic" | "semantic" | "procedural" | "self-model";
   importance: number;
   tags: string[];
+  jwk?: ArweaveJWK | null;
 }): Promise<string | null> {
-  const privateKey = getArweaveKey();
+  const privateKey = jwk ?? getArweaveKeyFromEnv();
 
   if (!privateKey) {
     return null;
@@ -38,7 +43,7 @@ export async function uploadTextToArweave({
 
   const turbo = TurboFactory.authenticated({
     privateKey,
-    token,
+    token: turboToken,
   });
 
   const response = await turbo.upload({

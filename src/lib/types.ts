@@ -30,3 +30,11 @@ export type MemoryDashboardStats = {
   pendingMemories: number;
   storageBytes: number;
 };
+
+export type ArweaveWalletStatus = {
+  source: "user" | "env" | "none";
+  hasWallet: boolean;
+  address: string | null;
+  balanceAr: string | null;
+  token: string;
+};

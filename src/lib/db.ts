@@ -37,6 +37,12 @@ function ensureInitialized() {
 
     CREATE INDEX IF NOT EXISTS idx_memories_user_created_at
     ON memories(user_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS user_settings (
+      user_id TEXT PRIMARY KEY,
+      arweave_jwk TEXT,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   const columns = db.prepare("PRAGMA table_info(memories)").all() as Array<{ name: string }>;
@@ -248,4 +254,56 @@ export function getDashboardStatsByUser(userId: string): MemoryDashboardStats {
     pendingMemories: Math.max(totalMemories - committedMemories, 0),
     storageBytes: row?.storage_bytes ?? 0,
   };
+}
+
+export function updateMemoryArweaveTx(memoryId: string, userId: string, arweaveTxId: string): void {
+  ensureInitialized();
+  db.prepare(
+    `
+      UPDATE memories
+      SET arweave_tx_id = ?
+      WHERE id = ? AND user_id = ?
+    `,
+  ).run(arweaveTxId, memoryId, userId);
+}
+
+export function setUserArweaveJwk(userId: string, jwkJson: string): void {
+  ensureInitialized();
+  db.prepare(
+    `
+      INSERT INTO user_settings (user_id, arweave_jwk, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        arweave_jwk = excluded.arweave_jwk,
+        updated_at = excluded.updated_at
+    `,
+  ).run(userId, jwkJson, new Date().toISOString());
+}
+
+export function clearUserArweaveJwk(userId: string): void {
+  ensureInitialized();
+  db.prepare(
+    `
+      INSERT INTO user_settings (user_id, arweave_jwk, updated_at)
+      VALUES (?, NULL, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        arweave_jwk = NULL,
+        updated_at = excluded.updated_at
+    `,
+  ).run(userId, new Date().toISOString());
+}
+
+export function getUserArweaveJwk(userId: string): string | null {
+  ensureInitialized();
+  const row = db
+    .prepare(
+      `
+      SELECT arweave_jwk
+      FROM user_settings
+      WHERE user_id = ?
+    `,
+    )
+    .get(userId) as { arweave_jwk: string | null } | undefined;
+
+  return row?.arweave_jwk ?? null;
 }

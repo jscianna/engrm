@@ -1,7 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { embedText } from "@/lib/embeddings";
 import { cleanText, extractUrlContent, hashContent } from "@/lib/content";
-import { getDashboardStatsByUser, getMemoriesByIds, getMemoryById, insertMemory, listMemoriesByUser } from "@/lib/db";
+import {
+  getDashboardStatsByUser,
+  getMemoriesByIds,
+  getMemoryById,
+  insertMemory,
+  listMemoriesByUser,
+  updateMemoryArweaveTx,
+} from "@/lib/db";
+import { resolveUserArweaveKey } from "@/lib/arweave";
 import { uploadTextToArweave } from "@/lib/turbo";
 import type {
   MemoryDashboardStats,
@@ -116,15 +124,21 @@ export async function createMemory(params: {
   const memoryType = params.memoryType ?? "episodic";
   const importance = normalizeImportance(params.importance);
   const tags = normalizeTags(params.tags);
-
-  const arweaveTxId = await uploadTextToArweave({
-    title,
-    content: parsed.contentText,
-    sourceType: params.sourceType,
-    memoryType,
-    importance,
-    tags,
-  });
+  let arweaveTxId: string | null = null;
+  try {
+    const wallet = resolveUserArweaveKey(params.userId);
+    arweaveTxId = await uploadTextToArweave({
+      title,
+      content: parsed.contentText,
+      sourceType: params.sourceType,
+      memoryType,
+      importance,
+      tags,
+      jwk: wallet.key,
+    });
+  } catch (error) {
+    console.error("Arweave upload failed during create; memory will remain local", error);
+  }
 
   const memory: MemoryRecord = {
     id: memoryId,
@@ -213,4 +227,45 @@ export async function getRelatedMemories(params: {
       memory: memoryById.get(hit.item.id),
     }))
     .filter((result): result is { score: number; memory: MemoryListItem } => Boolean(result.memory));
+}
+
+export async function commitMemoryToArweave(params: {
+  userId: string;
+  memoryId: string;
+}): Promise<MemoryRecord> {
+  const memory = getMemoryById(params.memoryId);
+  if (!memory || memory.userId !== params.userId) {
+    throw new Error("Memory not found");
+  }
+
+  if (memory.arweaveTxId) {
+    return memory;
+  }
+
+  const wallet = resolveUserArweaveKey(params.userId);
+  if (!wallet.key) {
+    throw new Error("No Arweave wallet configured. Add one in Settings.");
+  }
+
+  const txId = await uploadTextToArweave({
+    title: memory.title,
+    content: memory.contentText,
+    sourceType: memory.sourceType,
+    memoryType: memory.memoryType,
+    importance: memory.importance,
+    tags: memory.tags,
+    jwk: wallet.key,
+  });
+
+  if (!txId) {
+    throw new Error("Arweave upload failed");
+  }
+
+  updateMemoryArweaveTx(memory.id, params.userId, txId);
+  const updated = getMemoryById(memory.id);
+  if (!updated) {
+    throw new Error("Memory update failed after Arweave commit");
+  }
+
+  return updated;
 }

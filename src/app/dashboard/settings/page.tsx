@@ -1,4 +1,5 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
+import { ArweaveWalletCard } from "@/components/arweave-wallet-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default async function SettingsPage() {
@@ -36,6 +37,8 @@ export default async function SettingsPage() {
           </p>
         </CardContent>
       </Card>
+
+      <ArweaveWalletCard />
     </div>
   );
 }

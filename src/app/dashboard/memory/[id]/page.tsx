@@ -5,6 +5,7 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CommitMemoryButton } from "@/components/commit-memory-button";
 import { getMemory, getRelatedMemories } from "@/lib/memories";
 import type { MemorySearchResult } from "@/lib/types";
 
@@ -48,19 +49,22 @@ export default async function MemoryDetailPage({
 
       <Card className="border-zinc-800 bg-zinc-900/70">
         <CardHeader className="space-y-3">
-          <div className="flex items-start justify-between gap-3">
-            <CardTitle className="text-2xl text-zinc-100">{memory.title}</CardTitle>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <Badge variant="outline" className="border-zinc-700 text-zinc-300">
-                {memory.sourceType}
-              </Badge>
-              <Badge variant="outline" className="border-cyan-800/60 text-cyan-200">
-                {memory.memoryType}
-              </Badge>
-              <Badge variant="outline" className="border-zinc-700 text-zinc-300">
-                Importance {memory.importance}/10
-              </Badge>
+          <div className="space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <CardTitle className="text-2xl text-zinc-100">{memory.title}</CardTitle>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Badge variant="outline" className="border-zinc-700 text-zinc-300">
+                  {memory.sourceType}
+                </Badge>
+                <Badge variant="outline" className="border-cyan-800/60 text-cyan-200">
+                  {memory.memoryType}
+                </Badge>
+                <Badge variant="outline" className="border-zinc-700 text-zinc-300">
+                  Importance {memory.importance}/10
+                </Badge>
+              </div>
             </div>
+            <CommitMemoryButton memoryId={memory.id} arweaveTxId={memory.arweaveTxId} />
           </div>
           <p className="text-xs text-zinc-500">Saved {new Date(memory.createdAt).toLocaleString()}</p>
         </CardHeader>
@@ -102,7 +106,7 @@ export default async function MemoryDetailPage({
             </div>
           ) : (
             <p className="text-sm text-amber-300">
-              No Arweave TX ID found. Configure `ARWEAVE_JWK` and save new memories to anchor permanently.
+              Not committed yet. Use the commit button above after configuring your wallet in Settings.
             </p>
           )}
 
