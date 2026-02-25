@@ -19,8 +19,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      <div className="pointer-events-none fixed inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_top,rgba(6,182,212,0.14),transparent_58%)]" />
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6 md:px-8">
-        <header className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-900/70 px-4 py-3 backdrop-blur">
+        <header className="relative flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-900/85 px-4 py-3 backdrop-blur">
           <Link href="/dashboard" className="flex items-center gap-2 text-sm font-semibold tracking-wide">
             <Brain className="h-4 w-4 text-cyan-300" />
             MEMRY

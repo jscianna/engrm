@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Loader2, Search } from "lucide-react";
+import { toast } from "sonner";
 import { MemoryCard } from "@/components/memory-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +17,9 @@ export default function SearchPage() {
 
   async function onSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!query.trim()) {
+      return;
+    }
     setLoading(true);
     setError(null);
 
@@ -25,10 +29,14 @@ export default function SearchPage() {
       if (!response.ok) {
         throw new Error(payload.error || "Search failed");
       }
-      setResults(payload.results || []);
+      const nextResults = payload.results || [];
+      setResults(nextResults);
+      toast.success(`Found ${nextResults.length} related memory${nextResults.length === 1 ? "" : "ies"}.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Search failed");
+      const message = err instanceof Error ? err.message : "Search failed";
+      setError(message);
       setResults([]);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
