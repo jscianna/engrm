@@ -173,6 +173,23 @@ export function listMemoriesByUser(userId: string, limit = 100): MemoryListItem[
   });
 }
 
+export function listMemoryRecordsByUser(userId: string, limit = 100): MemoryRecord[] {
+  ensureInitialized();
+  const rows = db
+    .prepare(
+      `
+      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, arweave_tx_id, created_at, memory_type, importance, tags_csv
+      FROM memories
+      WHERE user_id = ?
+      ORDER BY datetime(created_at) DESC
+      LIMIT ?
+    `,
+    )
+    .all(userId, limit) as MemoryRow[];
+
+  return rows.map((row) => mapRow(row));
+}
+
 export function getMemoryById(id: string): MemoryRecord | null {
   ensureInitialized();
   const row = db

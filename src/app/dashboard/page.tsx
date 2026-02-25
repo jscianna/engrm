@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import { Database, HardDrive, PlusCircle } from "lucide-react";
+import { DreamCycleCard } from "@/components/dream-cycle-card";
 import { MemoryCard } from "@/components/memory-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -68,6 +69,8 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </section>
+
+      <DreamCycleCard />
 
       {memories.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-zinc-700 bg-zinc-900/40 p-10 text-center text-sm text-zinc-400">
