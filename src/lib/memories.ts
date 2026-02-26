@@ -6,6 +6,7 @@ import {
   getDashboardStatsByUser,
   getMemoriesByIds,
   getMemoryById,
+  getOrCreateUserEncryptionKey,
   insertMemory,
   listMemoriesByUser,
   updateMemorySyncFailure,
@@ -183,6 +184,7 @@ async function persistToDb(params: {
 async function uploadToArweave(memory: MemoryRecord) {
   try {
     const wallet = await resolveUserArweaveKey(memory.userId);
+    const encryptionKey = wallet.key ? await getOrCreateUserEncryptionKey(memory.userId) : undefined;
     const txId = await uploadTextToArweave({
       title: memory.title,
       content: memory.contentText,
@@ -191,6 +193,7 @@ async function uploadToArweave(memory: MemoryRecord) {
       importance: memory.importance,
       tags: memory.tags,
       jwk: wallet.key,
+      encryptionKey,
     });
     if (txId) {
       await updateMemoryArweaveTx(memory.id, memory.userId, txId);
@@ -317,6 +320,7 @@ export async function commitMemoryToArweave(params: {
   }
 
   try {
+    const encryptionKey = await getOrCreateUserEncryptionKey(params.userId);
     const txId = await uploadTextToArweave({
       title: memory.title,
       content: memory.contentText,
@@ -325,6 +329,7 @@ export async function commitMemoryToArweave(params: {
       importance: memory.importance,
       tags: memory.tags,
       jwk: wallet.key,
+      encryptionKey,
     });
 
     if (!txId) {

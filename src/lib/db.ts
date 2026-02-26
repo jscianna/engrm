@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { createClient, type Client } from "@libsql/client";
 import type { MemoryDashboardStats, MemoryKind, MemoryListItem, MemoryRecord, MemorySourceType, MemorySyncStatus } from "@/lib/types";
+import { generateUserKey } from "@/lib/user-crypto";
 
 const ENCRYPTION_ALGORITHM = "aes-256-gcm";
 
@@ -154,14 +155,45 @@ async function ensureInitialized(): Promise<void> {
       arweave_jwk_iv TEXT,
       arweave_jwk_key_encrypted TEXT,
       arweave_jwk_key_iv TEXT,
+      user_encryption_key_encrypted TEXT,
+      user_encryption_key_iv TEXT,
+      user_encryption_key_data_key TEXT,
+      user_encryption_key_data_iv TEXT,
       updated_at TEXT NOT NULL
     );
   `);
+    await ensureUserSettingsColumns(client);
 
     initialized = true;
   } catch (error) {
     console.error("[DB] ensureInitialized failed:", error);
     throw error;
+  }
+}
+
+async function ensureUserSettingsColumns(client: Client): Promise<void> {
+  const requiredColumns: Array<{ name: string; ddl: string }> = [
+    { name: "user_encryption_key_encrypted", ddl: "TEXT" },
+    { name: "user_encryption_key_iv", ddl: "TEXT" },
+    { name: "user_encryption_key_data_key", ddl: "TEXT" },
+    { name: "user_encryption_key_data_iv", ddl: "TEXT" },
+  ];
+
+  const tableInfo = await client.execute("PRAGMA table_info(user_settings)");
+  const existing = new Set(
+    tableInfo.rows
+      .map((row) => {
+        const record = row as Record<string, unknown>;
+        return typeof record.name === "string" ? record.name : null;
+      })
+      .filter((name): name is string => Boolean(name)),
+  );
+
+  for (const column of requiredColumns) {
+    if (existing.has(column.name)) {
+      continue;
+    }
+    await client.execute(`ALTER TABLE user_settings ADD COLUMN ${column.name} ${column.ddl}`);
   }
 }
 
@@ -482,4 +514,107 @@ export async function getUserArweaveJwk(userId: string): Promise<string | null> 
   }
 
   return (row.arweave_jwk as string) ?? null;
+}
+
+export async function setUserEncryptionKey(userId: string, key: Buffer): Promise<void> {
+  await ensureInitialized();
+  const client = getDb();
+  const encrypted = encryptSecretEnvelope(key.toString("base64"));
+
+  await client.execute({
+    sql: `
+      INSERT INTO user_settings (
+        user_id, user_encryption_key_encrypted, user_encryption_key_iv,
+        user_encryption_key_data_key, user_encryption_key_data_iv, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        user_encryption_key_encrypted = excluded.user_encryption_key_encrypted,
+        user_encryption_key_iv = excluded.user_encryption_key_iv,
+        user_encryption_key_data_key = excluded.user_encryption_key_data_key,
+        user_encryption_key_data_iv = excluded.user_encryption_key_data_iv,
+        updated_at = excluded.updated_at
+    `,
+    args: [
+      userId,
+      encrypted.encryptedBlob,
+      encrypted.iv,
+      encrypted.encryptedDataKey,
+      encrypted.dataKeyIv,
+      new Date().toISOString(),
+    ],
+  });
+}
+
+export async function getUserEncryptionKey(userId: string): Promise<Buffer | null> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const result = await client.execute({
+    sql: `
+      SELECT user_encryption_key_encrypted, user_encryption_key_iv, user_encryption_key_data_key, user_encryption_key_data_iv
+      FROM user_settings
+      WHERE user_id = ?
+    `,
+    args: [userId],
+  });
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  const row = result.rows[0] as Record<string, unknown>;
+  if (
+    !row.user_encryption_key_encrypted ||
+    !row.user_encryption_key_iv ||
+    !row.user_encryption_key_data_key ||
+    !row.user_encryption_key_data_iv
+  ) {
+    return null;
+  }
+
+  const keyB64 = decryptSecretEnvelope({
+    encryptedBlob: row.user_encryption_key_encrypted as string,
+    iv: row.user_encryption_key_iv as string,
+    encryptedDataKey: row.user_encryption_key_data_key as string,
+    dataKeyIv: row.user_encryption_key_data_iv as string,
+  });
+
+  const key = Buffer.from(keyB64, "base64");
+  if (key.length !== 32) {
+    throw new Error("Stored user encryption key is invalid.");
+  }
+
+  return key;
+}
+
+export async function getOrCreateUserEncryptionKey(userId: string): Promise<Buffer> {
+  const existing = await getUserEncryptionKey(userId);
+  if (existing) {
+    return existing;
+  }
+
+  const created = generateUserKey();
+  await setUserEncryptionKey(userId, created);
+  return created;
+}
+
+export async function hasUserEncryptionKey(userId: string): Promise<boolean> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT user_encryption_key_encrypted
+      FROM user_settings
+      WHERE user_id = ?
+    `,
+    args: [userId],
+  });
+
+  if (result.rows.length === 0) {
+    return false;
+  }
+
+  const row = result.rows[0] as Record<string, unknown>;
+  return typeof row.user_encryption_key_encrypted === "string" && row.user_encryption_key_encrypted.length > 0;
 }

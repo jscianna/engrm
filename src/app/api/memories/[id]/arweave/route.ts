@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { getMemory } from "@/lib/memories";
 import { getMemoryFromArweave } from "@/lib/arweave";
+import { getUserEncryptionKey } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -25,22 +26,28 @@ export async function GET(
     return NextResponse.json({ error: "Memory is not committed to Arweave" }, { status: 400 });
   }
 
-  const arweave = await getMemoryFromArweave(memory.arweaveTxId);
-  if (!arweave) {
-    return NextResponse.json({ error: "Failed to fetch data from Arweave" }, { status: 502 });
-  }
+  try {
+    const userKey = await getUserEncryptionKey(userId);
+    const arweave = await getMemoryFromArweave(memory.arweaveTxId, userKey);
+    if (!arweave) {
+      return NextResponse.json({ error: "Failed to fetch data from Arweave" }, { status: 502 });
+    }
 
-  return NextResponse.json({
-    txId: memory.arweaveTxId,
-    local: {
-      memoryId: memory.id,
-      title: memory.title,
-      contentHash: memory.contentHash,
-      tags: memory.tags,
-      sourceType: memory.sourceType,
-      memoryType: memory.memoryType,
-      importance: memory.importance,
-    },
-    arweave,
-  });
+    return NextResponse.json({
+      txId: memory.arweaveTxId,
+      local: {
+        memoryId: memory.id,
+        title: memory.title,
+        contentHash: memory.contentHash,
+        tags: memory.tags,
+        sourceType: memory.sourceType,
+        memoryType: memory.memoryType,
+        importance: memory.importance,
+      },
+      arweave,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to decode Arweave memory";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
 }

@@ -4,6 +4,7 @@ import { getUserArweaveJwk } from "@/lib/db";
 import { getArweaveKeyFromEnv, parseArweaveJwk, turboToken } from "@/lib/turbo";
 import type { ArweaveWalletStatus } from "@/lib/types";
 import { fetchArweaveData } from "@/lib/wayfinder";
+import { decryptWithUserKey } from "@/lib/user-crypto";
 
 const arweave = Arweave.init({
   host: "arweave.net",
@@ -58,6 +59,7 @@ export type ArweaveMemoryData = {
   sourceType: string | null;
   memoryType: string | null;
   importance: number | null;
+  encrypted: boolean;
   verified: boolean;
   raw: string;
 };
@@ -97,7 +99,24 @@ function toTags(value: unknown): string[] {
   return [];
 }
 
-export async function getMemoryFromArweave(txId: string): Promise<ArweaveMemoryData | null> {
+export function decryptArweaveMemory(data: unknown, userKey: Buffer): string {
+  if (!data || typeof data !== "object") {
+    throw new Error("Encrypted memory payload is invalid.");
+  }
+
+  const payload = data as Record<string, unknown>;
+  if (payload.encrypted !== true) {
+    throw new Error("Memory payload is not encrypted.");
+  }
+
+  if (typeof payload.data !== "string" || typeof payload.iv !== "string") {
+    throw new Error("Encrypted memory payload is missing data or iv.");
+  }
+
+  return decryptWithUserKey(payload.data, payload.iv, userKey);
+}
+
+export async function getMemoryFromArweave(txId: string, userKey?: Buffer | null): Promise<ArweaveMemoryData | null> {
   const fetched = await fetchArweaveData(txId);
   if (!fetched) {
     return null;
@@ -113,11 +132,20 @@ export async function getMemoryFromArweave(txId: string): Promise<ArweaveMemoryD
     parsed = null;
   }
 
-  const content =
-    toStringOrNull(parsed?.content) ??
-    toStringOrNull(parsed?.contentText) ??
-    toStringOrNull(parsed?.text) ??
-    fetched.data;
+  const encrypted = parsed?.encrypted === true;
+  let content: string;
+  if (encrypted) {
+    if (!userKey) {
+      throw new Error("This memory is encrypted and requires a recovery key.");
+    }
+    content = decryptArweaveMemory(parsed, userKey);
+  } else {
+    content =
+      toStringOrNull(parsed?.content) ??
+      toStringOrNull(parsed?.contentText) ??
+      toStringOrNull(parsed?.text) ??
+      fetched.data;
+  }
 
   return {
     txId,
@@ -127,6 +155,7 @@ export async function getMemoryFromArweave(txId: string): Promise<ArweaveMemoryD
     sourceType: toStringOrNull(parsed?.sourceType),
     memoryType: toStringOrNull(parsed?.memoryType),
     importance: toNumberOrNull(parsed?.importance),
+    encrypted,
     verified: fetched.verified,
     raw: fetched.data,
   };
