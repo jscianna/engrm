@@ -2,6 +2,7 @@ import dynamic from "next/dynamic";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SecurityKeyCard } from "@/components/security-key-card";
+import { ApiKeysCard } from "@/components/api-keys-card";
 
 const ArweaveWalletCard = dynamic(
   () => import("@/components/arweave-wallet-card").then((module) => module.ArweaveWalletCard),
@@ -48,6 +49,7 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
+      <ApiKeysCard />
       <ArweaveWalletCard />
       <SecurityKeyCard />
     </div>

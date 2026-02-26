@@ -1018,6 +1018,52 @@ export async function validateApiKey(rawApiKey: string): Promise<ApiKeyIdentity 
   };
 }
 
+export async function listApiKeys(userId: string): Promise<Array<{
+  id: string;
+  agentId: string;
+  agentName: string;
+  keyPrefix: string;
+  createdAt: string;
+  lastUsed: string;
+}>> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const result = await client.execute({
+    sql: `
+      SELECT id, agent_id, agent_name, created_at, last_used
+      FROM api_keys
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+    `,
+    args: [userId],
+  });
+
+  return result.rows.map((row) => ({
+    id: row.id as string,
+    agentId: row.agent_id as string,
+    agentName: (row.agent_name as string) || "Unnamed Agent",
+    keyPrefix: "mem_",
+    createdAt: row.created_at as string,
+    lastUsed: row.last_used as string,
+  }));
+}
+
+export async function deleteApiKey(userId: string, keyId: string): Promise<boolean> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const result = await client.execute({
+    sql: `
+      DELETE FROM api_keys
+      WHERE user_id = ? AND id = ?
+    `,
+    args: [userId, keyId],
+  });
+
+  return (result.rowsAffected ?? 0) > 0;
+}
+
 export async function createNamespace(userId: string, name: string): Promise<NamespaceRecord> {
   await ensureInitialized();
   const client = getDb();
