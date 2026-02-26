@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ar.io/sdk": "^3.23.1",
+    "@ar.io/wayfinder-core": "^1.9.1",
     "@ardrive/turbo-sdk": "^1.41.0",
     "@clerk/nextjs": "^6.38.2",
     "@xenova/transformers": "^2.17.2",

@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CommitMemoryButton } from "@/components/commit-memory-button";
+import { ArweaveVerifyButton } from "@/components/arweave-verify-button";
 import { getMemory, getRelatedMemories } from "@/lib/memories";
 import type { MemorySearchResult } from "@/lib/types";
 
@@ -92,17 +93,10 @@ export default async function MemoryDetailPage({
           )}
 
           {memory.arweaveTxId ? (
-            <div>
+            <div className="space-y-2">
               <p className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Arweave Proof</p>
-              <a
-                href={`https://arweave.net/${memory.arweaveTxId}`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 text-cyan-300 hover:text-cyan-200"
-              >
-                <ExternalLink className="h-4 w-4" />
-                {memory.arweaveTxId}
-              </a>
+              <ArweaveVerifyButton memoryId={memory.id} txId={memory.arweaveTxId} />
+              <p className="text-xs text-zinc-500">{memory.arweaveTxId}</p>
             </div>
           ) : (
             <div className="space-y-1">

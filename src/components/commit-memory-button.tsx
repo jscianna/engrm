@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, ExternalLink, Loader2, UploadCloud } from "lucide-react";
+import { Loader2, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { MemorySyncStatus } from "@/lib/types";
@@ -41,15 +40,7 @@ export function CommitMemoryButton({
   }
 
   if (arweaveTxId) {
-    return (
-      <Button asChild className="bg-emerald-400 text-zinc-950 hover:bg-emerald-300">
-        <Link href={`https://arweave.net/${arweaveTxId}`} target="_blank" rel="noreferrer">
-          <CheckCircle2 className="mr-2 h-4 w-4" />
-          View Arweave TX
-          <ExternalLink className="ml-2 h-4 w-4" />
-        </Link>
-      </Button>
-    );
+    return null;
   }
 
   return (
