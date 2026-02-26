@@ -1,7 +1,4 @@
-import { env, pipeline } from "@xenova/transformers";
-
-env.allowLocalModels = false;
-env.useBrowserCache = false;
+// Dynamic import to avoid loading ONNX runtime on serverless where it's not available
 
 type ExtractorOutput = {
   data: Float32Array | number[];
@@ -12,14 +9,26 @@ type FeatureExtractor = (
   options: { pooling: "mean"; normalize: true },
 ) => Promise<ExtractorOutput>;
 
-let extractorPromise: Promise<FeatureExtractor> | null = null;
+let extractorPromise: Promise<FeatureExtractor | null> | null = null;
 
-async function getExtractor() {
+async function getExtractor(): Promise<FeatureExtractor | null> {
   if (!extractorPromise) {
-    extractorPromise = pipeline(
-      "feature-extraction",
-      "Xenova/all-MiniLM-L6-v2",
-    ) as Promise<FeatureExtractor>;
+    extractorPromise = (async () => {
+      try {
+        // Dynamic import to avoid crashing on serverless
+        const { env, pipeline } = await import("@xenova/transformers");
+        env.allowLocalModels = false;
+        env.useBrowserCache = false;
+        
+        return pipeline(
+          "feature-extraction",
+          "Xenova/all-MiniLM-L6-v2",
+        ) as Promise<FeatureExtractor>;
+      } catch (error) {
+        console.error("[Embeddings] Failed to load transformers:", error);
+        return null;
+      }
+    })();
   }
   return extractorPromise;
 }
@@ -27,6 +36,11 @@ async function getExtractor() {
 export async function embedText(input: string): Promise<number[]> {
   try {
     const extractor = await getExtractor();
+    if (!extractor) {
+      console.warn("[Embeddings] Extractor unavailable, returning zero vector");
+      return new Array(384).fill(0);
+    }
+    
     const output: ExtractorOutput = await extractor(input, {
       pooling: "mean",
       normalize: true,
@@ -34,7 +48,7 @@ export async function embedText(input: string): Promise<number[]> {
 
     return Array.from(output.data);
   } catch (error) {
-    console.error("Embedding generation failed:", error);
+    console.error("[Embeddings] Generation failed:", error);
     // Return zero vector as fallback (384 dimensions for MiniLM)
     return new Array(384).fill(0);
   }
