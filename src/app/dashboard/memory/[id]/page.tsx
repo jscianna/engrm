@@ -64,7 +64,7 @@ export default async function MemoryDetailPage({
                 </Badge>
               </div>
             </div>
-            <CommitMemoryButton memoryId={memory.id} arweaveTxId={memory.arweaveTxId} />
+            <CommitMemoryButton memoryId={memory.id} arweaveTxId={memory.arweaveTxId} syncStatus={memory.syncStatus} />
           </div>
           <p className="text-xs text-zinc-500">Saved {new Date(memory.createdAt).toLocaleString()}</p>
         </CardHeader>
@@ -105,9 +105,14 @@ export default async function MemoryDetailPage({
               </a>
             </div>
           ) : (
-            <p className="text-sm text-amber-300">
-              Not committed yet. Use the commit button above after configuring your wallet in Settings.
-            </p>
+            <div className="space-y-1">
+              <p className="text-sm text-amber-300">
+                Not committed yet. Use the commit button above after configuring your wallet in Settings.
+              </p>
+              {memory.syncStatus === "failed" && (
+                <p className="text-xs text-rose-300">Last sync error: {memory.syncError ?? "Unknown error"}</p>
+              )}
+            </div>
           )}
 
           <div>

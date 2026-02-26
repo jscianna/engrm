@@ -7,6 +7,7 @@ import {
   getMemoryById,
   insertMemory,
   listMemoriesByUser,
+  updateMemorySyncFailure,
   updateMemoryArweaveTx,
 } from "@/lib/db";
 import { resolveUserArweaveKey } from "@/lib/arweave";
@@ -20,6 +21,8 @@ import type {
   MemorySourceType,
 } from "@/lib/types";
 import { semanticSearchVectors, upsertMemoryVector } from "@/lib/vector";
+
+const MAX_FILE_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 export function getMemory(id: string): MemoryRecord | null {
   return getMemoryById(id);
@@ -86,6 +89,9 @@ async function parseMemoryContent(input: {
   if (!file) {
     throw new Error("File is required for file memories.");
   }
+  if (file.size > MAX_FILE_UPLOAD_BYTES) {
+    throw new Error("File exceeds 10MB upload limit.");
+  }
 
   const rawText = cleanText(await file.text());
   if (!rawText) {
@@ -100,7 +106,7 @@ async function parseMemoryContent(input: {
   return { contentText: rawText, sourceUrl: null, fileName: file.name };
 }
 
-export async function createMemory(params: {
+type CreateMemoryParams = {
   userId: string;
   title?: string;
   sourceType: MemorySourceType;
@@ -110,54 +116,72 @@ export async function createMemory(params: {
   text?: string;
   url?: string;
   file?: File;
-}): Promise<MemoryRecord> {
+};
+
+async function parseInput(params: CreateMemoryParams) {
   const parsed = await parseMemoryContent({
     sourceType: params.sourceType,
     text: params.text,
     url: params.url,
     file: params.file,
   });
-
-  const memoryId = randomUUID();
   const title = cleanText(params.title ?? "") || parsed.fileName || "Untitled Memory";
-  const contentHash = hashContent(parsed.contentText);
-  const memoryType = params.memoryType ?? "episodic";
-  const importance = normalizeImportance(params.importance);
-  const tags = normalizeTags(params.tags);
-  let arweaveTxId: string | null = null;
-  try {
-    const wallet = resolveUserArweaveKey(params.userId);
-    arweaveTxId = await uploadTextToArweave({
-      title,
-      content: parsed.contentText,
-      sourceType: params.sourceType,
-      memoryType,
-      importance,
-      tags,
-      jwk: wallet.key,
-    });
-  } catch (error) {
-    console.error("Arweave upload failed during create; memory will remain local", error);
-  }
+  return { parsed, title };
+}
 
+function persistToDb(params: {
+  userId: string;
+  sourceType: MemorySourceType;
+  memoryType: MemoryKind;
+  importance: number;
+  tags: string[];
+  title: string;
+  parsed: { contentText: string; sourceUrl: string | null; fileName: string | null };
+}): MemoryRecord {
   const memory: MemoryRecord = {
-    id: memoryId,
+    id: randomUUID(),
     userId: params.userId,
-    title,
+    title: params.title,
     sourceType: params.sourceType,
-    memoryType,
-    importance,
-    tags,
-    sourceUrl: parsed.sourceUrl,
-    fileName: parsed.fileName,
-    contentText: parsed.contentText,
-    contentHash,
-    arweaveTxId,
+    memoryType: params.memoryType,
+    importance: params.importance,
+    tags: params.tags,
+    sourceUrl: params.parsed.sourceUrl,
+    fileName: params.parsed.fileName,
+    contentText: params.parsed.contentText,
+    contentHash: hashContent(params.parsed.contentText),
+    arweaveTxId: null,
+    syncStatus: "pending",
+    syncError: null,
     createdAt: new Date().toISOString(),
   };
-
   insertMemory(memory);
+  return memory;
+}
 
+async function uploadToArweave(memory: MemoryRecord) {
+  try {
+    const wallet = resolveUserArweaveKey(memory.userId);
+    const txId = await uploadTextToArweave({
+      title: memory.title,
+      content: memory.contentText,
+      sourceType: memory.sourceType,
+      memoryType: memory.memoryType,
+      importance: memory.importance,
+      tags: memory.tags,
+      jwk: wallet.key,
+    });
+    if (txId) {
+      updateMemoryArweaveTx(memory.id, memory.userId, txId);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Arweave upload failed";
+    updateMemorySyncFailure(memory.id, memory.userId, message);
+    console.error("Arweave upload failed during create; memory is stored for retry", error);
+  }
+}
+
+async function generateEmbedding(memory: MemoryRecord) {
   try {
     const vector = await embedText(memory.contentText.slice(0, 6000));
     await upsertMemoryVector({
@@ -172,8 +196,32 @@ export async function createMemory(params: {
   } catch (error) {
     console.error("Failed to generate/store embeddings", error);
   }
+}
 
-  return memory;
+export async function createMemory(params: CreateMemoryParams): Promise<MemoryRecord> {
+  const { parsed, title } = await parseInput(params);
+
+  const memoryType = params.memoryType ?? "episodic";
+  const importance = normalizeImportance(params.importance);
+  const tags = normalizeTags(params.tags);
+
+  const memory = persistToDb({
+    userId: params.userId,
+    sourceType: params.sourceType,
+    memoryType,
+    importance,
+    tags,
+    title,
+    parsed,
+  });
+  await uploadToArweave(memory);
+  await generateEmbedding(memory);
+
+  const persisted = getMemoryById(memory.id);
+  if (!persisted) {
+    throw new Error("Memory was created but could not be reloaded.");
+  }
+  return persisted;
 }
 
 export async function searchMemories(userId: string, query: string): Promise<MemorySearchResult[]> {
@@ -191,7 +239,7 @@ export async function searchMemories(userId: string, query: string): Promise<Mem
   });
 
   const ids = hits.map((hit) => hit.item.id);
-  const memories = getMemoriesByIds(ids);
+  const memories = getMemoriesByIds(userId, ids);
   const memoryById = new Map(memories.map((memory) => [memory.id, memory]));
 
   return hits
@@ -218,7 +266,7 @@ export async function getRelatedMemories(params: {
 
   const filtered = hits.filter((hit) => hit.item.id !== params.memoryId).slice(0, params.topK ?? 5);
   const ids = filtered.map((hit) => hit.item.id);
-  const memories = getMemoriesByIds(ids);
+  const memories = getMemoriesByIds(params.userId, ids);
   const memoryById = new Map(memories.map((memory) => [memory.id, memory]));
 
   return filtered
@@ -247,21 +295,27 @@ export async function commitMemoryToArweave(params: {
     throw new Error("No Arweave wallet configured. Add one in Settings.");
   }
 
-  const txId = await uploadTextToArweave({
-    title: memory.title,
-    content: memory.contentText,
-    sourceType: memory.sourceType,
-    memoryType: memory.memoryType,
-    importance: memory.importance,
-    tags: memory.tags,
-    jwk: wallet.key,
-  });
+  try {
+    const txId = await uploadTextToArweave({
+      title: memory.title,
+      content: memory.contentText,
+      sourceType: memory.sourceType,
+      memoryType: memory.memoryType,
+      importance: memory.importance,
+      tags: memory.tags,
+      jwk: wallet.key,
+    });
 
-  if (!txId) {
-    throw new Error("Arweave upload failed");
+    if (!txId) {
+      throw new Error("Arweave upload failed");
+    }
+
+    updateMemoryArweaveTx(memory.id, params.userId, txId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Arweave upload failed";
+    updateMemorySyncFailure(memory.id, params.userId, message);
+    throw error;
   }
-
-  updateMemoryArweaveTx(memory.id, params.userId, txId);
   const updated = getMemoryById(memory.id);
   if (!updated) {
     throw new Error("Memory update failed after Arweave commit");

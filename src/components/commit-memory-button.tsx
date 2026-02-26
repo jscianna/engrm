@@ -6,8 +6,17 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, ExternalLink, Loader2, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import type { MemorySyncStatus } from "@/lib/types";
 
-export function CommitMemoryButton({ memoryId, arweaveTxId }: { memoryId: string; arweaveTxId: string | null }) {
+export function CommitMemoryButton({
+  memoryId,
+  arweaveTxId,
+  syncStatus,
+}: {
+  memoryId: string;
+  arweaveTxId: string | null;
+  syncStatus: MemorySyncStatus;
+}) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
@@ -46,7 +55,7 @@ export function CommitMemoryButton({ memoryId, arweaveTxId }: { memoryId: string
   return (
     <Button onClick={() => void onCommit()} disabled={loading} className="bg-cyan-400 text-zinc-950 hover:bg-cyan-300">
       {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
-      Commit to Arweave
+      {syncStatus === "failed" ? "Retry Arweave Sync" : "Commit to Arweave"}
     </Button>
   );
 }

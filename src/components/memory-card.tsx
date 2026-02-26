@@ -29,8 +29,12 @@ export function MemoryCard({ memory }: { memory: MemoryListItem }) {
               <ExternalLink className="h-3.5 w-3.5" />
               TX: {memory.arweaveTxId.slice(0, 16)}...
             </div>
+          ) : memory.syncStatus === "failed" ? (
+            <div className="text-rose-300">Arweave sync failed: {memory.syncError ?? "Unknown error"}</div>
+          ) : memory.syncStatus === "pending" ? (
+            <div className="text-amber-300">Arweave sync pending (add a per-user wallet in Settings or use ARWEAVE_JWK)</div>
           ) : (
-            <div className="text-amber-300">Arweave upload pending (set `ARWEAVE_JWK`)</div>
+            <div className="text-zinc-400">Stored locally</div>
           )}
           {memory.tags.length > 0 && (
             <div className="flex flex-wrap gap-1">

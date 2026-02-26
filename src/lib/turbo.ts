@@ -3,11 +3,28 @@ import { TurboFactory, type ArweaveJWK, type TokenType } from "@ardrive/turbo-sd
 export const turboToken = (process.env.TURBO_TOKEN as TokenType | undefined) ?? "arweave";
 
 export function parseArweaveJwk(raw: string): ArweaveJWK {
+  let parsed: unknown;
   try {
-    return JSON.parse(raw) as ArweaveJWK;
+    parsed = JSON.parse(raw) as unknown;
   } catch {
     throw new Error("Arweave JWK is not valid JSON");
   }
+
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("Arweave JWK must be a JSON object");
+  }
+
+  const jwk = parsed as Record<string, unknown>;
+  if (jwk.kty !== "RSA") {
+    throw new Error("Arweave JWK must use RSA keys");
+  }
+  for (const key of ["n", "e", "d"] as const) {
+    if (typeof jwk[key] !== "string" || jwk[key].length === 0) {
+      throw new Error(`Arweave JWK is missing required RSA field: ${key}`);
+    }
+  }
+
+  return jwk as unknown as ArweaveJWK;
 }
 
 export function getArweaveKeyFromEnv(): ArweaveJWK | null {

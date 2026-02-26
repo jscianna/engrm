@@ -1,5 +1,6 @@
 export type MemorySourceType = "text" | "url" | "file";
 export type MemoryKind = "episodic" | "semantic" | "procedural" | "self-model";
+export type MemorySyncStatus = "pending" | "synced" | "failed";
 
 export type MemoryRecord = {
   id: string;
@@ -14,6 +15,8 @@ export type MemoryRecord = {
   contentText: string;
   contentHash: string;
   arweaveTxId: string | null;
+  syncStatus: MemorySyncStatus;
+  syncError: string | null;
   createdAt: string;
 };
 

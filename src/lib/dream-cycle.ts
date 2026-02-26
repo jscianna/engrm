@@ -1,5 +1,6 @@
-import { getMemoryById, listMemoryRecordsByUser } from "@/lib/db";
-import { getRelatedMemories } from "@/lib/memories";
+import { getMemoriesByIds, listMemoryRecordsByUser } from "@/lib/db";
+import { embedText } from "@/lib/embeddings";
+import { semanticSearchVectors } from "@/lib/vector";
 
 export type DreamBondSuggestion = {
   leftId: string;
@@ -37,33 +38,58 @@ function dayDiff(createdAt: string): number {
 
 export async function runDreamCycle(userId: string): Promise<DreamCycleResult> {
   const memories = listMemoryRecordsByUser(userId, 120);
+  const memoryById = new Map(memories.map((memory) => [memory.id, { id: memory.id, userId: memory.userId, title: memory.title }]));
   const candidateSet = memories
     .sort((a, b) => b.importance - a.importance)
     .slice(0, 14);
 
   const bondsMap = new Map<string, DreamBondSuggestion>();
+  const vectors = await Promise.all(candidateSet.map((memory) => embedText(memory.contentText.slice(0, 6000))));
+  const relatedLists = await Promise.all(
+    candidateSet.map((memory, index) =>
+      semanticSearchVectors({
+        userId,
+        query: memory.contentText.slice(0, 600),
+        vector: vectors[index],
+        topK: 3,
+      }),
+    ),
+  );
 
-  for (const memory of candidateSet) {
-    const related = await getRelatedMemories({
-      userId,
-      memoryId: memory.id,
-      contentText: memory.contentText,
-      topK: 2,
-    });
-
+  const missingIds = new Set<string>();
+  for (const [index, related] of relatedLists.entries()) {
+    const source = candidateSet[index];
     for (const hit of related) {
-      if (hit.score < 0.75) {
+      if (hit.item.id === source.id || hit.score < 0.75) {
+        continue;
+      }
+      if (!memoryById.has(hit.item.id)) {
+        missingIds.add(hit.item.id);
+      }
+    }
+  }
+  if (missingIds.size > 0) {
+    const fetched = getMemoriesByIds(userId, Array.from(missingIds));
+    for (const memory of fetched) {
+      memoryById.set(memory.id, memory);
+    }
+  }
+
+  for (const [index, related] of relatedLists.entries()) {
+    const memory = candidateSet[index];
+    for (const hit of related) {
+      if (hit.item.id === memory.id || hit.score < 0.75) {
         continue;
       }
 
-      const pair = [memory.id, hit.memory.id].sort();
+      const other = memoryById.get(hit.item.id);
+      if (!other || other.userId !== userId) {
+        continue;
+      }
+
+      const pair = [memory.id, other.id].sort();
       const pairKey = `${pair[0]}:${pair[1]}`;
       if (bondsMap.has(pairKey)) {
-        continue;
-      }
-
-      const other = getMemoryById(hit.memory.id);
-      if (!other || other.userId !== userId) {
         continue;
       }
 
