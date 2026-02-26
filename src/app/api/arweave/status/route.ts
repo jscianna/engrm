@@ -14,7 +14,7 @@ export async function GET() {
   try {
     const [wallet, stats] = await Promise.all([
       getArweaveWalletStatus(userId),
-      Promise.resolve(getMemoryStats(userId)),
+      Promise.resolve(await getMemoryStats(userId)),
     ]);
 
     return NextResponse.json({

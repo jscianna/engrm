@@ -21,7 +21,7 @@ export default async function MemoryDetailPage({
   }
 
   const { id } = await params;
-  const memory = getMemory(id);
+  const memory = await getMemory(id);
 
   if (!memory || memory.userId !== userId) {
     notFound();

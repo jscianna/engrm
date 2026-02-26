@@ -1,19 +1,27 @@
-import fs from "node:fs";
-import path from "node:path";
 import crypto from "node:crypto";
-import Database from "better-sqlite3";
+import { createClient, type Client } from "@libsql/client";
 import type { MemoryDashboardStats, MemoryKind, MemoryListItem, MemoryRecord, MemorySourceType, MemorySyncStatus } from "@/lib/types";
 
-const dataDir = path.join(process.cwd(), "data");
-fs.mkdirSync(dataDir, { recursive: true });
-
-const dbPath = path.join(dataDir, "memry.sqlite");
-const db = new Database(dbPath);
 const ENCRYPTION_ALGORITHM = "aes-256-gcm";
 
-db.pragma("busy_timeout = 5000");
+let db: Client | null = null;
 
-let initialized = false;
+function getDb(): Client {
+  if (!db) {
+    const url = process.env.TURSO_DATABASE_URL;
+    const authToken = process.env.TURSO_AUTH_TOKEN;
+    
+    if (!url) {
+      throw new Error("TURSO_DATABASE_URL is required");
+    }
+    
+    db = createClient({
+      url,
+      authToken,
+    });
+  }
+  return db;
+}
 
 function getMasterKey(): Buffer {
   const raw = process.env.ENCRYPTION_KEY;
@@ -107,12 +115,16 @@ function decryptSecretEnvelope(payload: {
   return plaintext.toString("utf8");
 }
 
-function ensureInitialized() {
+let initialized = false;
+
+async function ensureInitialized(): Promise<void> {
   if (initialized) {
     return;
   }
 
-  db.exec(`
+  const client = getDb();
+
+  await client.executeMultiple(`
     CREATE TABLE IF NOT EXISTS memories (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -145,40 +157,6 @@ function ensureInitialized() {
     );
   `);
 
-  const columns = db.prepare("PRAGMA table_info(memories)").all() as Array<{ name: string }>;
-  const columnNames = new Set(columns.map((column) => column.name));
-
-  if (!columnNames.has("memory_type")) {
-    db.exec("ALTER TABLE memories ADD COLUMN memory_type TEXT NOT NULL DEFAULT 'episodic'");
-  }
-  if (!columnNames.has("importance")) {
-    db.exec("ALTER TABLE memories ADD COLUMN importance INTEGER NOT NULL DEFAULT 5");
-  }
-  if (!columnNames.has("tags_csv")) {
-    db.exec("ALTER TABLE memories ADD COLUMN tags_csv TEXT NOT NULL DEFAULT ''");
-  }
-  if (!columnNames.has("sync_status")) {
-    db.exec("ALTER TABLE memories ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'pending'");
-  }
-  if (!columnNames.has("sync_error")) {
-    db.exec("ALTER TABLE memories ADD COLUMN sync_error TEXT");
-  }
-
-  const userSettingsColumns = db.prepare("PRAGMA table_info(user_settings)").all() as Array<{ name: string }>;
-  const userSettingsColumnNames = new Set(userSettingsColumns.map((column) => column.name));
-  if (!userSettingsColumnNames.has("arweave_jwk_encrypted")) {
-    db.exec("ALTER TABLE user_settings ADD COLUMN arweave_jwk_encrypted TEXT");
-  }
-  if (!userSettingsColumnNames.has("arweave_jwk_iv")) {
-    db.exec("ALTER TABLE user_settings ADD COLUMN arweave_jwk_iv TEXT");
-  }
-  if (!userSettingsColumnNames.has("arweave_jwk_key_encrypted")) {
-    db.exec("ALTER TABLE user_settings ADD COLUMN arweave_jwk_key_encrypted TEXT");
-  }
-  if (!userSettingsColumnNames.has("arweave_jwk_key_iv")) {
-    db.exec("ALTER TABLE user_settings ADD COLUMN arweave_jwk_key_iv TEXT");
-  }
-
   initialized = true;
 }
 
@@ -207,85 +185,76 @@ function parseTags(tagsCsv: string): string[] {
     .filter(Boolean);
 }
 
-function mapRow(row: MemoryRow): MemoryRecord {
+function mapRow(row: Record<string, unknown>): MemoryRecord {
   return {
-    id: row.id,
-    userId: row.user_id,
-    title: row.title,
-    sourceType: row.source_type,
-    memoryType: row.memory_type,
-    importance: row.importance,
-    tags: parseTags(row.tags_csv),
-    sourceUrl: row.source_url,
-    fileName: row.file_name,
-    contentText: row.content_text,
-    contentHash: row.content_hash,
-    arweaveTxId: row.arweave_tx_id,
-    syncStatus: row.sync_status,
-    syncError: row.sync_error,
-    createdAt: row.created_at,
+    id: row.id as string,
+    userId: row.user_id as string,
+    title: row.title as string,
+    sourceType: row.source_type as MemorySourceType,
+    memoryType: (row.memory_type as MemoryKind) ?? "episodic",
+    importance: (row.importance as number) ?? 5,
+    tags: parseTags((row.tags_csv as string) ?? ""),
+    sourceUrl: row.source_url as string | null,
+    fileName: row.file_name as string | null,
+    contentText: row.content_text as string,
+    contentHash: row.content_hash as string,
+    arweaveTxId: row.arweave_tx_id as string | null,
+    syncStatus: (row.sync_status as MemorySyncStatus) ?? "pending",
+    syncError: row.sync_error as string | null,
+    createdAt: row.created_at as string,
   };
 }
 
-export function insertMemory(memory: MemoryRecord): void {
-  ensureInitialized();
-  db.prepare(
-    `
+export async function insertMemory(memory: MemoryRecord): Promise<void> {
+  await ensureInitialized();
+  const client = getDb();
+  
+  await client.execute({
+    sql: `
       INSERT INTO memories (
-        id,
-        user_id,
-        title,
-        source_type,
-        memory_type,
-        importance,
-        tags_csv,
-        source_url,
-        file_name,
-        content_text,
-        content_hash,
-        arweave_tx_id,
-        sync_status,
-        sync_error,
-        created_at
+        id, user_id, title, source_type, memory_type, importance, tags_csv,
+        source_url, file_name, content_text, content_hash, arweave_tx_id,
+        sync_status, sync_error, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
-  ).run(
-    memory.id,
-    memory.userId,
-    memory.title,
-    memory.sourceType,
-    memory.memoryType,
-    memory.importance,
-    memory.tags.join(","),
-    memory.sourceUrl,
-    memory.fileName,
-    memory.contentText,
-    memory.contentHash,
-    memory.arweaveTxId,
-    memory.syncStatus,
-    memory.syncError,
-    memory.createdAt,
-  );
+    args: [
+      memory.id,
+      memory.userId,
+      memory.title,
+      memory.sourceType,
+      memory.memoryType,
+      memory.importance,
+      memory.tags.join(","),
+      memory.sourceUrl,
+      memory.fileName,
+      memory.contentText,
+      memory.contentHash,
+      memory.arweaveTxId,
+      memory.syncStatus,
+      memory.syncError,
+      memory.createdAt,
+    ],
+  });
 }
 
-export function listMemoriesByUser(userId: string, limit = 100): MemoryListItem[] {
-  ensureInitialized();
-  const rows = db
-    .prepare(
-      `
-      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, arweave_tx_id, created_at
-      , memory_type, importance, tags_csv
-      , sync_status, sync_error
+export async function listMemoriesByUser(userId: string, limit = 100): Promise<MemoryListItem[]> {
+  await ensureInitialized();
+  const client = getDb();
+  
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, arweave_tx_id, created_at,
+             memory_type, importance, tags_csv, sync_status, sync_error
       FROM memories
       WHERE user_id = ?
       ORDER BY created_at DESC
       LIMIT ?
     `,
-    )
-    .all(userId, limit) as MemoryRow[];
+    args: [userId, limit],
+  });
 
-  return rows.map((row) => {
-    const record = mapRow(row);
+  return result.rows.map((row) => {
+    const record = mapRow(row as Record<string, unknown>);
     return {
       id: record.id,
       userId: record.userId,
@@ -305,57 +274,67 @@ export function listMemoriesByUser(userId: string, limit = 100): MemoryListItem[
   });
 }
 
-export function listMemoryRecordsByUser(userId: string, limit = 100): MemoryRecord[] {
-  ensureInitialized();
-  const rows = db
-    .prepare(
-      `
-      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, arweave_tx_id, created_at, memory_type, importance, tags_csv, sync_status, sync_error
+export async function listMemoryRecordsByUser(userId: string, limit = 100): Promise<MemoryRecord[]> {
+  await ensureInitialized();
+  const client = getDb();
+  
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, arweave_tx_id, created_at,
+             memory_type, importance, tags_csv, sync_status, sync_error
       FROM memories
       WHERE user_id = ?
       ORDER BY created_at DESC
       LIMIT ?
     `,
-    )
-    .all(userId, limit) as MemoryRow[];
+    args: [userId, limit],
+  });
 
-  return rows.map((row) => mapRow(row));
+  return result.rows.map((row) => mapRow(row as Record<string, unknown>));
 }
 
-export function getMemoryById(id: string): MemoryRecord | null {
-  ensureInitialized();
-  const row = db
-    .prepare(
-      `
-      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, arweave_tx_id, created_at, memory_type, importance, tags_csv, sync_status, sync_error
+export async function getMemoryById(id: string): Promise<MemoryRecord | null> {
+  await ensureInitialized();
+  const client = getDb();
+  
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, arweave_tx_id, created_at,
+             memory_type, importance, tags_csv, sync_status, sync_error
       FROM memories
       WHERE id = ?
     `,
-    )
-    .get(id) as MemoryRow | undefined;
+    args: [id],
+  });
 
-  return row ? mapRow(row) : null;
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return mapRow(result.rows[0] as Record<string, unknown>);
 }
 
-export function getMemoriesByIds(userId: string, ids: string[]): MemoryListItem[] {
-  ensureInitialized();
+export async function getMemoriesByIds(userId: string, ids: string[]): Promise<MemoryListItem[]> {
+  await ensureInitialized();
   if (ids.length === 0) {
     return [];
   }
 
+  const client = getDb();
   const placeholders = ids.map(() => "?").join(",");
-  const rows = db
-    .prepare(
-      `
-      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, arweave_tx_id, created_at, memory_type, importance, tags_csv, sync_status, sync_error
+  
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, arweave_tx_id, created_at,
+             memory_type, importance, tags_csv, sync_status, sync_error
       FROM memories
       WHERE user_id = ? AND id IN (${placeholders})
     `,
-    )
-    .all(userId, ...ids) as MemoryRow[];
+    args: [userId, ...ids],
+  });
 
-  return rows.map((row) => {
-    const record = mapRow(row);
+  return result.rows.map((row) => {
+    const record = mapRow(row as Record<string, unknown>);
     return {
       id: record.id,
       userId: record.userId,
@@ -375,11 +354,12 @@ export function getMemoriesByIds(userId: string, ids: string[]): MemoryListItem[
   });
 }
 
-export function getDashboardStatsByUser(userId: string): MemoryDashboardStats {
-  ensureInitialized();
-  const row = db
-    .prepare(
-      `
+export async function getDashboardStatsByUser(userId: string): Promise<MemoryDashboardStats> {
+  await ensureInitialized();
+  const client = getDb();
+  
+  const result = await client.execute({
+    sql: `
       SELECT
         COUNT(*) AS total_memories,
         SUM(CASE WHEN arweave_tx_id IS NOT NULL AND arweave_tx_id != '' THEN 1 ELSE 0 END) AS committed_memories,
@@ -387,61 +367,59 @@ export function getDashboardStatsByUser(userId: string): MemoryDashboardStats {
       FROM memories
       WHERE user_id = ?
     `,
-    )
-    .get(userId) as
-    | {
-        total_memories: number;
-        committed_memories: number;
-        storage_bytes: number | null;
-      }
-    | undefined;
+    args: [userId],
+  });
 
-  const totalMemories = row?.total_memories ?? 0;
-  const committedMemories = row?.committed_memories ?? 0;
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  const totalMemories = Number(row?.total_memories ?? 0);
+  const committedMemories = Number(row?.committed_memories ?? 0);
 
   return {
     totalMemories,
     committedMemories,
     pendingMemories: Math.max(totalMemories - committedMemories, 0),
-    storageBytes: row?.storage_bytes ?? 0,
+    storageBytes: Number(row?.storage_bytes ?? 0),
   };
 }
 
-export function updateMemoryArweaveTx(memoryId: string, userId: string, arweaveTxId: string): void {
-  ensureInitialized();
-  db.prepare(
-    `
+export async function updateMemoryArweaveTx(memoryId: string, userId: string, arweaveTxId: string): Promise<void> {
+  await ensureInitialized();
+  const client = getDb();
+  
+  await client.execute({
+    sql: `
       UPDATE memories
       SET arweave_tx_id = ?, sync_status = 'synced', sync_error = NULL
       WHERE id = ? AND user_id = ?
     `,
-  ).run(arweaveTxId, memoryId, userId);
+    args: [arweaveTxId, memoryId, userId],
+  });
 }
 
-export function updateMemorySyncFailure(memoryId: string, userId: string, errorMessage: string): void {
-  ensureInitialized();
-  db.prepare(
-    `
+export async function updateMemorySyncFailure(memoryId: string, userId: string, errorMessage: string): Promise<void> {
+  await ensureInitialized();
+  const client = getDb();
+  
+  await client.execute({
+    sql: `
       UPDATE memories
       SET sync_status = 'failed', sync_error = ?
       WHERE id = ? AND user_id = ?
     `,
-  ).run(errorMessage.slice(0, 1000), memoryId, userId);
+    args: [errorMessage.slice(0, 1000), memoryId, userId],
+  });
 }
 
-export function setUserArweaveJwk(userId: string, jwkJson: string): void {
-  ensureInitialized();
+export async function setUserArweaveJwk(userId: string, jwkJson: string): Promise<void> {
+  await ensureInitialized();
+  const client = getDb();
   const encrypted = encryptSecretEnvelope(jwkJson);
-  db.prepare(
-    `
+  
+  await client.execute({
+    sql: `
       INSERT INTO user_settings (
-        user_id,
-        arweave_jwk,
-        arweave_jwk_encrypted,
-        arweave_jwk_iv,
-        arweave_jwk_key_encrypted,
-        arweave_jwk_key_iv,
-        updated_at
+        user_id, arweave_jwk, arweave_jwk_encrypted, arweave_jwk_iv,
+        arweave_jwk_key_encrypted, arweave_jwk_key_iv, updated_at
       )
       VALUES (?, NULL, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
@@ -452,28 +430,26 @@ export function setUserArweaveJwk(userId: string, jwkJson: string): void {
         arweave_jwk_key_iv = excluded.arweave_jwk_key_iv,
         updated_at = excluded.updated_at
     `,
-  ).run(
-    userId,
-    encrypted.encryptedBlob,
-    encrypted.iv,
-    encrypted.encryptedDataKey,
-    encrypted.dataKeyIv,
-    new Date().toISOString(),
-  );
+    args: [
+      userId,
+      encrypted.encryptedBlob,
+      encrypted.iv,
+      encrypted.encryptedDataKey,
+      encrypted.dataKeyIv,
+      new Date().toISOString(),
+    ],
+  });
 }
 
-export function clearUserArweaveJwk(userId: string): void {
-  ensureInitialized();
-  db.prepare(
-    `
+export async function clearUserArweaveJwk(userId: string): Promise<void> {
+  await ensureInitialized();
+  const client = getDb();
+  
+  await client.execute({
+    sql: `
       INSERT INTO user_settings (
-        user_id,
-        arweave_jwk,
-        arweave_jwk_encrypted,
-        arweave_jwk_iv,
-        arweave_jwk_key_encrypted,
-        arweave_jwk_key_iv,
-        updated_at
+        user_id, arweave_jwk, arweave_jwk_encrypted, arweave_jwk_iv,
+        arweave_jwk_key_encrypted, arweave_jwk_key_iv, updated_at
       )
       VALUES (?, NULL, NULL, NULL, NULL, NULL, ?)
       ON CONFLICT(user_id) DO UPDATE SET
@@ -484,48 +460,45 @@ export function clearUserArweaveJwk(userId: string): void {
         arweave_jwk_key_iv = NULL,
         updated_at = excluded.updated_at
     `,
-  ).run(userId, new Date().toISOString());
+    args: [userId, new Date().toISOString()],
+  });
 }
 
-export function getUserArweaveJwk(userId: string): string | null {
-  ensureInitialized();
-  const row = db
-    .prepare(
-      `
+export async function getUserArweaveJwk(userId: string): Promise<string | null> {
+  await ensureInitialized();
+  const client = getDb();
+  
+  const result = await client.execute({
+    sql: `
       SELECT arweave_jwk, arweave_jwk_encrypted, arweave_jwk_iv, arweave_jwk_key_encrypted, arweave_jwk_key_iv
       FROM user_settings
       WHERE user_id = ?
     `,
-    )
-    .get(userId) as
-    | {
-        arweave_jwk: string | null;
-        arweave_jwk_encrypted: string | null;
-        arweave_jwk_iv: string | null;
-        arweave_jwk_key_encrypted: string | null;
-        arweave_jwk_key_iv: string | null;
-      }
-    | undefined;
+    args: [userId],
+  });
 
-  if (!row) {
+  if (result.rows.length === 0) {
     return null;
   }
+
+  const row = result.rows[0] as Record<string, unknown>;
+
   if (row.arweave_jwk_encrypted && row.arweave_jwk_iv && row.arweave_jwk_key_encrypted && row.arweave_jwk_key_iv) {
     return decryptSecretEnvelope({
-      encryptedBlob: row.arweave_jwk_encrypted,
-      iv: row.arweave_jwk_iv,
-      encryptedDataKey: row.arweave_jwk_key_encrypted,
-      dataKeyIv: row.arweave_jwk_key_iv,
+      encryptedBlob: row.arweave_jwk_encrypted as string,
+      iv: row.arweave_jwk_iv as string,
+      encryptedDataKey: row.arweave_jwk_key_encrypted as string,
+      dataKeyIv: row.arweave_jwk_key_iv as string,
     });
   }
 
   if (row.arweave_jwk) {
     try {
-      setUserArweaveJwk(userId, row.arweave_jwk);
+      await setUserArweaveJwk(userId, row.arweave_jwk as string);
     } catch {
       // Keep serving legacy plaintext if ENCRYPTION_KEY is not configured yet.
     }
   }
 
-  return row.arweave_jwk ?? null;
+  return (row.arweave_jwk as string) ?? null;
 }

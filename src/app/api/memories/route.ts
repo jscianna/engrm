@@ -14,7 +14,7 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const memories = getMemories(userId);
+  const memories = await getMemories(userId);
   return NextResponse.json({ memories });
 }
 

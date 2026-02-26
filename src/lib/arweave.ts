@@ -11,8 +11,8 @@ const arweave = Arweave.init({
   protocol: "https",
 });
 
-export function resolveUserArweaveKey(userId: string): { key: ArweaveJWK | null; source: "user" | "env" | "none" } {
-  const userRaw = getUserArweaveJwk(userId);
+export async function resolveUserArweaveKey(userId: string): Promise<{ key: ArweaveJWK | null; source: "user" | "env" | "none" }> {
+  const userRaw = await getUserArweaveJwk(userId);
   if (userRaw) {
     return { key: parseArweaveJwk(userRaw), source: "user" };
   }
@@ -26,7 +26,7 @@ export function resolveUserArweaveKey(userId: string): { key: ArweaveJWK | null;
 }
 
 export async function getArweaveWalletStatus(userId: string): Promise<ArweaveWalletStatus> {
-  const resolved = resolveUserArweaveKey(userId);
+  const resolved = await resolveUserArweaveKey(userId);
   if (!resolved.key) {
     return {
       source: "none",

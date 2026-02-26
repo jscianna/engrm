@@ -14,7 +14,7 @@ export async function GET(
   }
 
   const { id } = await context.params;
-  const memory = getMemory(id);
+  const memory = await getMemory(id);
 
   if (!memory || memory.userId !== userId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

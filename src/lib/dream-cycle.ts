@@ -37,7 +37,7 @@ function dayDiff(createdAt: string): number {
 }
 
 export async function runDreamCycle(userId: string): Promise<DreamCycleResult> {
-  const memories = listMemoryRecordsByUser(userId, 120);
+  const memories = await listMemoryRecordsByUser(userId, 120);
   const memoryById = new Map(memories.map((memory) => [memory.id, { id: memory.id, userId: memory.userId, title: memory.title }]));
   const candidateSet = memories
     .sort((a, b) => b.importance - a.importance)
@@ -69,7 +69,7 @@ export async function runDreamCycle(userId: string): Promise<DreamCycleResult> {
     }
   }
   if (missingIds.size > 0) {
-    const fetched = getMemoriesByIds(userId, Array.from(missingIds));
+    const fetched = await getMemoriesByIds(userId, Array.from(missingIds));
     for (const memory of fetched) {
       memoryById.set(memory.id, memory);
     }

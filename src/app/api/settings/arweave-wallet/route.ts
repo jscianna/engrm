@@ -36,7 +36,7 @@ export async function PUT(request: Request) {
     }
 
     parseArweaveJwk(jwkRaw);
-    setUserArweaveJwk(userId, jwkRaw);
+    await setUserArweaveJwk(userId, jwkRaw);
 
     const wallet = await getArweaveWalletStatus(userId);
     return NextResponse.json({ wallet });
@@ -52,7 +52,7 @@ export async function DELETE() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  clearUserArweaveJwk(userId);
+  await clearUserArweaveJwk(userId);
   const wallet = await getArweaveWalletStatus(userId);
   return NextResponse.json({ wallet });
 }

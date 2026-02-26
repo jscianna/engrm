@@ -23,8 +23,8 @@ export default async function DashboardPage() {
     return null;
   }
 
-  const memories = getMemories(userId);
-  const stats = getMemoryStats(userId);
+  const memories = await getMemories(userId);
+  const stats = await getMemoryStats(userId);
 
   return (
     <div className="space-y-6">
