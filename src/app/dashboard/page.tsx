@@ -18,7 +18,20 @@ function formatBytes(bytes: number): string {
 }
 
 export default async function DashboardPage() {
-  const { userId } = await auth();
+  let userId: string | null = null;
+  
+  try {
+    const authResult = await auth();
+    userId = authResult.userId;
+  } catch (error) {
+    console.error("[Dashboard] auth() failed:", error);
+    return (
+      <div className="p-8 text-red-400">
+        Authentication failed. Please try refreshing the page.
+      </div>
+    );
+  }
+  
   if (!userId) {
     return null;
   }
