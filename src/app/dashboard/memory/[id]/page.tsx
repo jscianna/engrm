@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CommitMemoryButton } from "@/components/commit-memory-button";
 import { ArweaveVerifyButton } from "@/components/arweave-verify-button";
 import { EncryptedContentViewer } from "@/components/encrypted-content-viewer";
+import { MemoryRelationships } from "@/components/memory-relationships";
 import { getCachedMemory, getCachedRelatedMemories } from "@/lib/memories";
 
 async function RelatedMemoriesSection({
@@ -167,6 +168,8 @@ export default async function MemoryDetailPage({
           </div>
         </CardContent>
       </Card>
+
+      <MemoryRelationships memoryId={memory.id} />
 
       {!memory.isEncrypted ? (
         <Suspense fallback={<div className="h-36 animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900/40" />}>

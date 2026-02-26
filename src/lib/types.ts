@@ -1,6 +1,24 @@
 export type MemorySourceType = "text" | "url" | "file";
 export type MemoryKind = "episodic" | "semantic" | "procedural" | "self-model";
 export type MemorySyncStatus = "pending" | "synced" | "failed";
+export type MemoryRelationshipType =
+  | "similar"
+  | "updates"
+  | "contradicts"
+  | "extends"
+  | "derives_from"
+  | "references";
+
+export type MemoryEdgeRecord = {
+  id: string;
+  userId: string;
+  sourceId: string;
+  targetId: string;
+  relationshipType: MemoryRelationshipType;
+  weight: number;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+};
 
 export type MemoryRecord = {
   id: string;
@@ -20,6 +38,8 @@ export type MemoryRecord = {
   syncStatus: MemorySyncStatus;
   syncError: string | null;
   createdAt: string;
+  relationshipCount?: number;
+  supersededByCount?: number;
 };
 
 export type MemoryListItem = Omit<MemoryRecord, "contentText">;
@@ -34,6 +54,21 @@ export type MemoryDashboardStats = {
   committedMemories: number;
   pendingMemories: number;
   storageBytes: number;
+};
+
+export type MemoryGraphNode = {
+  id: string;
+  title: string;
+  memoryType: MemoryKind;
+  importance: number;
+};
+
+export type MemoryGraphEdge = {
+  id: string;
+  source: string;
+  target: string;
+  relationshipType: MemoryRelationshipType;
+  weight: number;
 };
 
 export type ArweaveWalletStatus = {

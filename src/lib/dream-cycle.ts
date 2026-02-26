@@ -1,4 +1,4 @@
-import { getMemoriesByIds, listMemoryRecordsByUser } from "@/lib/db";
+import { createMemoryEdge, getMemoriesByIds, listMemoryEdgesByUser, listMemoryRecordsByUser } from "@/lib/db";
 import { embedText } from "@/lib/embeddings";
 import { semanticSearchVectors } from "@/lib/vector";
 
@@ -8,6 +8,7 @@ export type DreamBondSuggestion = {
   leftTitle: string;
   rightTitle: string;
   score: number;
+  persisted: boolean;
 };
 
 export type DreamPromotionSuggestion = {
@@ -36,9 +37,31 @@ function dayDiff(createdAt: string): number {
   return Math.max(0, millis / (1000 * 60 * 60 * 24));
 }
 
+export async function saveBond(params: {
+  userId: string;
+  leftId: string;
+  rightId: string;
+  score?: number;
+  metadata?: Record<string, unknown> | null;
+}) {
+  return createMemoryEdge({
+    userId: params.userId,
+    sourceId: params.leftId,
+    targetId: params.rightId,
+    relationshipType: "similar",
+    weight: params.score ?? 1,
+    metadata: params.metadata ?? null,
+  });
+}
+
 export async function runDreamCycle(userId: string): Promise<DreamCycleResult> {
   const memories = await listMemoryRecordsByUser(userId, 120);
   const memoryById = new Map(memories.map((memory) => [memory.id, { id: memory.id, userId: memory.userId, title: memory.title }]));
+  const existingEdges = await listMemoryEdgesByUser(userId, 600);
+  const existingSimilarEdges = existingEdges.filter((edge) => edge.relationshipType === "similar");
+  const existingPairKeys = new Set(
+    existingSimilarEdges.map((edge) => [edge.sourceId, edge.targetId].sort().join(":")),
+  );
   const candidateSet = memories
     .sort((a, b) => b.importance - a.importance)
     .slice(0, 14);
@@ -99,13 +122,49 @@ export async function runDreamCycle(userId: string): Promise<DreamCycleResult> {
         leftTitle: memory.title,
         rightTitle: other.title,
         score: hit.score,
+        persisted: existingPairKeys.has(pairKey),
       });
     }
+  }
+
+  for (const edge of existingSimilarEdges) {
+    const left = memoryById.get(edge.sourceId);
+    const right = memoryById.get(edge.targetId);
+    if (!left || !right) {
+      continue;
+    }
+    const pairKey = [left.id, right.id].sort().join(":");
+    if (bondsMap.has(pairKey)) {
+      continue;
+    }
+    bondsMap.set(pairKey, {
+      leftId: left.id,
+      rightId: right.id,
+      leftTitle: left.title,
+      rightTitle: right.title,
+      score: edge.weight,
+      persisted: true,
+    });
   }
 
   const bonds = Array.from(bondsMap.values())
     .sort((a, b) => b.score - a.score)
     .slice(0, 8);
+
+  await Promise.all(
+    bonds
+      .filter((bond) => !bond.persisted && bond.score > 0.85)
+      .map(async (bond) => {
+        await saveBond({
+          userId,
+          leftId: bond.leftId,
+          rightId: bond.rightId,
+          score: bond.score,
+          metadata: { source: "dream_cycle_auto" },
+        });
+        bond.persisted = true;
+      }),
+  );
 
   const promotions = candidateSet
     .filter((memory) => memory.memoryType === "episodic")

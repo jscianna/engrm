@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Link2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { MemoryListItem } from "@/lib/types";
@@ -21,6 +21,17 @@ export function MemoryCard({ memory }: { memory: MemoryListItem }) {
             <Badge variant="outline" className="border-zinc-700 text-zinc-300">
               Importance {memory.importance}/10
             </Badge>
+            {Number(memory.relationshipCount ?? 0) > 0 ? (
+              <Badge variant="outline" className="border-cyan-800/70 text-cyan-200">
+                <Link2 className="h-3 w-3" />
+                {memory.relationshipCount} links
+              </Badge>
+            ) : null}
+            {Number(memory.supersededByCount ?? 0) > 0 ? (
+              <Badge variant="outline" className="border-amber-700/70 text-amber-200">
+                Superseded
+              </Badge>
+            ) : null}
             <span>{new Date(memory.createdAt).toLocaleString()}</span>
           </div>
         </CardHeader>

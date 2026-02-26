@@ -1,6 +1,17 @@
 import crypto from "node:crypto";
 import { createClient, type Client } from "@libsql/client";
-import type { MemoryDashboardStats, MemoryKind, MemoryListItem, MemoryRecord, MemorySourceType, MemorySyncStatus } from "@/lib/types";
+import type {
+  MemoryDashboardStats,
+  MemoryEdgeRecord,
+  MemoryGraphEdge,
+  MemoryGraphNode,
+  MemoryKind,
+  MemoryListItem,
+  MemoryRecord,
+  MemoryRelationshipType,
+  MemorySourceType,
+  MemorySyncStatus,
+} from "@/lib/types";
 
 const ENCRYPTION_ALGORITHM = "aes-256-gcm";
 
@@ -203,6 +214,29 @@ async function ensureInitialized(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_sessions_user_created_at
     ON sessions(user_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS memory_edges (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      relationship_type TEXT NOT NULL,
+      weight REAL DEFAULT 1.0,
+      metadata_json TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (source_id) REFERENCES memories(id) ON DELETE CASCADE,
+      FOREIGN KEY (target_id) REFERENCES memories(id) ON DELETE CASCADE,
+      UNIQUE(source_id, target_id, relationship_type)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_edges_user
+    ON memory_edges(user_id);
+
+    CREATE INDEX IF NOT EXISTS idx_edges_source
+    ON memory_edges(source_id);
+
+    CREATE INDEX IF NOT EXISTS idx_edges_target
+    ON memory_edges(target_id);
   `);
     await ensureMemoriesColumns(client);
     await ensureMemoriesIndexes(client);
@@ -378,7 +412,20 @@ export async function listMemoriesByUser(userId: string, limit = 100): Promise<M
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, source_url, file_name, content_hash, arweave_tx_id, created_at,
-             memory_type, importance, tags_csv, sync_status, sync_error, content_iv, content_encrypted
+             memory_type, importance, tags_csv, sync_status, sync_error, content_iv, content_encrypted,
+             (
+               SELECT COUNT(*)
+               FROM memory_edges e
+               WHERE e.user_id = memories.user_id
+               AND (e.source_id = memories.id OR e.target_id = memories.id)
+             ) AS relationship_count,
+             (
+               SELECT COUNT(*)
+               FROM memory_edges e
+               WHERE e.user_id = memories.user_id
+               AND e.source_id = memories.id
+               AND e.relationship_type = 'updates'
+             ) AS superseded_by_count
       FROM memories
       WHERE user_id = ?
       ORDER BY created_at DESC
@@ -404,6 +451,8 @@ export async function listMemoriesByUser(userId: string, limit = 100): Promise<M
     syncStatus: (row.sync_status as MemorySyncStatus) ?? "pending",
     syncError: row.sync_error as string | null,
     createdAt: row.created_at as string,
+    relationshipCount: Number(row.relationship_count ?? 0),
+    supersededByCount: Number(row.superseded_by_count ?? 0),
   }));
 }
 
@@ -459,7 +508,20 @@ export async function getMemoriesByIds(userId: string, ids: string[]): Promise<M
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, source_url, file_name, content_hash, arweave_tx_id, created_at,
-             memory_type, importance, tags_csv, sync_status, sync_error, content_iv, content_encrypted
+             memory_type, importance, tags_csv, sync_status, sync_error, content_iv, content_encrypted,
+             (
+               SELECT COUNT(*)
+               FROM memory_edges e
+               WHERE e.user_id = memories.user_id
+               AND (e.source_id = memories.id OR e.target_id = memories.id)
+             ) AS relationship_count,
+             (
+               SELECT COUNT(*)
+               FROM memory_edges e
+               WHERE e.user_id = memories.user_id
+               AND e.source_id = memories.id
+               AND e.relationship_type = 'updates'
+             ) AS superseded_by_count
       FROM memories
       WHERE user_id = ? AND id IN (${placeholders})
     `,
@@ -483,7 +545,163 @@ export async function getMemoriesByIds(userId: string, ids: string[]): Promise<M
     syncStatus: (row.sync_status as MemorySyncStatus) ?? "pending",
     syncError: row.sync_error as string | null,
     createdAt: row.created_at as string,
+    relationshipCount: Number(row.relationship_count ?? 0),
+    supersededByCount: Number(row.superseded_by_count ?? 0),
   }));
+}
+
+export async function createMemoryEdge(input: CreateMemoryEdgeInput): Promise<MemoryEdgeRecord> {
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+  const id = `edge_${crypto.randomUUID().replaceAll("-", "")}`;
+  const weight = Number.isFinite(input.weight) ? Number(input.weight) : 1;
+  const metadataJson = input.metadata ? JSON.stringify(input.metadata) : null;
+
+  await client.execute({
+    sql: `
+      INSERT INTO memory_edges (
+        id, user_id, source_id, target_id, relationship_type, weight, metadata_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(source_id, target_id, relationship_type) DO UPDATE SET
+        weight = excluded.weight,
+        metadata_json = excluded.metadata_json
+    `,
+    args: [
+      id,
+      input.userId,
+      input.sourceId,
+      input.targetId,
+      input.relationshipType,
+      weight,
+      metadataJson,
+      now,
+    ],
+  });
+
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, source_id, target_id, relationship_type, weight, metadata_json, created_at
+      FROM memory_edges
+      WHERE user_id = ? AND source_id = ? AND target_id = ? AND relationship_type = ?
+      LIMIT 1
+    `,
+    args: [input.userId, input.sourceId, input.targetId, input.relationshipType],
+  });
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  if (!row) {
+    throw new Error("Failed to create memory edge");
+  }
+  return mapMemoryEdgeRow(row);
+}
+
+export async function getMemoryEdgesForMemory(userId: string, memoryId: string): Promise<MemoryEdgesForMemory> {
+  await ensureInitialized();
+  const client = getDb();
+  const [incomingResult, outgoingResult] = await Promise.all([
+    client.execute({
+      sql: `
+        SELECT id, user_id, source_id, target_id, relationship_type, weight, metadata_json, created_at
+        FROM memory_edges
+        WHERE user_id = ? AND target_id = ?
+        ORDER BY created_at DESC
+      `,
+      args: [userId, memoryId],
+    }),
+    client.execute({
+      sql: `
+        SELECT id, user_id, source_id, target_id, relationship_type, weight, metadata_json, created_at
+        FROM memory_edges
+        WHERE user_id = ? AND source_id = ?
+        ORDER BY created_at DESC
+      `,
+      args: [userId, memoryId],
+    }),
+  ]);
+
+  return {
+    incoming: incomingResult.rows.map((row) => mapMemoryEdgeRow(row as Record<string, unknown>)),
+    outgoing: outgoingResult.rows.map((row) => mapMemoryEdgeRow(row as Record<string, unknown>)),
+  };
+}
+
+export async function deleteMemoryEdge(userId: string, edgeId: string): Promise<boolean> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      DELETE FROM memory_edges
+      WHERE user_id = ? AND id = ?
+    `,
+    args: [userId, edgeId],
+  });
+  return (result.rowsAffected ?? 0) > 0;
+}
+
+export async function listMemoryEdgesByUser(userId: string, limit = 250): Promise<MemoryEdgeRecord[]> {
+  await ensureInitialized();
+  const client = getDb();
+  const boundedLimit = Math.max(1, Math.min(limit, 1000));
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, source_id, target_id, relationship_type, weight, metadata_json, created_at
+      FROM memory_edges
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `,
+    args: [userId, boundedLimit],
+  });
+  return result.rows.map((row) => mapMemoryEdgeRow(row as Record<string, unknown>));
+}
+
+export async function getMemoryGraph(userId: string, limit = 100): Promise<{ nodes: MemoryGraphNode[]; edges: MemoryGraphEdge[] }> {
+  await ensureInitialized();
+  const client = getDb();
+  const boundedLimit = Math.max(1, Math.min(limit, 300));
+  const nodeResult = await client.execute({
+    sql: `
+      SELECT id, title, memory_type, importance
+      FROM memories
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `,
+    args: [userId, boundedLimit],
+  });
+
+  const nodes: MemoryGraphNode[] = nodeResult.rows.map((row) => ({
+    id: row.id as string,
+    title: row.title as string,
+    memoryType: ((row.memory_type as MemoryKind) ?? "episodic") as MemoryKind,
+    importance: Number(row.importance ?? 5),
+  }));
+  const nodeIds = nodes.map((node) => node.id);
+  if (nodeIds.length === 0) {
+    return { nodes: [], edges: [] };
+  }
+
+  const placeholders = nodeIds.map(() => "?").join(",");
+  const edgeResult = await client.execute({
+    sql: `
+      SELECT id, source_id, target_id, relationship_type, weight
+      FROM memory_edges
+      WHERE user_id = ?
+      AND source_id IN (${placeholders})
+      AND target_id IN (${placeholders})
+    `,
+    args: [userId, ...nodeIds, ...nodeIds],
+  });
+
+  const edges: MemoryGraphEdge[] = edgeResult.rows.map((row) => ({
+    id: row.id as string,
+    source: row.source_id as string,
+    target: row.target_id as string,
+    relationshipType: row.relationship_type as MemoryRelationshipType,
+    weight: Number(row.weight ?? 1),
+  }));
+
+  return { nodes, edges };
 }
 
 export async function getDashboardStatsByUser(userId: string): Promise<MemoryDashboardStats> {
@@ -702,6 +920,33 @@ function parseJsonObject(input: unknown): Record<string, unknown> | null {
   }
 
   return null;
+}
+
+export type CreateMemoryEdgeInput = {
+  userId: string;
+  sourceId: string;
+  targetId: string;
+  relationshipType: MemoryRelationshipType;
+  weight?: number;
+  metadata?: Record<string, unknown> | null;
+};
+
+export type MemoryEdgesForMemory = {
+  incoming: MemoryEdgeRecord[];
+  outgoing: MemoryEdgeRecord[];
+};
+
+function mapMemoryEdgeRow(row: Record<string, unknown>): MemoryEdgeRecord {
+  return {
+    id: row.id as string,
+    userId: row.user_id as string,
+    sourceId: row.source_id as string,
+    targetId: row.target_id as string,
+    relationshipType: row.relationship_type as MemoryRelationshipType,
+    weight: Number(row.weight ?? 1),
+    metadata: parseJsonObject(row.metadata_json),
+    createdAt: row.created_at as string,
+  };
 }
 
 function mapAgentMemoryRow(row: Record<string, unknown>): AgentMemoryRecord {
