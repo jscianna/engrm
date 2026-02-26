@@ -162,3 +162,42 @@ export async function semanticSearchVectors(params: {
     return [];
   }
 }
+
+/**
+ * Search vectors directly - for zero-knowledge mode where client provides pre-computed vector
+ */
+export async function semanticSearchVectorsDirect(params: {
+  userId: string;
+  vector: number[];
+  topK?: number;
+}): Promise<Array<{ id: string; score: number }>> {
+  try {
+    await ensureVectorTable();
+    const client = getDb();
+    
+    const result = await client.execute({
+      sql: `
+        SELECT memory_id, vector_json
+        FROM memory_vectors
+        WHERE user_id = ?
+      `,
+      args: [params.userId],
+    });
+    
+    const scored = result.rows.map((row) => {
+      const storedVector = JSON.parse(row.vector_json as string) as number[];
+      const score = cosineSimilarity(params.vector, storedVector);
+      return {
+        id: row.memory_id as string,
+        score,
+      };
+    });
+    
+    return scored
+      .sort((a, b) => b.score - a.score)
+      .slice(0, params.topK ?? 10);
+  } catch (error) {
+    console.error("Vector search failed:", error);
+    return [];
+  }
+}
