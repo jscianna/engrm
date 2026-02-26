@@ -23,8 +23,25 @@ export default async function DashboardPage() {
     return null;
   }
 
-  const memories = await getMemories(userId);
-  const stats = await getMemoryStats(userId);
+  let memories: Awaited<ReturnType<typeof getMemories>> = [];
+  let stats: Awaited<ReturnType<typeof getMemoryStats>> = { 
+    totalMemories: 0, 
+    committedMemories: 0, 
+    pendingMemories: 0, 
+    storageBytes: 0 
+  };
+  
+  try {
+    memories = await getMemories(userId);
+  } catch (error) {
+    console.error("[Dashboard] getMemories failed:", error);
+  }
+  
+  try {
+    stats = await getMemoryStats(userId);
+  } catch (error) {
+    console.error("[Dashboard] getMemoryStats failed:", error);
+  }
 
   return (
     <div className="space-y-6">

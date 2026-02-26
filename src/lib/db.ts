@@ -124,7 +124,8 @@ async function ensureInitialized(): Promise<void> {
 
   const client = getDb();
 
-  await client.executeMultiple(`
+  try {
+    await client.executeMultiple(`
     CREATE TABLE IF NOT EXISTS memories (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -157,7 +158,11 @@ async function ensureInitialized(): Promise<void> {
     );
   `);
 
-  initialized = true;
+    initialized = true;
+  } catch (error) {
+    console.error("[DB] ensureInitialized failed:", error);
+    throw error;
+  }
 }
 
 type MemoryRow = {
