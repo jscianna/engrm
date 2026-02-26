@@ -1,8 +1,8 @@
 # MEMRY + OpenClaw Integration
 
-OpenClaw agents wake up fresh each session. MEMRY gives them permanent memory that survives restarts, context compaction, and even switching between models.
+OpenClaw agents wake up fresh each session. MEMRY gives them permanent memory that survives restarts, context compaction, and model switches.
 
-## Why OpenClaw Agents Need MEMRY
+## Why Agents Need MEMRY
 
 | Problem | MEMRY Solution |
 |---------|----------------|
@@ -10,104 +10,85 @@ OpenClaw agents wake up fresh each session. MEMRY gives them permanent memory th
 | Context window fills up | Offload to searchable memory |
 | Switching models loses history | Memory persists across any model |
 | Can't recall past conversations | Semantic search finds relevant context |
-| No audit trail | Arweave makes decisions permanent |
+| No audit trail | Arweave makes decisions verifiable |
 
-## Quick Setup
+## Quick Start
 
 ```bash
-# In your OpenClaw config, add MEMRY API key
+# Set your API key
 export MEMRY_API_KEY="mem_xxx"
+```
+
+```python
+from memry import MemryClient
+
+client = MemryClient(api_key=os.environ["MEMRY_API_KEY"])
+
+# Store a memory
+client.store("User prefers morning meeting times")
+
+# Search memories
+results = client.search("meeting preferences")
+
+# Get context for LLM
+context = client.get_context("scheduling a meeting", max_tokens=2000)
 ```
 
 ## Example 1: Remembering User Preferences
 
 ```python
 # When user states a preference
-async def on_user_preference(user_id: str, preference: str):
+async def save_preference(user_id: str, preference: str):
     await memry.store(
         content=f"User preference: {preference}",
         namespace=f"user_{user_id}",
-        metadata={"type": "preference", "timestamp": now()}
+        metadata={"type": "preference"}
     )
 
-# When responding, recall preferences
-async def get_user_context(user_id: str, query: str):
-    prefs = await memry.search(
-        query=query,
+# Before responding to preference-related questions
+async def get_preferences(user_id: str, topic: str):
+    return await memry.search(
+        query=topic,
         namespace=f"user_{user_id}",
         top_k=5
     )
-    return "\n".join([p.content for p in prefs])
 ```
 
-**OpenClaw AGENTS.md integration:**
-```markdown
-## Memory
-Before responding to preference-related questions, search MEMRY:
-- Call: memry.search(query, namespace="user_{userId}")
-- Include relevant memories in your context
-```
+**Example preferences to store:**
+- "User prefers concise responses over detailed explanations"
+- "User's timezone is EST"
+- "User prefers code examples in Python"
 
 ## Example 2: Conversation Continuity
 
 ```python
-# Start of each OpenClaw session
+# Start a session for this conversation
 session = await memry.create_session(
     namespace="conversations",
-    metadata={"user": user_id, "channel": "telegram"}
+    metadata={"channel": "slack", "started": now()}
 )
 
 # After each exchange
 await memry.store(
-    content=f"User: {user_message}\nAssistant: {bot_response}",
-    session_id=session.id,
-    metadata={"role": "exchange"}
+    content=f"User asked about project deadlines. I provided Q2 timeline.",
+    session_id=session.id
 )
 
-# On new session, recall recent context
+# On new session, recall context
 context = await memry.get_context(
-    query="recent conversation",
-    session_id=last_session_id,
+    query="recent discussion topics",
     max_tokens=2000
 )
 ```
 
-## Example 3: Deal Flow Memory (Vex/Venturer-1)
+## Example 3: Learning From Corrections
 
 ```python
-# When scouting a company
+# When user corrects the agent
 await memry.store(
-    content=f"""
-    Company: {company_name}
-    Score: {score}/10
-    Thesis fit: {thesis}
-    Team assessment: {team_notes}
-    Red flags: {red_flags}
-    """,
-    namespace="deal_flow",
-    metadata={
-        "company": company_name,
-        "score": score,
-        "stage": "scouted",
-        "date": today()
-    }
-)
-
-# When asked about a company later
-memories = await memry.search(
-    query=f"What do we know about {company_name}?",
-    namespace="deal_flow"
-)
-```
-
-## Example 4: Learning From Corrections
-
-```python
-# When user corrects the bot
-await memry.store(
-    content=f"CORRECTION: When I said '{wrong_thing}', user corrected me: '{correction}'",
+    content=f"CORRECTION: {original_statement} was wrong. Correct info: {correction}",
     namespace="learnings",
-    metadata={"type": "correction", "severity": "high"}
+    metadata={"type": "correction", "topic": topic}
 )
 
 # Before responding, check for relevant corrections
@@ -116,100 +97,121 @@ corrections = await memry.search(
     namespace="learnings",
     top_k=3
 )
-if corrections:
-    context += "\n\nPast corrections to remember:\n" + format_corrections(corrections)
 ```
 
-## Example 5: Cross-Session Task Tracking
+## Example 4: Task and Project Tracking
 
 ```python
 # When user assigns a task
 await memry.store(
-    content=f"TODO: {task_description}",
+    content=f"Task: {task_description}. Due: {due_date}. Priority: {priority}",
     namespace="tasks",
-    metadata={
-        "status": "pending",
-        "assigned": now(),
-        "priority": priority,
-        "user": user_id
-    }
+    metadata={"status": "pending", "assigned": now()}
 )
 
-# On heartbeat, check pending tasks
+# Check pending tasks
 pending = await memry.search(
-    query="pending tasks due soon",
+    query="pending tasks",
     namespace="tasks"
 )
 ```
 
-## Example 6: Building a Knowledge Graph
+## Example 5: Knowledge Base Building
 
 ```python
-# When learning about relationships
+# When learning new information
 await memry.store(
-    content=f"{person_a} is connected to {person_b} via {relationship}",
-    namespace="network_graph",
-    metadata={
-        "entities": [person_a, person_b],
-        "relationship_type": relationship
-    }
+    content=f"Fact: {information}. Source: {source}. Context: {context}",
+    namespace="knowledge",
+    metadata={"category": category, "confidence": "high"}
 )
 
-# Query the graph
-connections = await memry.search(
-    query=f"Who is {person} connected to?",
-    namespace="network_graph"
+# Query knowledge base
+relevant = await memry.search(
+    query="information about topic X",
+    namespace="knowledge",
+    top_k=10
 )
 ```
 
-## OpenClaw Skill Integration
+## Example 6: Multi-Agent Namespaces
 
-Create a MEMRY skill for OpenClaw agents:
-
-```markdown
-# skills/memry/SKILL.md
-
-## When to Use
-- Storing user preferences, learnings, corrections
-- Recalling past conversations or decisions
-- Building persistent knowledge across sessions
-
-## Usage
 ```python
-from memry import MemryClient
+# Each agent gets its own namespace
+research_agent_ns = "agent_research"
+writing_agent_ns = "agent_writing"
+coding_agent_ns = "agent_coding"
 
-client = MemryClient(api_key=os.environ["MEMRY_API_KEY"])
+# Research agent stores findings
+await memry.store(
+    content="Found 3 relevant papers on topic",
+    namespace=research_agent_ns
+)
 
-# Store
-client.store("Important fact to remember", namespace="knowledge")
-
-# Search
-results = client.search("relevant query", top_k=5)
-
-# Get context window
-context = client.get_context("current task", max_tokens=4000)
+# Writing agent can access research namespace if needed
+research = await memry.search(
+    query="relevant papers",
+    namespace=research_agent_ns
+)
 ```
+
+## Context Window Management
+
+The `/context` endpoint is designed for LLM prompts:
+
+```python
+# Get optimized context for your current task
+context = await memry.get_context(
+    query="user's project requirements",
+    max_tokens=4000,  # Fits in most context windows
+    namespace="projects"
+)
+
+# Use in your LLM prompt
+prompt = f"""
+Previous context:
+{context}
+
+Current request: {user_message}
+"""
 ```
 
-## The Pitch for OpenClaw Users
+The context endpoint:
+- Combines recent + semantically relevant memories
+- Respects token budget
+- Returns LLM-ready text
 
-> "Your OpenClaw agent reads MEMORY.md every session. But MEMORY.md has limits:
-> - Gets too long → context overflow
-> - Can't search semantically
-> - Lost if file corrupts
-> 
-> MEMRY is MEMORY.md that scales forever, searches intelligently, and lives on Arweave permanently."
+## Security Model
 
-## API Endpoints for OpenClaw
+MEMRY uses zero-knowledge encryption:
+- Your vault password never leaves your device
+- Server stores only encrypted blobs
+- Even API access can't read plaintext without the vault key
 
-| Action | Endpoint | Example |
-|--------|----------|---------|
-| Store memory | `POST /api/v1/memories` | Save user preference |
-| Search | `POST /api/v1/search` | Find relevant context |
-| Get context | `POST /api/v1/context` | Build LLM prompt |
-| Create session | `POST /api/v1/sessions` | Start conversation |
-| List by session | `GET /api/v1/sessions/{id}/memories` | Recall conversation |
+This is critical for agents handling:
+- Personal user data
+- Financial information
+- Health records
+- Confidential business data
 
-## Security Note
+## API Reference
 
-MEMRY uses zero-knowledge encryption. Even if someone accesses the API, they can't read the actual memories without the user's vault password. This is critical for agents handling sensitive data (financials, health, personal info).
+| Action | Endpoint | Method |
+|--------|----------|--------|
+| Store memory | `/api/v1/memories` | POST |
+| List memories | `/api/v1/memories` | GET |
+| Search | `/api/v1/search` | POST |
+| Get context | `/api/v1/context` | POST |
+| Create session | `/api/v1/sessions` | POST |
+| Create namespace | `/api/v1/namespaces` | POST |
+
+## The Pitch
+
+> **Without MEMRY:** Agent forgets everything between sessions. Context window overflows. No way to recall past conversations.
+>
+> **With MEMRY:** Infinite searchable memory. Semantic recall. Permanent storage. Zero-knowledge encryption. One API call.
+
+```python
+# That's it. Your agent now has permanent memory.
+client.store("Important information to remember forever")
+```
