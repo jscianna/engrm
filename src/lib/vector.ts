@@ -1,6 +1,4 @@
-import fs from "node:fs";
-import path from "node:path";
-import { LocalIndex } from "vectra";
+import type { LocalIndex } from "vectra";
 
 type MemoryVectorMetadata = {
   userId: string;
@@ -11,24 +9,34 @@ type MemoryVectorMetadata = {
   importance: number;
 };
 
-const indexPath = path.join(process.cwd(), "data", "vectra");
-fs.mkdirSync(indexPath, { recursive: true });
+let indexPromise: Promise<LocalIndex<MemoryVectorMetadata> | null> | null = null;
 
-let indexPromise: Promise<LocalIndex<MemoryVectorMetadata>> | null = null;
-
-async function getIndex(): Promise<LocalIndex<MemoryVectorMetadata>> {
+async function getIndex(): Promise<LocalIndex<MemoryVectorMetadata> | null> {
   if (!indexPromise) {
     indexPromise = (async () => {
-      const index = new LocalIndex<MemoryVectorMetadata>(indexPath);
-      if (!(await index.isIndexCreated())) {
-        await index.createIndex({
-          version: 2,
-          metadata_config: {
-            indexed: ["userId", "memoryId", "sourceType"],
-          },
-        });
+      try {
+        // Dynamic imports to avoid crashes on serverless
+        const fs = await import("node:fs");
+        const path = await import("node:path");
+        const { LocalIndex } = await import("vectra");
+        
+        const indexPath = path.join(process.cwd(), "data", "vectra");
+        fs.mkdirSync(indexPath, { recursive: true });
+        
+        const index = new LocalIndex<MemoryVectorMetadata>(indexPath);
+        if (!(await index.isIndexCreated())) {
+          await index.createIndex({
+            version: 2,
+            metadata_config: {
+              indexed: ["userId", "memoryId", "sourceType"],
+            },
+          });
+        }
+        return index;
+      } catch (error) {
+        console.warn("Vector index unavailable (likely serverless environment):", error);
+        return null;
       }
-      return index;
     })();
   }
 
@@ -43,30 +51,52 @@ export async function upsertMemoryVector(params: {
   memoryType: string;
   importance: number;
   vector: number[];
-}) {
-  const index = await getIndex();
-  await index.upsertItem({
-    id: params.memoryId,
-    vector: params.vector,
-    metadata: {
-      memoryId: params.memoryId,
-      userId: params.userId,
-      title: params.title,
-      sourceType: params.sourceType,
-      memoryType: params.memoryType,
-      importance: params.importance,
-    },
-  });
+}): Promise<void> {
+  try {
+    const index = await getIndex();
+    if (!index) {
+      console.warn("Skipping vector upsert: index unavailable");
+      return;
+    }
+    await index.upsertItem({
+      id: params.memoryId,
+      vector: params.vector,
+      metadata: {
+        memoryId: params.memoryId,
+        userId: params.userId,
+        title: params.title,
+        sourceType: params.sourceType,
+        memoryType: params.memoryType,
+        importance: params.importance,
+      },
+    });
+  } catch (error) {
+    console.error("Vector upsert failed:", error);
+  }
 }
+
+type VectorSearchResult = {
+  score: number;
+  item: { id: string; metadata: MemoryVectorMetadata };
+};
 
 export async function semanticSearchVectors(params: {
   userId: string;
   query: string;
   vector: number[];
   topK?: number;
-}) {
-  const index = await getIndex();
-  return index.queryItems(params.vector, params.query, params.topK ?? 10, {
-    userId: { $eq: params.userId },
-  });
+}): Promise<VectorSearchResult[]> {
+  try {
+    const index = await getIndex();
+    if (!index) {
+      console.warn("Skipping vector search: index unavailable");
+      return [];
+    }
+    return await index.queryItems(params.vector, params.query, params.topK ?? 10, {
+      userId: { $eq: params.userId },
+    });
+  } catch (error) {
+    console.error("Vector search failed:", error);
+    return [];
+  }
 }

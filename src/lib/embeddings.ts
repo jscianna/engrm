@@ -25,11 +25,17 @@ async function getExtractor() {
 }
 
 export async function embedText(input: string): Promise<number[]> {
-  const extractor = await getExtractor();
-  const output: ExtractorOutput = await extractor(input, {
-    pooling: "mean",
-    normalize: true,
-  });
+  try {
+    const extractor = await getExtractor();
+    const output: ExtractorOutput = await extractor(input, {
+      pooling: "mean",
+      normalize: true,
+    });
 
-  return Array.from(output.data);
+    return Array.from(output.data);
+  } catch (error) {
+    console.error("Embedding generation failed:", error);
+    // Return zero vector as fallback (384 dimensions for MiniLM)
+    return new Array(384).fill(0);
+  }
 }
