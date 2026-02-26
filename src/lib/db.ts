@@ -143,11 +143,20 @@ async function ensureInitialized(): Promise<void> {
       arweave_tx_id TEXT,
       sync_status TEXT NOT NULL DEFAULT 'pending',
       sync_error TEXT,
+      namespace_id TEXT,
+      session_id TEXT,
+      metadata_json TEXT,
       created_at TEXT NOT NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_memories_user_created_at
     ON memories(user_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_memories_user_namespace_created_at
+    ON memories(user_id, namespace_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_memories_user_session_created_at
+    ON memories(user_id, session_id, created_at);
 
     CREATE TABLE IF NOT EXISTS user_settings (
       user_id TEXT PRIMARY KEY,
@@ -159,8 +168,44 @@ async function ensureInitialized(): Promise<void> {
       vault_salt TEXT,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      key_hash TEXT NOT NULL UNIQUE,
+      agent_id TEXT NOT NULL,
+      agent_name TEXT,
+      created_at TEXT NOT NULL,
+      last_used TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_api_keys_user_created_at
+    ON api_keys(user_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS namespaces (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(user_id, name)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_namespaces_user_created_at
+    ON namespaces(user_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      namespace_id TEXT,
+      metadata_json TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sessions_user_created_at
+    ON sessions(user_id, created_at DESC);
   `);
     await ensureMemoriesColumns(client);
+    await ensureMemoriesIndexes(client);
     await ensureUserSettingsColumns(client);
 
     initialized = true;
@@ -170,10 +215,24 @@ async function ensureInitialized(): Promise<void> {
   }
 }
 
+async function ensureMemoriesIndexes(client: Client): Promise<void> {
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_memories_user_namespace_created_at
+    ON memories(user_id, namespace_id, created_at DESC)
+  `);
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_memories_user_session_created_at
+    ON memories(user_id, session_id, created_at)
+  `);
+}
+
 async function ensureMemoriesColumns(client: Client): Promise<void> {
   const requiredColumns: Array<{ name: string; ddl: string }> = [
     { name: "content_iv", ddl: "TEXT" },
     { name: "content_encrypted", ddl: "INTEGER NOT NULL DEFAULT 0" },
+    { name: "namespace_id", ddl: "TEXT" },
+    { name: "session_id", ddl: "TEXT" },
+    { name: "metadata_json", ddl: "TEXT" },
   ];
 
   const tableInfo = await client.execute("PRAGMA table_info(memories)");
@@ -223,6 +282,38 @@ function parseTags(tagsCsv: string): string[] {
     .map((tag) => tag.trim())
     .filter(Boolean);
 }
+
+export type ApiKeyIdentity = {
+  userId: string;
+  agentId: string;
+};
+
+export type NamespaceRecord = {
+  id: string;
+  userId: string;
+  name: string;
+  createdAt: string;
+};
+
+export type SessionRecord = {
+  id: string;
+  userId: string;
+  namespaceId: string | null;
+  namespaceName: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+};
+
+export type AgentMemoryRecord = {
+  id: string;
+  userId: string;
+  title: string;
+  text: string;
+  metadata: Record<string, unknown> | null;
+  namespaceId: string | null;
+  sessionId: string | null;
+  createdAt: string;
+};
 
 function mapRow(row: Record<string, unknown>): MemoryRecord {
   return {
@@ -590,4 +681,447 @@ export async function setUserVaultSalt(userId: string, vaultSalt: string): Promi
     `,
     args: [userId, vaultSalt, now],
   });
+}
+
+function hashApiKey(key: string): string {
+  return crypto.createHash("sha256").update(key, "utf8").digest("hex");
+}
+
+function parseJsonObject(input: unknown): Record<string, unknown> | null {
+  if (typeof input !== "string" || !input) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(input) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // no-op
+  }
+
+  return null;
+}
+
+function mapAgentMemoryRow(row: Record<string, unknown>): AgentMemoryRecord {
+  return {
+    id: row.id as string,
+    userId: row.user_id as string,
+    title: row.title as string,
+    text: row.content_text as string,
+    metadata: parseJsonObject(row.metadata_json),
+    namespaceId: (row.namespace_id as string | null) ?? null,
+    sessionId: (row.session_id as string | null) ?? null,
+    createdAt: row.created_at as string,
+  };
+}
+
+export async function createApiKey(userId: string, agentName?: string): Promise<{ apiKey: string; agentId: string }> {
+  await ensureInitialized();
+  const client = getDb();
+  const id = crypto.randomUUID();
+  const agentId = `agent_${crypto.randomUUID().replaceAll("-", "")}`;
+  const token = crypto.randomBytes(24).toString("hex");
+  const apiKey = `mem_${token}`;
+  const keyHash = hashApiKey(apiKey);
+  const now = new Date().toISOString();
+
+  await client.execute({
+    sql: `
+      INSERT INTO api_keys (id, user_id, key_hash, agent_id, agent_name, created_at, last_used)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `,
+    args: [id, userId, keyHash, agentId, agentName ?? null, now, now],
+  });
+
+  return { apiKey, agentId };
+}
+
+export async function validateApiKey(rawApiKey: string): Promise<ApiKeyIdentity | null> {
+  await ensureInitialized();
+  const client = getDb();
+  const keyHash = hashApiKey(rawApiKey);
+
+  const result = await client.execute({
+    sql: `
+      SELECT user_id, agent_id
+      FROM api_keys
+      WHERE key_hash = ?
+      LIMIT 1
+    `,
+    args: [keyHash],
+  });
+
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  if (!row) {
+    return null;
+  }
+
+  await client.execute({
+    sql: `
+      UPDATE api_keys
+      SET last_used = ?
+      WHERE key_hash = ?
+    `,
+    args: [new Date().toISOString(), keyHash],
+  });
+
+  return {
+    userId: row.user_id as string,
+    agentId: row.agent_id as string,
+  };
+}
+
+export async function createNamespace(userId: string, name: string): Promise<NamespaceRecord> {
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+  const cleaned = name.trim();
+  if (!cleaned) {
+    throw new Error("Namespace name is required.");
+  }
+  const id = `ns_${crypto.randomUUID().replaceAll("-", "")}`;
+
+  await client.execute({
+    sql: `
+      INSERT INTO namespaces (id, user_id, name, created_at)
+      VALUES (?, ?, ?, ?)
+    `,
+    args: [id, userId, cleaned, now],
+  });
+
+  return {
+    id,
+    userId,
+    name: cleaned,
+    createdAt: now,
+  };
+}
+
+export async function listNamespaces(userId: string): Promise<NamespaceRecord[]> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, name, created_at
+      FROM namespaces
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+    `,
+    args: [userId],
+  });
+
+  return result.rows.map((row) => {
+    const record = row as Record<string, unknown>;
+    return {
+      id: record.id as string,
+      userId: record.user_id as string,
+      name: record.name as string,
+      createdAt: record.created_at as string,
+    };
+  });
+}
+
+export async function getNamespaceByName(userId: string, name: string): Promise<NamespaceRecord | null> {
+  await ensureInitialized();
+  const client = getDb();
+  const cleaned = name.trim();
+  if (!cleaned) {
+    return null;
+  }
+
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, name, created_at
+      FROM namespaces
+      WHERE user_id = ? AND name = ?
+      LIMIT 1
+    `,
+    args: [userId, cleaned],
+  });
+
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: row.id as string,
+    userId: row.user_id as string,
+    name: row.name as string,
+    createdAt: row.created_at as string,
+  };
+}
+
+export async function getNamespaceById(userId: string, id: string): Promise<NamespaceRecord | null> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, name, created_at
+      FROM namespaces
+      WHERE user_id = ? AND id = ?
+      LIMIT 1
+    `,
+    args: [userId, id],
+  });
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  if (!row) {
+    return null;
+  }
+  return {
+    id: row.id as string,
+    userId: row.user_id as string,
+    name: row.name as string,
+    createdAt: row.created_at as string,
+  };
+}
+
+export async function createSession(params: {
+  userId: string;
+  namespaceId?: string | null;
+  metadata?: Record<string, unknown> | null;
+}): Promise<SessionRecord> {
+  await ensureInitialized();
+  const client = getDb();
+  const id = `sess_${crypto.randomUUID().replaceAll("-", "")}`;
+  const now = new Date().toISOString();
+  const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
+
+  await client.execute({
+    sql: `
+      INSERT INTO sessions (id, user_id, namespace_id, metadata_json, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `,
+    args: [id, params.userId, params.namespaceId ?? null, metadataJson, now],
+  });
+
+  const namespaceName = params.namespaceId
+    ? (await getNamespaceById(params.userId, params.namespaceId))?.name ?? null
+    : null;
+
+  return {
+    id,
+    userId: params.userId,
+    namespaceId: params.namespaceId ?? null,
+    namespaceName,
+    metadata: params.metadata ?? null,
+    createdAt: now,
+  };
+}
+
+export async function listSessions(params: {
+  userId: string;
+  namespaceId?: string | null;
+}): Promise<SessionRecord[]> {
+  await ensureInitialized();
+  const client = getDb();
+  const hasNamespaceFilter = typeof params.namespaceId !== "undefined";
+  const result = await client.execute({
+    sql: `
+      SELECT s.id, s.user_id, s.namespace_id, s.metadata_json, s.created_at, n.name AS namespace_name
+      FROM sessions s
+      LEFT JOIN namespaces n ON n.id = s.namespace_id
+      WHERE s.user_id = ?
+      ${hasNamespaceFilter ? "AND s.namespace_id = ?" : ""}
+      ORDER BY s.created_at DESC
+    `,
+    args: hasNamespaceFilter ? [params.userId, params.namespaceId ?? null] : [params.userId],
+  });
+
+  return result.rows.map((row) => {
+    const record = row as Record<string, unknown>;
+    return {
+      id: record.id as string,
+      userId: record.user_id as string,
+      namespaceId: (record.namespace_id as string | null) ?? null,
+      namespaceName: (record.namespace_name as string | null) ?? null,
+      metadata: parseJsonObject(record.metadata_json),
+      createdAt: record.created_at as string,
+    };
+  });
+}
+
+export async function getSessionById(userId: string, sessionId: string): Promise<SessionRecord | null> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT s.id, s.user_id, s.namespace_id, s.metadata_json, s.created_at, n.name AS namespace_name
+      FROM sessions s
+      LEFT JOIN namespaces n ON n.id = s.namespace_id
+      WHERE s.user_id = ? AND s.id = ?
+      LIMIT 1
+    `,
+    args: [userId, sessionId],
+  });
+
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: row.id as string,
+    userId: row.user_id as string,
+    namespaceId: (row.namespace_id as string | null) ?? null,
+    namespaceName: (row.namespace_name as string | null) ?? null,
+    metadata: parseJsonObject(row.metadata_json),
+    createdAt: row.created_at as string,
+  };
+}
+
+export async function insertAgentMemory(params: {
+  userId: string;
+  title?: string;
+  text: string;
+  metadata?: Record<string, unknown> | null;
+  namespaceId?: string | null;
+  sessionId?: string | null;
+}): Promise<AgentMemoryRecord> {
+  await ensureInitialized();
+  const client = getDb();
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const text = params.text.trim();
+  const title = (params.title?.trim() || text.slice(0, 80) || "Untitled Memory").trim();
+  const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
+  const contentHash = crypto.createHash("sha256").update(text, "utf8").digest("hex");
+
+  await client.execute({
+    sql: `
+      INSERT INTO memories (
+        id, user_id, title, source_type, memory_type, importance, tags_csv,
+        source_url, file_name, content_text, content_iv, content_encrypted, content_hash, arweave_tx_id,
+        sync_status, sync_error, created_at, namespace_id, session_id, metadata_json
+      ) VALUES (?, ?, ?, 'text', 'episodic', 5, '', NULL, NULL, ?, NULL, 0, ?, NULL, 'pending', NULL, ?, ?, ?, ?)
+    `,
+    args: [id, params.userId, title, text, contentHash, now, params.namespaceId ?? null, params.sessionId ?? null, metadataJson],
+  });
+
+  return {
+    id,
+    userId: params.userId,
+    title,
+    text,
+    metadata: params.metadata ?? null,
+    namespaceId: params.namespaceId ?? null,
+    sessionId: params.sessionId ?? null,
+    createdAt: now,
+  };
+}
+
+export async function listAgentMemories(params: {
+  userId: string;
+  namespaceId?: string | null;
+  limit?: number;
+  since?: string;
+}): Promise<AgentMemoryRecord[]> {
+  await ensureInitialized();
+  const client = getDb();
+  const hasNamespaceFilter = typeof params.namespaceId !== "undefined";
+  const hasSince = typeof params.since === "string" && params.since.length > 0;
+  const limit = Math.max(1, Math.min(params.limit ?? 50, 200));
+  const args: Array<string | number | null> = [params.userId];
+  let where = "WHERE user_id = ?";
+
+  if (hasNamespaceFilter) {
+    where += " AND namespace_id = ?";
+    args.push(params.namespaceId ?? null);
+  }
+  if (hasSince) {
+    where += " AND created_at >= ?";
+    args.push(params.since as string);
+  }
+  args.push(limit);
+
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, title, content_text, metadata_json, namespace_id, session_id, created_at
+      FROM memories
+      ${where}
+      ORDER BY created_at DESC
+      LIMIT ?
+    `,
+    args,
+  });
+
+  return result.rows.map((row) => mapAgentMemoryRow(row as Record<string, unknown>));
+}
+
+export async function listSessionMemories(userId: string, sessionId: string): Promise<AgentMemoryRecord[]> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, title, content_text, metadata_json, namespace_id, session_id, created_at
+      FROM memories
+      WHERE user_id = ? AND session_id = ?
+      ORDER BY created_at ASC
+    `,
+    args: [userId, sessionId],
+  });
+  return result.rows.map((row) => mapAgentMemoryRow(row as Record<string, unknown>));
+}
+
+export async function getAgentMemoryById(userId: string, id: string): Promise<AgentMemoryRecord | null> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, title, content_text, metadata_json, namespace_id, session_id, created_at
+      FROM memories
+      WHERE user_id = ? AND id = ?
+      LIMIT 1
+    `,
+    args: [userId, id],
+  });
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  return row ? mapAgentMemoryRow(row) : null;
+}
+
+export async function getAgentMemoriesByIds(params: {
+  userId: string;
+  ids: string[];
+  namespaceId?: string | null;
+}): Promise<AgentMemoryRecord[]> {
+  await ensureInitialized();
+  if (params.ids.length === 0) {
+    return [];
+  }
+
+  const client = getDb();
+  const placeholders = params.ids.map(() => "?").join(",");
+  const hasNamespaceFilter = typeof params.namespaceId !== "undefined";
+  const args: Array<string | number | null> = [params.userId, ...params.ids];
+  if (hasNamespaceFilter) {
+    args.push(params.namespaceId ?? null);
+  }
+
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, title, content_text, metadata_json, namespace_id, session_id, created_at
+      FROM memories
+      WHERE user_id = ? AND id IN (${placeholders})
+      ${hasNamespaceFilter ? "AND namespace_id = ?" : ""}
+    `,
+    args,
+  });
+
+  return result.rows.map((row) => mapAgentMemoryRow(row as Record<string, unknown>));
+}
+
+export async function deleteAgentMemoryById(userId: string, id: string): Promise<boolean> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      DELETE FROM memories
+      WHERE user_id = ? AND id = ?
+    `,
+    args: [userId, id],
+  });
+
+  return (result.rowsAffected ?? 0) > 0;
 }
