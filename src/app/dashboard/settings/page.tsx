@@ -1,14 +1,23 @@
+import dynamic from "next/dynamic";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { ArweaveWalletCard } from "@/components/arweave-wallet-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+const ArweaveWalletCard = dynamic(
+  () => import("@/components/arweave-wallet-card").then((module) => module.ArweaveWalletCard),
+  {
+    loading: () => (
+      <Card className="border-zinc-800 bg-zinc-900/60">
+        <CardContent className="p-5 text-sm text-zinc-400">Loading wallet tools...</CardContent>
+      </Card>
+    ),
+  },
+);
+
 export default async function SettingsPage() {
-  const { userId } = await auth();
+  const [{ userId }, user] = await Promise.all([auth(), currentUser()]);
   if (!userId) {
     return null;
   }
-
-  const user = await currentUser();
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-4">

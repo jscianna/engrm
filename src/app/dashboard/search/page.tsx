@@ -67,7 +67,7 @@ export default function SearchPage() {
       </Card>
 
       {results.length > 0 ? (
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <section className="memory-grid grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {results.map((result) => (
             <div key={result.memory.id} className="space-y-2">
               <p className="text-xs text-cyan-300">Similarity: {(result.score * 100).toFixed(2)}%</p>

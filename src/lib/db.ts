@@ -165,24 +165,6 @@ async function ensureInitialized(): Promise<void> {
   }
 }
 
-type MemoryRow = {
-  id: string;
-  user_id: string;
-  title: string;
-  source_type: MemorySourceType;
-  memory_type: MemoryKind;
-  importance: number;
-  tags_csv: string;
-  source_url: string | null;
-  file_name: string | null;
-  content_text: string;
-  content_hash: string;
-  arweave_tx_id: string | null;
-  sync_status: MemorySyncStatus;
-  sync_error: string | null;
-  created_at: string;
-};
-
 function parseTags(tagsCsv: string): string[] {
   return tagsCsv
     .split(",")
@@ -248,7 +230,7 @@ export async function listMemoriesByUser(userId: string, limit = 100): Promise<M
   
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, arweave_tx_id, created_at,
+      SELECT id, user_id, title, source_type, source_url, file_name, content_hash, arweave_tx_id, created_at,
              memory_type, importance, tags_csv, sync_status, sync_error
       FROM memories
       WHERE user_id = ?
@@ -258,25 +240,22 @@ export async function listMemoriesByUser(userId: string, limit = 100): Promise<M
     args: [userId, limit],
   });
 
-  return result.rows.map((row) => {
-    const record = mapRow(row as Record<string, unknown>);
-    return {
-      id: record.id,
-      userId: record.userId,
-      title: record.title,
-      sourceType: record.sourceType,
-      memoryType: record.memoryType,
-      importance: record.importance,
-      tags: record.tags,
-      sourceUrl: record.sourceUrl,
-      fileName: record.fileName,
-      contentHash: record.contentHash,
-      arweaveTxId: record.arweaveTxId,
-      syncStatus: record.syncStatus,
-      syncError: record.syncError,
-      createdAt: record.createdAt,
-    };
-  });
+  return result.rows.map((row) => ({
+    id: row.id as string,
+    userId: row.user_id as string,
+    title: row.title as string,
+    sourceType: row.source_type as MemorySourceType,
+    memoryType: (row.memory_type as MemoryKind) ?? "episodic",
+    importance: (row.importance as number) ?? 5,
+    tags: parseTags((row.tags_csv as string) ?? ""),
+    sourceUrl: row.source_url as string | null,
+    fileName: row.file_name as string | null,
+    contentHash: row.content_hash as string,
+    arweaveTxId: row.arweave_tx_id as string | null,
+    syncStatus: (row.sync_status as MemorySyncStatus) ?? "pending",
+    syncError: row.sync_error as string | null,
+    createdAt: row.created_at as string,
+  }));
 }
 
 export async function listMemoryRecordsByUser(userId: string, limit = 100): Promise<MemoryRecord[]> {
@@ -330,7 +309,7 @@ export async function getMemoriesByIds(userId: string, ids: string[]): Promise<M
   
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, arweave_tx_id, created_at,
+      SELECT id, user_id, title, source_type, source_url, file_name, content_hash, arweave_tx_id, created_at,
              memory_type, importance, tags_csv, sync_status, sync_error
       FROM memories
       WHERE user_id = ? AND id IN (${placeholders})
@@ -338,25 +317,22 @@ export async function getMemoriesByIds(userId: string, ids: string[]): Promise<M
     args: [userId, ...ids],
   });
 
-  return result.rows.map((row) => {
-    const record = mapRow(row as Record<string, unknown>);
-    return {
-      id: record.id,
-      userId: record.userId,
-      title: record.title,
-      sourceType: record.sourceType,
-      memoryType: record.memoryType,
-      importance: record.importance,
-      tags: record.tags,
-      sourceUrl: record.sourceUrl,
-      fileName: record.fileName,
-      contentHash: record.contentHash,
-      arweaveTxId: record.arweaveTxId,
-      syncStatus: record.syncStatus,
-      syncError: record.syncError,
-      createdAt: record.createdAt,
-    };
-  });
+  return result.rows.map((row) => ({
+    id: row.id as string,
+    userId: row.user_id as string,
+    title: row.title as string,
+    sourceType: row.source_type as MemorySourceType,
+    memoryType: (row.memory_type as MemoryKind) ?? "episodic",
+    importance: (row.importance as number) ?? 5,
+    tags: parseTags((row.tags_csv as string) ?? ""),
+    sourceUrl: row.source_url as string | null,
+    fileName: row.file_name as string | null,
+    contentHash: row.content_hash as string,
+    arweaveTxId: row.arweave_tx_id as string | null,
+    syncStatus: (row.sync_status as MemorySyncStatus) ?? "pending",
+    syncError: row.sync_error as string | null,
+    createdAt: row.created_at as string,
+  }));
 }
 
 export async function getDashboardStatsByUser(userId: string): Promise<MemoryDashboardStats> {

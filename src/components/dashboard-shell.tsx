@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
 import { Brain, Home, Plus, Search, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,7 @@ const links = [
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -38,10 +39,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                   size="sm"
                   className={cn(
                     "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100",
-                    active && "bg-zinc-800 text-zinc-50",
+                    active ? "bg-zinc-800 text-zinc-50" : "",
                   )}
                 >
-                  <Link href={link.href}>
+                  <Link
+                    href={link.href}
+                    onMouseEnter={() => router.prefetch(link.href)}
+                    onFocus={() => router.prefetch(link.href)}
+                  >
                     <Icon className="mr-1 h-4 w-4" />
                     {link.label}
                   </Link>

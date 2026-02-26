@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { cache } from "react";
 import { embedText } from "@/lib/embeddings";
 import { cleanText, extractUrlContent, hashContent } from "@/lib/content";
 import {
@@ -35,6 +36,26 @@ export async function getMemories(userId: string): Promise<MemoryListItem[]> {
 export async function getMemoryStats(userId: string): Promise<MemoryDashboardStats> {
   return getDashboardStatsByUser(userId);
 }
+
+export const getCachedMemory = cache(async (id: string): Promise<MemoryRecord | null> => getMemoryById(id));
+
+export const getCachedMemories = cache(async (userId: string): Promise<MemoryListItem[]> => listMemoriesByUser(userId, 200));
+
+export const getCachedMemoryStats = cache(async (userId: string): Promise<MemoryDashboardStats> => getDashboardStatsByUser(userId));
+
+export const getCachedRelatedMemories = cache(async (
+  userId: string,
+  memoryId: string,
+  contentText: string,
+  topK = 5,
+): Promise<MemorySearchResult[]> => {
+  return getRelatedMemories({
+    userId,
+    memoryId,
+    contentText,
+    topK,
+  });
+});
 
 function normalizeImportance(input: number | undefined): number {
   const value = Number.isFinite(input) ? Math.round(input as number) : 5;

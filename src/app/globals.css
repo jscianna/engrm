@@ -48,6 +48,8 @@
 }
 
 :root {
+  --font-space-grotesk: "Avenir Next", "Century Gothic", "Trebuchet MS", "Segoe UI", sans-serif;
+  --font-jetbrains-mono: "Menlo", "Consolas", "Liberation Mono", monospace;
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -114,6 +116,9 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --memry-surface: oklch(0.21 0.02 233);
+  --memry-glow: oklch(0.74 0.11 205);
+  --memry-accent: oklch(0.71 0.17 167);
 }
 
 @layer base {
@@ -122,5 +127,32 @@
   }
   body {
     @apply bg-zinc-950 text-foreground font-sans;
+    background-image:
+      radial-gradient(65rem 30rem at 8% -10%, color-mix(in oklch, var(--memry-glow) 16%, transparent), transparent 62%),
+      radial-gradient(44rem 24rem at 92% -8%, color-mix(in oklch, var(--memry-accent) 15%, transparent), transparent 66%),
+      linear-gradient(160deg, oklch(0.15 0.01 235), oklch(0.13 0.01 245));
+    background-attachment: fixed;
+  }
+}
+
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@layer components {
+  .reveal-up {
+    animation: reveal-up 0.45s ease-out both;
+  }
+
+  .memory-grid > * {
+    content-visibility: auto;
+    contain-intrinsic-size: 220px;
   }
 }

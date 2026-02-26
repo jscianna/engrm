@@ -7,7 +7,8 @@ import type { MemoryListItem } from "@/lib/types";
 export function MemoryCard({ memory }: { memory: MemoryListItem }) {
   return (
     <Link href={`/dashboard/memory/${memory.id}`}>
-      <Card className="h-full border-zinc-800 bg-zinc-900/70 transition hover:border-cyan-400/40 hover:bg-zinc-900">
+      <Card className="group relative h-full overflow-hidden border-zinc-800 bg-zinc-900/70 transition duration-300 hover:-translate-y-0.5 hover:border-cyan-400/40 hover:bg-zinc-900 hover:shadow-[0_18px_45px_rgba(34,211,238,0.12)]">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/70 to-transparent opacity-0 transition group-hover:opacity-100" />
         <CardHeader className="pb-3">
           <CardTitle className="line-clamp-2 text-base text-zinc-100">{memory.title}</CardTitle>
           <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { auth } from "@clerk/nextjs/server";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -7,36 +8,64 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CommitMemoryButton } from "@/components/commit-memory-button";
 import { ArweaveVerifyButton } from "@/components/arweave-verify-button";
-import { getMemory, getRelatedMemories } from "@/lib/memories";
-import type { MemorySearchResult } from "@/lib/types";
+import { getCachedMemory, getCachedRelatedMemories } from "@/lib/memories";
+
+async function RelatedMemoriesSection({
+  userId,
+  memoryId,
+  contentText,
+}: {
+  userId: string;
+  memoryId: string;
+  contentText: string;
+}) {
+  const related = await getCachedRelatedMemories(userId, memoryId, contentText, 5);
+
+  return (
+    <Card className="border-zinc-800 bg-zinc-900/70">
+      <CardHeader>
+        <CardTitle className="text-zinc-100">Related Memories</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {related.length === 0 ? (
+          <p className="text-sm text-zinc-400">No related memories found yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {related.map((result) => (
+              <Link
+                key={result.memory.id}
+                href={`/dashboard/memory/${result.memory.id}`}
+                className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 p-3 transition hover:border-cyan-500/40"
+              >
+                <div>
+                  <p className="text-sm font-medium text-zinc-100">{result.memory.title}</p>
+                  <p className="text-xs text-zinc-400">
+                    {result.memory.memoryType} • Importance {result.memory.importance}/10
+                  </p>
+                </div>
+                <p className="text-xs text-cyan-300">{(result.score * 100).toFixed(1)}%</p>
+              </Link>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default async function MemoryDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { userId } = await auth();
+  const [{ userId }, { id }] = await Promise.all([auth(), params]);
   if (!userId) {
     notFound();
   }
 
-  const { id } = await params;
-  const memory = await getMemory(id);
-
+  const memory = await getCachedMemory(id);
   if (!memory || memory.userId !== userId) {
     notFound();
-  }
-
-  let related: MemorySearchResult[] = [];
-  try {
-    related = await getRelatedMemories({
-      userId,
-      memoryId: memory.id,
-      contentText: memory.contentText,
-      topK: 5,
-    });
-  } catch (error) {
-    console.error("Failed to load related memories", error);
   }
 
   return (
@@ -70,7 +99,7 @@ export default async function MemoryDetailPage({
           <p className="text-xs text-zinc-500">Saved {new Date(memory.createdAt).toLocaleString()}</p>
         </CardHeader>
         <CardContent className="space-y-5">
-          {memory.tags.length > 0 && (
+          {memory.tags.length > 0 ? (
             <div>
               <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Tags</p>
               <div className="flex flex-wrap gap-2">
@@ -81,16 +110,16 @@ export default async function MemoryDetailPage({
                 ))}
               </div>
             </div>
-          )}
+          ) : null}
 
-          {memory.sourceUrl && (
+          {memory.sourceUrl ? (
             <div>
               <p className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Source URL</p>
               <a href={memory.sourceUrl} target="_blank" rel="noreferrer" className="text-sm text-cyan-300 hover:text-cyan-200">
                 {memory.sourceUrl}
               </a>
             </div>
-          )}
+          ) : null}
 
           {memory.arweaveTxId ? (
             <div className="space-y-2">
@@ -103,9 +132,9 @@ export default async function MemoryDetailPage({
               <p className="text-sm text-amber-300">
                 Not committed yet. Use the commit button above after configuring your wallet in Settings.
               </p>
-              {memory.syncStatus === "failed" && (
+              {memory.syncStatus === "failed" ? (
                 <p className="text-xs text-rose-300">Last sync error: {memory.syncError ?? "Unknown error"}</p>
-              )}
+              ) : null}
             </div>
           )}
 
@@ -118,41 +147,16 @@ export default async function MemoryDetailPage({
 
           <div>
             <p className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Memory Content</p>
-            <pre className="max-h-[460px] overflow-auto rounded-md border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-200 whitespace-pre-wrap">
+            <pre className="max-h-[460px] overflow-auto whitespace-pre-wrap rounded-md border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-200">
               {memory.contentText}
             </pre>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="border-zinc-800 bg-zinc-900/70">
-        <CardHeader>
-          <CardTitle className="text-zinc-100">Related Memories</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {related.length === 0 ? (
-            <p className="text-sm text-zinc-400">No related memories found yet.</p>
-          ) : (
-            <div className="space-y-3">
-              {related.map((result) => (
-                <Link
-                  key={result.memory.id}
-                  href={`/dashboard/memory/${result.memory.id}`}
-                  className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 p-3 transition hover:border-cyan-500/40"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-zinc-100">{result.memory.title}</p>
-                    <p className="text-xs text-zinc-400">
-                      {result.memory.memoryType} • Importance {result.memory.importance}/10
-                    </p>
-                  </div>
-                  <p className="text-xs text-cyan-300">{(result.score * 100).toFixed(1)}%</p>
-                </Link>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <Suspense fallback={<div className="h-36 animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900/40" />}>
+        <RelatedMemoriesSection userId={userId} memoryId={memory.id} contentText={memory.contentText} />
+      </Suspense>
     </div>
   );
 }
