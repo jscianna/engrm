@@ -41,3 +41,4 @@ yarn-error.log*
 next-env.d.ts
 data/*.sqlite
 data/vectra/
+packages/memry-mcp/node_modules/
