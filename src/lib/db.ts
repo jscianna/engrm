@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 import { createClient, type Client } from "@libsql/client";
 import type { MemoryDashboardStats, MemoryKind, MemoryListItem, MemoryRecord, MemorySourceType, MemorySyncStatus } from "@/lib/types";
-import { generateUserKey } from "@/lib/user-crypto";
 
 const ENCRYPTION_ALGORITHM = "aes-256-gcm";
 
@@ -138,6 +137,8 @@ async function ensureInitialized(): Promise<void> {
       source_url TEXT,
       file_name TEXT,
       content_text TEXT NOT NULL,
+      content_iv TEXT,
+      content_encrypted INTEGER NOT NULL DEFAULT 0,
       content_hash TEXT NOT NULL,
       arweave_tx_id TEXT,
       sync_status TEXT NOT NULL DEFAULT 'pending',
@@ -155,13 +156,11 @@ async function ensureInitialized(): Promise<void> {
       arweave_jwk_iv TEXT,
       arweave_jwk_key_encrypted TEXT,
       arweave_jwk_key_iv TEXT,
-      user_encryption_key_encrypted TEXT,
-      user_encryption_key_iv TEXT,
-      user_encryption_key_data_key TEXT,
-      user_encryption_key_data_iv TEXT,
+      vault_salt TEXT,
       updated_at TEXT NOT NULL
     );
   `);
+    await ensureMemoriesColumns(client);
     await ensureUserSettingsColumns(client);
 
     initialized = true;
@@ -171,12 +170,33 @@ async function ensureInitialized(): Promise<void> {
   }
 }
 
+async function ensureMemoriesColumns(client: Client): Promise<void> {
+  const requiredColumns: Array<{ name: string; ddl: string }> = [
+    { name: "content_iv", ddl: "TEXT" },
+    { name: "content_encrypted", ddl: "INTEGER NOT NULL DEFAULT 0" },
+  ];
+
+  const tableInfo = await client.execute("PRAGMA table_info(memories)");
+  const existing = new Set(
+    tableInfo.rows
+      .map((row) => {
+        const record = row as Record<string, unknown>;
+        return typeof record.name === "string" ? record.name : null;
+      })
+      .filter((name): name is string => Boolean(name)),
+  );
+
+  for (const column of requiredColumns) {
+    if (existing.has(column.name)) {
+      continue;
+    }
+    await client.execute(`ALTER TABLE memories ADD COLUMN ${column.name} ${column.ddl}`);
+  }
+}
+
 async function ensureUserSettingsColumns(client: Client): Promise<void> {
   const requiredColumns: Array<{ name: string; ddl: string }> = [
-    { name: "user_encryption_key_encrypted", ddl: "TEXT" },
-    { name: "user_encryption_key_iv", ddl: "TEXT" },
-    { name: "user_encryption_key_data_key", ddl: "TEXT" },
-    { name: "user_encryption_key_data_iv", ddl: "TEXT" },
+    { name: "vault_salt", ddl: "TEXT" },
   ];
 
   const tableInfo = await client.execute("PRAGMA table_info(user_settings)");
@@ -216,6 +236,8 @@ function mapRow(row: Record<string, unknown>): MemoryRecord {
     sourceUrl: row.source_url as string | null,
     fileName: row.file_name as string | null,
     contentText: row.content_text as string,
+    contentIv: row.content_iv as string | null,
+    isEncrypted: Number(row.content_encrypted ?? 0) === 1,
     contentHash: row.content_hash as string,
     arweaveTxId: row.arweave_tx_id as string | null,
     syncStatus: (row.sync_status as MemorySyncStatus) ?? "pending",
@@ -232,9 +254,9 @@ export async function insertMemory(memory: MemoryRecord): Promise<void> {
     sql: `
       INSERT INTO memories (
         id, user_id, title, source_type, memory_type, importance, tags_csv,
-        source_url, file_name, content_text, content_hash, arweave_tx_id,
+        source_url, file_name, content_text, content_iv, content_encrypted, content_hash, arweave_tx_id,
         sync_status, sync_error, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       memory.id,
@@ -247,6 +269,8 @@ export async function insertMemory(memory: MemoryRecord): Promise<void> {
       memory.sourceUrl,
       memory.fileName,
       memory.contentText,
+      memory.contentIv,
+      memory.isEncrypted ? 1 : 0,
       memory.contentHash,
       memory.arweaveTxId,
       memory.syncStatus,
@@ -263,7 +287,7 @@ export async function listMemoriesByUser(userId: string, limit = 100): Promise<M
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, source_url, file_name, content_hash, arweave_tx_id, created_at,
-             memory_type, importance, tags_csv, sync_status, sync_error
+             memory_type, importance, tags_csv, sync_status, sync_error, content_iv, content_encrypted
       FROM memories
       WHERE user_id = ?
       ORDER BY created_at DESC
@@ -282,6 +306,8 @@ export async function listMemoriesByUser(userId: string, limit = 100): Promise<M
     tags: parseTags((row.tags_csv as string) ?? ""),
     sourceUrl: row.source_url as string | null,
     fileName: row.file_name as string | null,
+    contentIv: row.content_iv as string | null,
+    isEncrypted: Number(row.content_encrypted ?? 0) === 1,
     contentHash: row.content_hash as string,
     arweaveTxId: row.arweave_tx_id as string | null,
     syncStatus: (row.sync_status as MemorySyncStatus) ?? "pending",
@@ -297,7 +323,7 @@ export async function listMemoryRecordsByUser(userId: string, limit = 100): Prom
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, arweave_tx_id, created_at,
-             memory_type, importance, tags_csv, sync_status, sync_error
+             memory_type, importance, tags_csv, sync_status, sync_error, content_iv, content_encrypted
       FROM memories
       WHERE user_id = ?
       ORDER BY created_at DESC
@@ -316,7 +342,7 @@ export async function getMemoryById(id: string): Promise<MemoryRecord | null> {
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, arweave_tx_id, created_at,
-             memory_type, importance, tags_csv, sync_status, sync_error
+             memory_type, importance, tags_csv, sync_status, sync_error, content_iv, content_encrypted
       FROM memories
       WHERE id = ?
     `,
@@ -342,7 +368,7 @@ export async function getMemoriesByIds(userId: string, ids: string[]): Promise<M
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, source_url, file_name, content_hash, arweave_tx_id, created_at,
-             memory_type, importance, tags_csv, sync_status, sync_error
+             memory_type, importance, tags_csv, sync_status, sync_error, content_iv, content_encrypted
       FROM memories
       WHERE user_id = ? AND id IN (${placeholders})
     `,
@@ -359,6 +385,8 @@ export async function getMemoriesByIds(userId: string, ids: string[]): Promise<M
     tags: parseTags((row.tags_csv as string) ?? ""),
     sourceUrl: row.source_url as string | null,
     fileName: row.file_name as string | null,
+    contentIv: row.content_iv as string | null,
+    isEncrypted: Number(row.content_encrypted ?? 0) === 1,
     contentHash: row.content_hash as string,
     arweaveTxId: row.arweave_tx_id as string | null,
     syncStatus: (row.sync_status as MemorySyncStatus) ?? "pending",
@@ -516,105 +544,50 @@ export async function getUserArweaveJwk(userId: string): Promise<string | null> 
   return (row.arweave_jwk as string) ?? null;
 }
 
-export async function setUserEncryptionKey(userId: string, key: Buffer): Promise<void> {
+export async function getUserVaultSalt(userId: string): Promise<string | null> {
   await ensureInitialized();
   const client = getDb();
-  const encrypted = encryptSecretEnvelope(key.toString("base64"));
+
+  const result = await client.execute({
+    sql: `
+      SELECT vault_salt
+      FROM user_settings
+      WHERE user_id = ?
+    `,
+    args: [userId],
+  });
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  const row = result.rows[0] as Record<string, unknown>;
+  return typeof row.vault_salt === "string" && row.vault_salt.length > 0 ? row.vault_salt : null;
+}
+
+export async function hasUserVaultSalt(userId: string): Promise<boolean> {
+  const salt = await getUserVaultSalt(userId);
+  return Boolean(salt);
+}
+
+export async function setUserVaultSalt(userId: string, vaultSalt: string): Promise<void> {
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+
+  const existing = await getUserVaultSalt(userId);
+  if (existing && existing !== vaultSalt) {
+    throw new Error("Vault is already configured for this account.");
+  }
 
   await client.execute({
     sql: `
-      INSERT INTO user_settings (
-        user_id, user_encryption_key_encrypted, user_encryption_key_iv,
-        user_encryption_key_data_key, user_encryption_key_data_iv, updated_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO user_settings (user_id, vault_salt, updated_at)
+      VALUES (?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
-        user_encryption_key_encrypted = excluded.user_encryption_key_encrypted,
-        user_encryption_key_iv = excluded.user_encryption_key_iv,
-        user_encryption_key_data_key = excluded.user_encryption_key_data_key,
-        user_encryption_key_data_iv = excluded.user_encryption_key_data_iv,
+        vault_salt = COALESCE(user_settings.vault_salt, excluded.vault_salt),
         updated_at = excluded.updated_at
     `,
-    args: [
-      userId,
-      encrypted.encryptedBlob,
-      encrypted.iv,
-      encrypted.encryptedDataKey,
-      encrypted.dataKeyIv,
-      new Date().toISOString(),
-    ],
+    args: [userId, vaultSalt, now],
   });
-}
-
-export async function getUserEncryptionKey(userId: string): Promise<Buffer | null> {
-  await ensureInitialized();
-  const client = getDb();
-
-  const result = await client.execute({
-    sql: `
-      SELECT user_encryption_key_encrypted, user_encryption_key_iv, user_encryption_key_data_key, user_encryption_key_data_iv
-      FROM user_settings
-      WHERE user_id = ?
-    `,
-    args: [userId],
-  });
-
-  if (result.rows.length === 0) {
-    return null;
-  }
-
-  const row = result.rows[0] as Record<string, unknown>;
-  if (
-    !row.user_encryption_key_encrypted ||
-    !row.user_encryption_key_iv ||
-    !row.user_encryption_key_data_key ||
-    !row.user_encryption_key_data_iv
-  ) {
-    return null;
-  }
-
-  const keyB64 = decryptSecretEnvelope({
-    encryptedBlob: row.user_encryption_key_encrypted as string,
-    iv: row.user_encryption_key_iv as string,
-    encryptedDataKey: row.user_encryption_key_data_key as string,
-    dataKeyIv: row.user_encryption_key_data_iv as string,
-  });
-
-  const key = Buffer.from(keyB64, "base64");
-  if (key.length !== 32) {
-    throw new Error("Stored user encryption key is invalid.");
-  }
-
-  return key;
-}
-
-export async function getOrCreateUserEncryptionKey(userId: string): Promise<Buffer> {
-  const existing = await getUserEncryptionKey(userId);
-  if (existing) {
-    return existing;
-  }
-
-  const created = generateUserKey();
-  await setUserEncryptionKey(userId, created);
-  return created;
-}
-
-export async function hasUserEncryptionKey(userId: string): Promise<boolean> {
-  await ensureInitialized();
-  const client = getDb();
-  const result = await client.execute({
-    sql: `
-      SELECT user_encryption_key_encrypted
-      FROM user_settings
-      WHERE user_id = ?
-    `,
-    args: [userId],
-  });
-
-  if (result.rows.length === 0) {
-    return false;
-  }
-
-  const row = result.rows[0] as Record<string, unknown>;
-  return typeof row.user_encryption_key_encrypted === "string" && row.user_encryption_key_encrypted.length > 0;
 }

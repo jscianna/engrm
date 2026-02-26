@@ -13,6 +13,8 @@ export type MemoryRecord = {
   sourceUrl: string | null;
   fileName: string | null;
   contentText: string;
+  contentIv: string | null;
+  isEncrypted: boolean;
   contentHash: string;
   arweaveTxId: string | null;
   syncStatus: MemorySyncStatus;

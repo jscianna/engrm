@@ -46,6 +46,7 @@ export function MemoryCard({ memory }: { memory: MemoryListItem }) {
               ))}
             </div>
           )}
+          <div>{memory.isEncrypted ? "Encrypted (vault-protected)" : "Unencrypted (legacy)"}</div>
         </CardContent>
       </Card>
     </Link>

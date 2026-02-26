@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CommitMemoryButton } from "@/components/commit-memory-button";
 import { ArweaveVerifyButton } from "@/components/arweave-verify-button";
+import { EncryptedContentViewer } from "@/components/encrypted-content-viewer";
 import { getCachedMemory, getCachedRelatedMemories } from "@/lib/memories";
 
 async function RelatedMemoriesSection({
@@ -147,16 +148,31 @@ export default async function MemoryDetailPage({
 
           <div>
             <p className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Memory Content</p>
-            <pre className="max-h-[460px] overflow-auto whitespace-pre-wrap rounded-md border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-200">
-              {memory.contentText}
-            </pre>
+            {memory.isEncrypted ? (
+              memory.contentIv ? (
+                <EncryptedContentViewer ciphertext={memory.contentText} iv={memory.contentIv} />
+              ) : (
+                <p className="text-sm text-rose-300">Encrypted memory is missing IV metadata.</p>
+              )
+            ) : (
+              <>
+                <p className="mb-2 text-xs text-amber-300">
+                  Warning: this memory is stored unencrypted and is not zero-knowledge protected.
+                </p>
+                <pre className="max-h-[460px] overflow-auto whitespace-pre-wrap rounded-md border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-200">
+                  {memory.contentText}
+                </pre>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      <Suspense fallback={<div className="h-36 animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900/40" />}>
-        <RelatedMemoriesSection userId={userId} memoryId={memory.id} contentText={memory.contentText} />
-      </Suspense>
+      {!memory.isEncrypted ? (
+        <Suspense fallback={<div className="h-36 animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900/40" />}>
+          <RelatedMemoriesSection userId={userId} memoryId={memory.id} contentText={memory.contentText} />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

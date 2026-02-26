@@ -2,7 +2,6 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { getMemory } from "@/lib/memories";
 import { getMemoryFromArweave } from "@/lib/arweave";
-import { getUserEncryptionKey } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -27,8 +26,7 @@ export async function GET(
   }
 
   try {
-    const userKey = await getUserEncryptionKey(userId);
-    const arweave = await getMemoryFromArweave(memory.arweaveTxId, userKey);
+    const arweave = await getMemoryFromArweave(memory.arweaveTxId);
     if (!arweave) {
       return NextResponse.json({ error: "Failed to fetch data from Arweave" }, { status: 502 });
     }

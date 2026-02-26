@@ -6,7 +6,6 @@ import {
   getDashboardStatsByUser,
   getMemoriesByIds,
   getMemoryById,
-  getOrCreateUserEncryptionKey,
   insertMemory,
   listMemoriesByUser,
   updateMemorySyncFailure,
@@ -138,9 +137,19 @@ type CreateMemoryParams = {
   text?: string;
   url?: string;
   file?: File;
+  encryptedContent?: string;
+  iv?: string;
 };
 
 async function parseInput(params: CreateMemoryParams) {
+  if (params.encryptedContent) {
+    const title = cleanText(params.title ?? "") || "Untitled Memory";
+    return {
+      parsed: { contentText: "", sourceUrl: null, fileName: null },
+      title,
+    };
+  }
+
   const parsed = await parseMemoryContent({
     sourceType: params.sourceType,
     text: params.text,
@@ -159,7 +168,19 @@ async function persistToDb(params: {
   tags: string[];
   title: string;
   parsed: { contentText: string; sourceUrl: string | null; fileName: string | null };
+  encryptedContent?: string;
+  iv?: string;
 }): Promise<MemoryRecord> {
+  const contentText = params.encryptedContent ?? params.parsed.contentText;
+  const isEncrypted = Boolean(params.encryptedContent && params.iv);
+  const contentHashInput = isEncrypted
+    ? JSON.stringify({
+        encrypted: true,
+        iv: params.iv,
+        data: params.encryptedContent,
+      })
+    : contentText;
+
   const memory: MemoryRecord = {
     id: randomUUID(),
     userId: params.userId,
@@ -170,8 +191,10 @@ async function persistToDb(params: {
     tags: params.tags,
     sourceUrl: params.parsed.sourceUrl,
     fileName: params.parsed.fileName,
-    contentText: params.parsed.contentText,
-    contentHash: hashContent(params.parsed.contentText),
+    contentText,
+    contentIv: params.iv ?? null,
+    isEncrypted,
+    contentHash: hashContent(contentHashInput),
     arweaveTxId: null,
     syncStatus: "pending",
     syncError: null,
@@ -184,7 +207,6 @@ async function persistToDb(params: {
 async function uploadToArweave(memory: MemoryRecord) {
   try {
     const wallet = await resolveUserArweaveKey(memory.userId);
-    const encryptionKey = wallet.key ? await getOrCreateUserEncryptionKey(memory.userId) : undefined;
     const txId = await uploadTextToArweave({
       title: memory.title,
       content: memory.contentText,
@@ -193,7 +215,8 @@ async function uploadToArweave(memory: MemoryRecord) {
       importance: memory.importance,
       tags: memory.tags,
       jwk: wallet.key,
-      encryptionKey,
+      encryptedContent: memory.isEncrypted ? memory.contentText : undefined,
+      iv: memory.isEncrypted ? (memory.contentIv ?? undefined) : undefined,
     });
     if (txId) {
       await updateMemoryArweaveTx(memory.id, memory.userId, txId);
@@ -207,6 +230,10 @@ async function uploadToArweave(memory: MemoryRecord) {
 
 async function generateEmbedding(memory: MemoryRecord) {
   try {
+    if (memory.isEncrypted) {
+      return;
+    }
+
     const vector = await embedText(memory.contentText.slice(0, 6000));
     await upsertMemoryVector({
       memoryId: memory.id,
@@ -237,6 +264,8 @@ export async function createMemory(params: CreateMemoryParams): Promise<MemoryRe
     tags,
     title,
     parsed,
+    encryptedContent: params.encryptedContent,
+    iv: params.iv,
   });
   await uploadToArweave(memory);
   await generateEmbedding(memory);
@@ -320,7 +349,6 @@ export async function commitMemoryToArweave(params: {
   }
 
   try {
-    const encryptionKey = await getOrCreateUserEncryptionKey(params.userId);
     const txId = await uploadTextToArweave({
       title: memory.title,
       content: memory.contentText,
@@ -329,7 +357,8 @@ export async function commitMemoryToArweave(params: {
       importance: memory.importance,
       tags: memory.tags,
       jwk: wallet.key,
-      encryptionKey,
+      encryptedContent: memory.isEncrypted ? memory.contentText : undefined,
+      iv: memory.isEncrypted ? (memory.contentIv ?? undefined) : undefined,
     });
 
     if (!txId) {

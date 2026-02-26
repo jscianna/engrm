@@ -45,6 +45,11 @@ export async function POST(request: Request) {
     const title = (formData.get("title") as string) || undefined;
     const text = (formData.get("text") as string) || undefined;
     const url = (formData.get("url") as string) || undefined;
+    const encryptedContent = (formData.get("encryptedContent") as string) || undefined;
+    const iv = (formData.get("iv") as string) || undefined;
+    if ((encryptedContent && !iv) || (!encryptedContent && iv)) {
+      return NextResponse.json({ error: "encryptedContent and iv must be provided together" }, { status: 400 });
+    }
     const file = formData.get("file");
     if (file instanceof File && file.size > MAX_FILE_UPLOAD_BYTES) {
       return NextResponse.json({ error: "File exceeds 10MB upload limit." }, { status: 400 });
@@ -60,6 +65,8 @@ export async function POST(request: Request) {
       text,
       url,
       file: file instanceof File && file.size > 0 ? file : undefined,
+      encryptedContent,
+      iv,
     });
 
     return NextResponse.json({ memory }, { status: 201 });

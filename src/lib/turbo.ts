@@ -1,5 +1,4 @@
 import { TurboFactory, type ArweaveJWK, type TokenType } from "@ardrive/turbo-sdk";
-import { encryptWithUserKey } from "@/lib/user-crypto";
 
 export const turboToken = (process.env.TURBO_TOKEN as TokenType | undefined) ?? "arweave";
 
@@ -44,7 +43,8 @@ export async function uploadTextToArweave({
   importance,
   tags,
   jwk,
-  encryptionKey,
+  encryptedContent,
+  iv,
 }: {
   title: string;
   content: string;
@@ -53,7 +53,8 @@ export async function uploadTextToArweave({
   importance: number;
   tags: string[];
   jwk?: ArweaveJWK | null;
-  encryptionKey?: Buffer;
+  encryptedContent?: string;
+  iv?: string;
 }): Promise<string | null> {
   const privateKey = jwk ?? getArweaveKeyFromEnv();
 
@@ -66,12 +67,12 @@ export async function uploadTextToArweave({
     token: turboToken,
   });
 
-  const encryptedPayload = encryptionKey ? encryptWithUserKey(content, encryptionKey) : null;
-  const uploadContent = encryptedPayload
+  const hasEncryptedPayload = Boolean(encryptedContent && iv);
+  const uploadContent = hasEncryptedPayload
     ? JSON.stringify({
         encrypted: true,
-        iv: encryptedPayload.iv,
-        data: encryptedPayload.ciphertext,
+        iv,
+        data: encryptedContent,
       })
     : content;
 
@@ -80,16 +81,16 @@ export async function uploadTextToArweave({
     dataItemOpts: {
       tags: [
         { name: "App-Name", value: "MEMRY" },
-        { name: "Content-Type", value: encryptedPayload ? "application/json; charset=utf-8" : "text/plain; charset=utf-8" },
+        { name: "Content-Type", value: hasEncryptedPayload ? "application/json; charset=utf-8" : "text/plain; charset=utf-8" },
         { name: "Memory-Title", value: title.slice(0, 120) },
         { name: "Memory-Source-Type", value: sourceType },
         { name: "Memory-Type", value: memoryType },
         { name: "Memory-Importance", value: String(importance) },
         { name: "Memory-Tags", value: tags.join(",").slice(0, 240) },
-        ...(encryptedPayload
+        ...(hasEncryptedPayload
           ? [
               { name: "encrypted", value: "true" },
-              { name: "iv", value: encryptedPayload.iv },
+              { name: "iv", value: iv as string },
             ]
           : []),
       ],

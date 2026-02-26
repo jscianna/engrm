@@ -19,6 +19,9 @@ export async function GET(
   if (!memory || memory.userId !== userId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  if (memory.isEncrypted) {
+    return NextResponse.json({ related: [] });
+  }
 
   try {
     const results = await getRelatedMemories({

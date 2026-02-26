@@ -1,73 +1,31 @@
 "use client";
 
-import { type ChangeEvent, useEffect, useRef, useState } from "react";
-import { Download, Loader2, ShieldAlert, Upload } from "lucide-react";
+import { type ChangeEvent, useRef, useState } from "react";
+import { Download, Loader2, Lock, ShieldAlert, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { useVault } from "@/components/vault-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-type KeyStatusPayload = {
-  hasKey: boolean;
-};
-
-type ExportPayload = {
-  hasKey: boolean;
-  key: string;
-  filename: string;
-  warning: string;
-};
-
 export function SecurityKeyCard() {
-  const [hasKey, setHasKey] = useState<boolean | null>(null);
+  const { unlocked, hasVault, exportRecoveryKey, importRecoveryKey, lockVault } = useVault();
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
-
-  async function refreshStatus(showToast = false) {
-    try {
-      const response = await fetch("/api/settings/encryption-key?status=true", {
-        cache: "no-store",
-      });
-      const payload = (await response.json()) as KeyStatusPayload & { error?: string };
-      if (!response.ok) {
-        throw new Error(payload.error || "Failed to load encryption key status");
-      }
-      setHasKey(payload.hasKey);
-      if (showToast) {
-        toast.success("Encryption key status refreshed");
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to load encryption key status";
-      toast.error(message);
-    }
-  }
-
-  useEffect(() => {
-    void refreshStatus();
-  }, []);
 
   async function onExportKey() {
     try {
       setBusy(true);
-      const response = await fetch("/api/settings/encryption-key", {
-        method: "GET",
-        cache: "no-store",
-      });
-      const payload = (await response.json()) as (ExportPayload & { error?: string });
-      if (!response.ok) {
-        throw new Error(payload.error || "Failed to export recovery key");
-      }
-
-      const blob = new Blob([`${payload.key}\n`], { type: "text/plain;charset=utf-8" });
+      const exported = await exportRecoveryKey();
+      const blob = new Blob([`${exported}\n`], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = payload.filename || "memry-recovery-key.txt";
+      link.download = "memry-recovery-key.txt";
       link.click();
       URL.revokeObjectURL(url);
 
-      toast.warning(payload.warning);
+      toast.warning("Store this recovery key securely. Losing it means encrypted memories may be unrecoverable.");
       toast.success("Recovery key exported");
-      await refreshStatus();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to export recovery key";
       toast.error(message);
@@ -85,18 +43,8 @@ export function SecurityKeyCard() {
     try {
       setBusy(true);
       const key = (await file.text()).trim();
-      const response = await fetch("/api/settings/encryption-key", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key }),
-      });
-      const payload = (await response.json()) as { error?: string; message?: string };
-      if (!response.ok) {
-        throw new Error(payload.error || "Failed to import recovery key");
-      }
-
-      toast.success(payload.message || "Recovery key imported");
-      await refreshStatus();
+      await importRecoveryKey(key);
+      toast.success("Recovery key imported for this session");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to import recovery key";
       toast.error(message);
@@ -113,14 +61,18 @@ export function SecurityKeyCard() {
       </CardHeader>
       <CardContent className="space-y-4 text-sm text-zinc-300">
         <p>
-          Key status:{" "}
-          <span className="text-zinc-100">{hasKey === null ? "Loading..." : hasKey ? "Generated" : "Not generated"}</span>
+          Vault status: <span className="text-zinc-100">{hasVault ? (unlocked ? "Unlocked" : "Locked") : "Not setup"}</span>
         </p>
         <p className="rounded-xl border border-amber-800/60 bg-amber-950/40 p-3 text-amber-200">
-          Keep your recovery key safe. If you lose it, encrypted Arweave memories cannot be decrypted.
+          Keep your recovery key safe. The server cannot recover your password or key.
         </p>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" onClick={() => void onExportKey()} disabled={busy} className="bg-cyan-400 text-zinc-950 hover:bg-cyan-300">
+          <Button
+            type="button"
+            onClick={() => void onExportKey()}
+            disabled={busy || !unlocked}
+            className="bg-cyan-400 text-zinc-950 hover:bg-cyan-300"
+          >
             {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
             Export Recovery Key
           </Button>
@@ -137,12 +89,12 @@ export function SecurityKeyCard() {
           <Button
             type="button"
             variant="ghost"
-            disabled={busy}
+            disabled={busy || !unlocked}
             className="text-zinc-400 hover:text-zinc-100"
-            onClick={() => void refreshStatus(true)}
+            onClick={lockVault}
           >
             <ShieldAlert className="mr-2 h-4 w-4" />
-            Refresh Status
+            Lock Vault
           </Button>
           <input
             ref={fileRef}
@@ -152,6 +104,12 @@ export function SecurityKeyCard() {
             onChange={(event) => void onImportFile(event)}
           />
         </div>
+        {!unlocked ? (
+          <p className="text-xs text-zinc-400">
+            <Lock className="mr-1 inline h-3 w-3" />
+            Unlock your vault to decrypt and export the current session key.
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   );
