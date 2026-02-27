@@ -21,15 +21,30 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = (await request.json()) as { salt?: string };
+    const body = (await request.json()) as {
+      salt?: string;
+      arweaveWalletEncrypted?: string;
+      arweaveWalletIv?: string;
+      arweaveWalletAddress?: string;
+    };
     const salt = body.salt?.trim();
 
     if (!salt) {
       return NextResponse.json({ error: "Salt is required" }, { status: 400 });
     }
 
-    await setUserVaultSalt(userId, salt);
-    return NextResponse.json({ ok: true, hasVault: true });
+    // Build wallet object if all fields provided
+    const arweaveWallet =
+      body.arweaveWalletEncrypted && body.arweaveWalletIv && body.arweaveWalletAddress
+        ? {
+            encrypted: body.arweaveWalletEncrypted,
+            iv: body.arweaveWalletIv,
+            address: body.arweaveWalletAddress,
+          }
+        : undefined;
+
+    await setUserVaultSalt(userId, salt, arweaveWallet);
+    return NextResponse.json({ ok: true, hasVault: true, hasWallet: Boolean(arweaveWallet) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to store vault salt";
     return NextResponse.json({ error: message }, { status: 400 });

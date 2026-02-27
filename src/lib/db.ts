@@ -290,6 +290,9 @@ async function ensureMemoriesColumns(client: Client): Promise<void> {
 async function ensureUserSettingsColumns(client: Client): Promise<void> {
   const requiredColumns: Array<{ name: string; ddl: string }> = [
     { name: "vault_salt", ddl: "TEXT" },
+    { name: "arweave_wallet_encrypted", ddl: "TEXT" },
+    { name: "arweave_wallet_iv", ddl: "TEXT" },
+    { name: "arweave_wallet_address", ddl: "TEXT" },
   ];
 
   const tableInfo = await client.execute("PRAGMA table_info(user_settings)");
@@ -879,7 +882,11 @@ export async function hasUserVaultSalt(userId: string): Promise<boolean> {
   return Boolean(salt);
 }
 
-export async function setUserVaultSalt(userId: string, vaultSalt: string): Promise<void> {
+export async function setUserVaultSalt(
+  userId: string,
+  vaultSalt: string,
+  arweaveWallet?: { encrypted: string; iv: string; address: string }
+): Promise<void> {
   await ensureInitialized();
   const client = getDb();
   const now = new Date().toISOString();
@@ -891,14 +898,59 @@ export async function setUserVaultSalt(userId: string, vaultSalt: string): Promi
 
   await client.execute({
     sql: `
-      INSERT INTO user_settings (user_id, vault_salt, updated_at)
-      VALUES (?, ?, ?)
+      INSERT INTO user_settings (
+        user_id, vault_salt, arweave_wallet_encrypted, arweave_wallet_iv, arweave_wallet_address, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
         vault_salt = COALESCE(user_settings.vault_salt, excluded.vault_salt),
+        arweave_wallet_encrypted = COALESCE(excluded.arweave_wallet_encrypted, user_settings.arweave_wallet_encrypted),
+        arweave_wallet_iv = COALESCE(excluded.arweave_wallet_iv, user_settings.arweave_wallet_iv),
+        arweave_wallet_address = COALESCE(excluded.arweave_wallet_address, user_settings.arweave_wallet_address),
         updated_at = excluded.updated_at
     `,
-    args: [userId, vaultSalt, now],
+    args: [
+      userId,
+      vaultSalt,
+      arweaveWallet?.encrypted ?? null,
+      arweaveWallet?.iv ?? null,
+      arweaveWallet?.address ?? null,
+      now,
+    ],
   });
+}
+
+export async function getUserArweaveWallet(userId: string): Promise<{
+  encrypted: string;
+  iv: string;
+  address: string;
+} | null> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const result = await client.execute({
+    sql: `
+      SELECT arweave_wallet_encrypted, arweave_wallet_iv, arweave_wallet_address
+      FROM user_settings
+      WHERE user_id = ?
+    `,
+    args: [userId],
+  });
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  const row = result.rows[0] as Record<string, unknown>;
+  const encrypted = row.arweave_wallet_encrypted;
+  const iv = row.arweave_wallet_iv;
+  const address = row.arweave_wallet_address;
+
+  if (typeof encrypted !== "string" || typeof iv !== "string" || typeof address !== "string") {
+    return null;
+  }
+
+  return { encrypted, iv, address };
 }
 
 function hashApiKey(key: string): string {

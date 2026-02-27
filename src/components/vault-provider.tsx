@@ -2,7 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { base64ToBytes, bytesToBase64, deriveKeyFromPassword, exportKeyToBase64, generateSalt, importKeyFromBase64 } from "@/lib/client-crypto";
+import { base64ToBytes, bytesToBase64, deriveKeyFromPassword, encryptClientSide, exportKeyToBase64, generateSalt, importKeyFromBase64 } from "@/lib/client-crypto";
+import { generateArweaveWallet, getWalletAddress } from "@/lib/arweave-wallet";
 import { VaultPasswordModal } from "@/components/vault-password-modal";
 
 type VaultContextValue = {
@@ -27,6 +28,7 @@ export function VaultProvider({ children, initialHasVault, userId }: VaultProvid
   const [hasVault, setHasVault] = useState(initialHasVault);
   const [saltB64, setSaltB64] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [initializing, setInitializing] = useState(true); // Prevent modal flash
 
   useEffect(() => {
     let active = true;
@@ -58,14 +60,17 @@ export function VaultProvider({ children, initialHasVault, userId }: VaultProvid
         const sessionKey = `memry_vault_key_b64:${userId}`;
         const stored = sessionStorage.getItem(sessionKey);
         if (!stored) {
+          if (active) setInitializing(false);
           return;
         }
         const imported = await importKeyFromBase64(stored);
         if (active) {
           setKey(imported);
+          setInitializing(false);
         }
       } catch {
         sessionStorage.removeItem(`memry_vault_key_b64:${userId}`);
+        if (active) setInitializing(false);
       }
     })();
 
@@ -80,10 +85,22 @@ export function VaultProvider({ children, initialHasVault, userId }: VaultProvid
       const salt = generateSalt();
       const derivedKey = await deriveKeyFromPassword(password, salt);
       const saltEncoded = bytesToBase64(salt);
+
+      // Generate Arweave wallet and encrypt with vault key
+      const arweaveWallet = await generateArweaveWallet();
+      const walletJson = JSON.stringify(arweaveWallet);
+      const { ciphertext: walletEncrypted, iv: walletIv } = await encryptClientSide(walletJson, derivedKey);
+      const walletAddress = await getWalletAddress(arweaveWallet);
+
       const response = await fetch("/api/settings/vault", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ salt: saltEncoded }),
+        body: JSON.stringify({
+          salt: saltEncoded,
+          arweaveWalletEncrypted: walletEncrypted,
+          arweaveWalletIv: walletIv,
+          arweaveWalletAddress: walletAddress,
+        }),
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) {
@@ -95,7 +112,7 @@ export function VaultProvider({ children, initialHasVault, userId }: VaultProvid
       setSaltB64(saltEncoded);
       setHasVault(true);
       setKey(derivedKey);
-      toast.success("Vault password created.");
+      toast.success("Vault created with Arweave wallet.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to configure vault";
       toast.error(message);
@@ -159,7 +176,7 @@ export function VaultProvider({ children, initialHasVault, userId }: VaultProvid
   return (
     <VaultContext.Provider value={value}>
       {children}
-      {!key ? (
+      {!initializing && !key ? (
         <VaultPasswordModal mode={hasVault ? "unlock" : "setup"} loading={loading} onSubmit={hasVault ? unlock : setup} />
       ) : null}
     </VaultContext.Provider>
