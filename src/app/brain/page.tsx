@@ -84,7 +84,7 @@ function Brain3D({
   const isDraggingRef = useRef(false);
   const lastMouseRef = useRef({ x: 0, y: 0 });
   const nodesRef = useRef<MemoryNode[]>([]);
-  const zoomRef = useRef(1);
+  const zoomRef = useRef(1.5); // Start slightly zoomed out
 
   // Update nodes ref when nodes change
   useEffect(() => {
@@ -95,10 +95,11 @@ function Brain3D({
   const simulate = useCallback(() => {
     const nodesCopy = nodesRef.current;
     const center = { x: 0, y: 0, z: 0 };
-    const repulsion = 500;
-    const attraction = 0.01;
-    const damping = 0.95;
-    const centerPull = 0.002;
+    const repulsion = 80;        // Reduced from 500
+    const attraction = 0.003;    // Reduced from 0.01
+    const damping = 0.85;        // More damping (was 0.95)
+    const centerPull = 0.008;    // Stronger center pull (was 0.002)
+    const maxVelocity = 2;       // Clamp velocity
 
     // Apply forces
     for (let i = 0; i < nodesCopy.length; i++) {
@@ -112,13 +113,15 @@ function Brain3D({
         const dy = node.y - other.y;
         const dz = node.z - other.z;
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
-        const force = repulsion / (dist * dist);
+        const minDist = 20; // Minimum distance to prevent explosion
+        const safeDist = Math.max(dist, minDist);
+        const force = repulsion / (safeDist * safeDist);
         node.vx += (dx / dist) * force * 0.01;
         node.vy += (dy / dist) * force * 0.01;
         node.vz += (dz / dist) * force * 0.01;
       }
 
-      // Center pull
+      // Center pull (keeps graph centered)
       node.vx += (center.x - node.x) * centerPull;
       node.vy += (center.y - node.y) * centerPull;
       node.vz += (center.z - node.z) * centerPull;
@@ -144,14 +147,26 @@ function Brain3D({
       target.vz -= dz * force;
     }
 
-    // Apply velocity and damping
+    // Apply velocity with damping and clamping
     for (const node of nodesCopy) {
       node.vx *= damping;
       node.vy *= damping;
       node.vz *= damping;
+      
+      // Clamp velocity to prevent runaway
+      node.vx = Math.max(-maxVelocity, Math.min(maxVelocity, node.vx));
+      node.vy = Math.max(-maxVelocity, Math.min(maxVelocity, node.vy));
+      node.vz = Math.max(-maxVelocity, Math.min(maxVelocity, node.vz));
+      
       node.x += node.vx;
       node.y += node.vy;
       node.z += node.vz;
+      
+      // Soft boundary to keep nodes in view
+      const maxRange = 80;
+      if (Math.abs(node.x) > maxRange) node.x *= 0.95;
+      if (Math.abs(node.y) > maxRange) node.y *= 0.95;
+      if (Math.abs(node.z) > maxRange) node.z *= 0.95;
     }
   }, [edges]);
 
@@ -170,7 +185,7 @@ function Brain3D({
       const height = canvas.height;
       const centerX = width / 2;
       const centerY = height / 2;
-      const scale = Math.min(width, height) / 4 * zoomRef.current;
+      const scale = Math.min(width, height) / 250 * zoomRef.current;
 
       // Clear
       ctx.fillStyle = "#09090b";
@@ -242,20 +257,22 @@ function Brain3D({
 
       // Draw nodes
       for (const { node, proj } of projected) {
-        const baseRadius = node.radius * proj.scale;
+        const baseRadius = Math.max(2, node.radius * proj.scale * 0.8);
         const color = TYPE_COLORS[node.type] || "#22d3ee";
         
-        // Glow effect
-        const gradient = ctx.createRadialGradient(
-          proj.x, proj.y, 0,
-          proj.x, proj.y, baseRadius * 3
-        );
-        gradient.addColorStop(0, `${color}40`);
-        gradient.addColorStop(1, "transparent");
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(proj.x, proj.y, baseRadius * 3, 0, Math.PI * 2);
-        ctx.fill();
+        // Subtle glow effect
+        if (baseRadius > 3) {
+          const gradient = ctx.createRadialGradient(
+            proj.x, proj.y, 0,
+            proj.x, proj.y, baseRadius * 2
+          );
+          gradient.addColorStop(0, `${color}30`);
+          gradient.addColorStop(1, "transparent");
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(proj.x, proj.y, baseRadius * 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
 
         // Node
         ctx.fillStyle = color;
@@ -264,10 +281,12 @@ function Brain3D({
         ctx.fill();
 
         // Inner highlight
-        ctx.fillStyle = `${color}80`;
-        ctx.beginPath();
-        ctx.arc(proj.x - baseRadius * 0.3, proj.y - baseRadius * 0.3, baseRadius * 0.4, 0, Math.PI * 2);
-        ctx.fill();
+        if (baseRadius > 3) {
+          ctx.fillStyle = `${color}60`;
+          ctx.beginPath();
+          ctx.arc(proj.x - baseRadius * 0.2, proj.y - baseRadius * 0.2, baseRadius * 0.3, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
 
       animationRef.current = requestAnimationFrame(render);
@@ -428,13 +447,18 @@ function generateDemoData(): { nodes: MemoryNode[]; edges: MemoryEdge[] } {
   const nodes: MemoryNode[] = [];
   const edges: MemoryEdge[] = [];
 
-  // Create nodes from demo memories
+  // Create nodes from demo memories - tight initial cluster
   DEMO_MEMORIES.forEach((mem, i) => {
+    // Arrange in a sphere-like distribution
+    const phi = Math.acos(-1 + (2 * i) / DEMO_MEMORIES.length);
+    const theta = Math.sqrt(DEMO_MEMORIES.length * Math.PI) * phi;
+    const radius = 30 + Math.random() * 20;
+    
     nodes.push({
       id: `mem_${i}`,
-      x: (Math.random() - 0.5) * 200,
-      y: (Math.random() - 0.5) * 200,
-      z: (Math.random() - 0.5) * 200,
+      x: radius * Math.sin(phi) * Math.cos(theta),
+      y: radius * Math.sin(phi) * Math.sin(theta),
+      z: radius * Math.cos(phi),
       vx: 0,
       vy: 0,
       vz: 0,
@@ -442,7 +466,7 @@ function generateDemoData(): { nodes: MemoryNode[]; edges: MemoryEdge[] } {
       strength: 0.5 + Math.random() * 0.5,
       importance: mem.importance,
       title: mem.title,
-      radius: 4 + mem.importance * 8,
+      radius: 3 + mem.importance * 5,
     });
   });
 
