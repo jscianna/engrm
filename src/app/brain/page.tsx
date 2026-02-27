@@ -367,16 +367,69 @@ function Brain3D({
 // Demo Data Generator
 // =============================================================================
 
+// Demo memories - generic mainstream content for demo purposes
+const DEMO_MEMORIES = [
+  // Identity
+  { type: "identity", title: "Prefers coffee over tea", importance: 0.7 },
+  { type: "identity", title: "Works in software engineering", importance: 0.9 },
+  { type: "identity", title: "Lives in San Francisco", importance: 0.8 },
+  { type: "identity", title: "Speaks English and Spanish", importance: 0.6 },
+  
+  // Preferences
+  { type: "preference", title: "Likes action movies", importance: 0.5 },
+  { type: "preference", title: "Prefers dark mode UI", importance: 0.8 },
+  { type: "preference", title: "Morning person", importance: 0.6 },
+  { type: "preference", title: "Prefers async communication", importance: 0.7 },
+  { type: "preference", title: "Likes minimalist design", importance: 0.6 },
+  { type: "preference", title: "Prefers walking over driving", importance: 0.4 },
+  
+  // Facts
+  { type: "fact", title: "Python is a programming language", importance: 0.5 },
+  { type: "fact", title: "The Earth orbits the Sun", importance: 0.3 },
+  { type: "fact", title: "HTTP uses port 80 by default", importance: 0.6 },
+  { type: "fact", title: "Water boils at 100°C", importance: 0.4 },
+  { type: "fact", title: "JavaScript runs in browsers", importance: 0.7 },
+  { type: "fact", title: "Git is version control software", importance: 0.8 },
+  { type: "fact", title: "SQL queries databases", importance: 0.6 },
+  { type: "fact", title: "JSON is a data format", importance: 0.5 },
+  
+  // Events
+  { type: "event", title: "Had meeting about Q4 planning", importance: 0.6 },
+  { type: "event", title: "Completed project milestone", importance: 0.8 },
+  { type: "event", title: "Attended conference last month", importance: 0.5 },
+  { type: "event", title: "Fixed critical production bug", importance: 0.9 },
+  { type: "event", title: "Shipped v2.0 release", importance: 0.9 },
+  { type: "event", title: "Team lunch on Friday", importance: 0.4 },
+  
+  // How-to
+  { type: "how_to", title: "Deploy to production: git push main", importance: 0.8 },
+  { type: "how_to", title: "Reset password via settings page", importance: 0.5 },
+  { type: "how_to", title: "Create PR: branch, commit, push, open PR", importance: 0.7 },
+  { type: "how_to", title: "Run tests: npm test", importance: 0.6 },
+  { type: "how_to", title: "Check logs: docker logs -f app", importance: 0.7 },
+  { type: "how_to", title: "Connect to database: psql $DATABASE_URL", importance: 0.6 },
+  
+  // Constraints
+  { type: "constraint", title: "No deployments on Fridays", importance: 0.9 },
+  { type: "constraint", title: "Max 100 API calls per minute", importance: 0.8 },
+  { type: "constraint", title: "Password must be 12+ characters", importance: 0.7 },
+  { type: "constraint", title: "Code review required before merge", importance: 0.9 },
+  { type: "constraint", title: "Use UTC for all timestamps", importance: 0.6 },
+  
+  // Relationships
+  { type: "relationship", title: "Works with design team", importance: 0.6 },
+  { type: "relationship", title: "Reports to engineering manager", importance: 0.7 },
+  { type: "relationship", title: "Mentors junior developers", importance: 0.5 },
+  { type: "relationship", title: "Collaborates with product team", importance: 0.6 },
+  { type: "relationship", title: "Part of platform squad", importance: 0.7 },
+];
+
 function generateDemoData(): { nodes: MemoryNode[]; edges: MemoryEdge[] } {
-  const types = ["identity", "preference", "fact", "event", "how_to", "constraint", "relationship"];
   const nodes: MemoryNode[] = [];
   const edges: MemoryEdge[] = [];
 
-  // Generate nodes
-  for (let i = 0; i < 50; i++) {
-    const type = types[Math.floor(Math.random() * types.length)];
-    const importance = 0.3 + Math.random() * 0.7;
-    
+  // Create nodes from demo memories
+  DEMO_MEMORIES.forEach((mem, i) => {
     nodes.push({
       id: `mem_${i}`,
       x: (Math.random() - 0.5) * 200,
@@ -385,17 +438,38 @@ function generateDemoData(): { nodes: MemoryNode[]; edges: MemoryEdge[] } {
       vx: 0,
       vy: 0,
       vz: 0,
-      type,
+      type: mem.type,
       strength: 0.5 + Math.random() * 0.5,
-      importance,
-      title: `Memory ${i}`,
-      radius: 4 + importance * 8,
+      importance: mem.importance,
+      title: mem.title,
+      radius: 4 + mem.importance * 8,
     });
-  }
+  });
 
-  // Generate edges
+  // Generate meaningful edges (connect related memories)
   const edgeTypes = ["similar", "extends", "updates", "references"];
-  for (let i = 0; i < 80; i++) {
+  
+  // Connect memories of the same type
+  const byType: Record<string, number[]> = {};
+  nodes.forEach((node, i) => {
+    if (!byType[node.type]) byType[node.type] = [];
+    byType[node.type].push(i);
+  });
+  
+  // Add edges within type groups
+  Object.values(byType).forEach(indices => {
+    for (let i = 0; i < indices.length - 1; i++) {
+      edges.push({
+        source: nodes[indices[i]].id,
+        target: nodes[indices[i + 1]].id,
+        weight: 0.8 + Math.random() * 0.5,
+        type: "similar",
+      });
+    }
+  });
+  
+  // Add some cross-type connections
+  for (let i = 0; i < 30; i++) {
     const sourceIdx = Math.floor(Math.random() * nodes.length);
     let targetIdx = Math.floor(Math.random() * nodes.length);
     while (targetIdx === sourceIdx) {
@@ -405,7 +479,7 @@ function generateDemoData(): { nodes: MemoryNode[]; edges: MemoryEdge[] } {
     edges.push({
       source: nodes[sourceIdx].id,
       target: nodes[targetIdx].id,
-      weight: 0.5 + Math.random() * 1.5,
+      weight: 0.3 + Math.random() * 0.7,
       type: edgeTypes[Math.floor(Math.random() * edgeTypes.length)],
     });
   }

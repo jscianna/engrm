@@ -91,8 +91,53 @@ export default function Home() {
         <div className="absolute -right-40 top-20 h-[400px] w-[400px] rounded-full bg-violet-500/15 blur-[100px]" />
       </div>
 
+      {/* Header */}
+      <header className="relative z-50 px-6 py-4 md:px-10">
+        <div className="mx-auto flex max-w-6xl items-center justify-between">
+          <Link href="/" className="text-xl font-bold tracking-tight">
+            MEMRY
+          </Link>
+          <nav className="flex items-center gap-6">
+            <Link href="/docs" className="text-sm text-zinc-400 hover:text-white transition-colors">
+              Docs
+            </Link>
+            <Link href="/brain" className="text-sm text-zinc-400 hover:text-white transition-colors">
+              Brain
+            </Link>
+            <a 
+              href="https://github.com/jscianna/memry" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-sm text-zinc-400 hover:text-white transition-colors"
+            >
+              GitHub
+            </a>
+            {hasClerk ? (
+              <>
+                <SignedOut>
+                  <SignInButton mode="modal">
+                    <Button size="sm" className="bg-cyan-500 text-zinc-950 hover:bg-cyan-400">
+                      Sign In
+                    </Button>
+                  </SignInButton>
+                </SignedOut>
+                <SignedIn>
+                  <Button asChild size="sm" className="bg-cyan-500 text-zinc-950 hover:bg-cyan-400">
+                    <Link href="/dashboard">Dashboard</Link>
+                  </Button>
+                </SignedIn>
+              </>
+            ) : (
+              <Button asChild size="sm" className="bg-cyan-500 text-zinc-950 hover:bg-cyan-400">
+                <Link href="/dashboard">Dashboard</Link>
+              </Button>
+            )}
+          </nav>
+        </div>
+      </header>
+
       {/* Hero - compact, fits viewport */}
-      <section className="relative px-6 pt-12 pb-12 md:px-10 lg:pt-16 lg:pb-16">
+      <section className="relative px-6 pt-8 pb-12 md:px-10 lg:pt-12 lg:pb-16">
         <div className="mx-auto max-w-6xl">
           <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-12">
             {/* Left: Copy */}
