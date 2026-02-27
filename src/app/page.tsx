@@ -197,34 +197,57 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="relative rounded-2xl border border-zinc-700/70 bg-zinc-950/70 p-5 backdrop-blur-2xl">
-              <div className="mb-4 flex items-center justify-between">
-                <p className="text-xs font-medium tracking-[0.18em] text-zinc-400 uppercase">Live Memory Console</p>
-                <Badge className="border-zinc-700 bg-zinc-900/80 text-cyan-200">Encrypted</Badge>
-              </div>
-              <div className="space-y-3">
-                <div className="rounded-xl border border-cyan-300/20 bg-cyan-400/10 p-3">
-                  <p className="text-xs text-zinc-400">Incoming context</p>
-                  <p className="text-sm text-zinc-100">User asked for concise update style and weekly recaps.</p>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-xl border border-zinc-700/70 bg-zinc-900/90 p-3">
-                    <p className="text-xs text-zinc-500">Fingerprint</p>
-                    <p className="mt-1 font-mono text-xs text-cyan-300">0x7ca4...8d1f</p>
+            <div className="space-y-4">
+              {/* Memory Flow Visual */}
+              <div className="relative rounded-2xl border border-zinc-700/70 bg-zinc-950/70 p-5 backdrop-blur-2xl">
+                <p className="mb-4 text-xs font-medium tracking-[0.18em] text-zinc-400 uppercase">Memory Lifecycle</p>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex-1 rounded-xl border border-cyan-400/30 bg-cyan-400/10 p-3 text-center">
+                    <div className="mb-1 text-lg">💾</div>
+                    <p className="text-xs font-medium text-cyan-200">Store</p>
+                    <p className="text-[10px] text-zinc-500">Encrypt & save</p>
                   </div>
-                  <div className="rounded-xl border border-zinc-700/70 bg-zinc-900/90 p-3">
-                    <p className="text-xs text-zinc-500">Project</p>
-                    <p className="mt-1 font-mono text-xs text-cyan-300">prod-assistant</p>
+                  <div className="text-zinc-600">→</div>
+                  <div className="flex-1 rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-3 text-center">
+                    <div className="mb-1 text-lg">🔍</div>
+                    <p className="text-xs font-medium text-emerald-200">Recall</p>
+                    <p className="text-[10px] text-zinc-500">Find by meaning</p>
+                  </div>
+                  <div className="text-zinc-600">→</div>
+                  <div className="flex-1 rounded-xl border border-violet-400/30 bg-violet-400/10 p-3 text-center">
+                    <div className="mb-1 text-lg">🔗</div>
+                    <p className="text-xs font-medium text-violet-200">Share</p>
+                    <p className="text-[10px] text-zinc-500">Link related</p>
+                  </div>
+                  <div className="text-zinc-600">→</div>
+                  <div className="flex-1 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-center">
+                    <div className="mb-1 text-lg">✓</div>
+                    <p className="text-xs font-medium text-amber-200">Verify</p>
+                    <p className="text-[10px] text-zinc-500">Prove it existed</p>
                   </div>
                 </div>
-                <div className="rounded-xl border border-zinc-700/70 bg-zinc-900/90 p-3 font-mono text-xs text-zinc-300">
-                  <p><span className="text-zinc-500">encrypted:</span> 8a2f7b11e6d0c4...</p>
-                  <p><span className="text-zinc-500">searchable:</span> [0.118, -0.042, 0.911, ...]</p>
-                </div>
               </div>
-              <p className="mt-4 text-sm text-zinc-400">
-                We only store scrambled data. <span className="text-cyan-200">Your actual content never touches our servers.</span>
-              </p>
+
+              {/* Live Console */}
+              <div className="relative rounded-2xl border border-zinc-700/70 bg-zinc-950/70 p-5 backdrop-blur-2xl">
+                <div className="mb-4 flex items-center justify-between">
+                  <p className="text-xs font-medium tracking-[0.18em] text-zinc-400 uppercase">Live Memory Console</p>
+                  <Badge className="border-zinc-700 bg-zinc-900/80 text-cyan-200">Encrypted</Badge>
+                </div>
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-cyan-300/20 bg-cyan-400/10 p-3">
+                    <p className="text-xs text-zinc-400">Incoming context</p>
+                    <p className="text-sm text-zinc-100">User asked for concise update style and weekly recaps.</p>
+                  </div>
+                  <div className="rounded-xl border border-zinc-700/70 bg-zinc-900/90 p-3 font-mono text-xs text-zinc-300">
+                    <p><span className="text-zinc-500">encrypted:</span> 8a2f7b11e6d0c4...</p>
+                    <p><span className="text-zinc-500">searchable:</span> [0.118, -0.042, ...]</p>
+                  </div>
+                </div>
+                <p className="mt-4 text-sm text-zinc-400">
+                  We only store scrambled data. <span className="text-cyan-200">Your content never touches our servers.</span>
+                </p>
+              </div>
             </div>
           </div>
         </section>
