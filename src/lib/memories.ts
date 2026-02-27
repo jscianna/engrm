@@ -3,6 +3,7 @@ import { cache } from "react";
 import { embedText } from "@/lib/embeddings";
 import { cleanText, extractUrlContent, hashContent } from "@/lib/content";
 import {
+  createMemoryEdge,
   getDashboardStatsByUser,
   getMemoriesByIds,
   getMemoryById,
@@ -249,6 +250,76 @@ async function generateEmbedding(memory: MemoryRecord) {
   }
 }
 
+// Auto-link: "memories that fire together, wire together"
+// Creates edges between a new memory and similar existing memories
+const AUTO_LINK_THRESHOLD = 0.75; // Minimum similarity to auto-link
+const AUTO_LINK_TOP_K = 5; // Max memories to auto-link
+
+async function autoLinkSimilarMemories(memory: MemoryRecord) {
+  try {
+    // Skip encrypted memories (can't compute similarity without plaintext)
+    if (memory.isEncrypted) {
+      return;
+    }
+
+    // Find similar memories
+    const similar = await getRelatedMemories({
+      userId: memory.userId,
+      memoryId: memory.id,
+      contentText: memory.contentText,
+      topK: AUTO_LINK_TOP_K,
+    });
+
+    // Create edges for sufficiently similar memories
+    for (const result of similar) {
+      if (result.score >= AUTO_LINK_THRESHOLD) {
+        await createMemoryEdge({
+          userId: memory.userId,
+          sourceId: memory.id,
+          targetId: result.memory.id,
+          relationshipType: "similar",
+          weight: result.score, // Higher similarity = stronger initial bond
+          metadata: { autoLinked: true, initialScore: result.score },
+        });
+      }
+    }
+  } catch (error) {
+    // Non-fatal: don't fail memory creation if auto-linking fails
+    console.error("Failed to auto-link similar memories", error);
+  }
+}
+
+// Strengthen bonds between memories retrieved together
+// "Neurons that fire together, wire together"
+export async function strengthenCoRetrievedMemories(
+  userId: string,
+  memoryIds: string[],
+  boostAmount = 0.05
+): Promise<void> {
+  if (memoryIds.length < 2) {
+    return;
+  }
+
+  try {
+    // Create/strengthen edges between all pairs
+    for (let i = 0; i < memoryIds.length; i++) {
+      for (let j = i + 1; j < memoryIds.length; j++) {
+        await createMemoryEdge({
+          userId,
+          sourceId: memoryIds[i],
+          targetId: memoryIds[j],
+          relationshipType: "similar",
+          weight: boostAmount, // Will add to existing weight on conflict
+          metadata: { coRetrieved: true, timestamp: new Date().toISOString() },
+        });
+      }
+    }
+  } catch (error) {
+    // Non-fatal
+    console.error("Failed to strengthen co-retrieved memories", error);
+  }
+}
+
 export async function createMemory(params: CreateMemoryParams): Promise<MemoryRecord> {
   const { parsed, title } = await parseInput(params);
 
@@ -269,6 +340,10 @@ export async function createMemory(params: CreateMemoryParams): Promise<MemoryRe
   });
   await uploadToArweave(memory);
   await generateEmbedding(memory);
+
+  // "Memories that fire together, wire together"
+  // Auto-link to similar existing memories
+  await autoLinkSimilarMemories(memory);
 
   const persisted = await getMemoryById(memory.id);
   if (!persisted) {
@@ -295,12 +370,22 @@ export async function searchMemories(userId: string, query: string): Promise<Mem
   const memories = await getMemoriesByIds(userId, ids);
   const memoryById = new Map(memories.map((memory) => [memory.id, memory]));
 
-  return hits
+  const results = hits
     .map((hit) => ({
       score: hit.score,
       memory: memoryById.get(hit.item.id),
     }))
     .filter((result): result is { score: number; memory: MemoryListItem } => Boolean(result.memory));
+
+  // "Memories that fire together, wire together"
+  // Strengthen bonds between top co-retrieved results
+  const topResultIds = results.slice(0, 5).map((r) => r.memory.id);
+  if (topResultIds.length >= 2) {
+    // Fire and forget - don't block search response
+    strengthenCoRetrievedMemories(userId, topResultIds, 0.02).catch(() => {});
+  }
+
+  return results;
 }
 
 export async function getRelatedMemories(params: {

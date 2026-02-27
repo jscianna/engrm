@@ -567,7 +567,7 @@ export async function createMemoryEdge(input: CreateMemoryEdgeInput): Promise<Me
         id, user_id, source_id, target_id, relationship_type, weight, metadata_json, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(source_id, target_id, relationship_type) DO UPDATE SET
-        weight = excluded.weight,
+        weight = MIN(memory_edges.weight + excluded.weight, 10.0),
         metadata_json = excluded.metadata_json
     `,
     args: [
