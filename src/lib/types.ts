@@ -1,5 +1,17 @@
 export type MemorySourceType = "text" | "url" | "file";
-export type MemoryKind = "episodic" | "semantic" | "procedural" | "self-model";
+export type MemoryKind = 
+  | "episodic" 
+  | "semantic" 
+  | "procedural" 
+  | "self-model"
+  // New types from auto-memory spec v2
+  | "constraint"
+  | "identity"
+  | "relationship"
+  | "preference"
+  | "how_to"
+  | "fact"
+  | "event";
 export type MemorySyncStatus = "pending" | "synced" | "failed";
 export type MemoryRelationshipType =
   | "similar"

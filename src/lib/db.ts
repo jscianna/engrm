@@ -267,6 +267,19 @@ async function ensureMemoriesColumns(client: Client): Promise<void> {
     { name: "namespace_id", ddl: "TEXT" },
     { name: "session_id", ddl: "TEXT" },
     { name: "metadata_json", ddl: "TEXT" },
+    // Reinforcement & decay columns
+    { name: "strength", ddl: "REAL DEFAULT 1.0" },
+    { name: "base_strength", ddl: "REAL DEFAULT 1.0" },
+    { name: "mention_count", ddl: "INTEGER DEFAULT 1" },
+    { name: "access_count", ddl: "INTEGER DEFAULT 0" },
+    { name: "halflife_days", ddl: "INTEGER DEFAULT 60" },
+    { name: "last_accessed_at", ddl: "TEXT" },
+    { name: "last_mentioned_at", ddl: "TEXT" },
+    { name: "first_mentioned_at", ddl: "TEXT" },
+    { name: "archived_at", ddl: "TEXT" },
+    { name: "source_conversations", ddl: "TEXT" },  // JSON array
+    { name: "entities_json", ddl: "TEXT" },  // JSON array
+    { name: "embedding", ddl: "TEXT" },  // JSON array of floats
   ];
 
   const tableInfo = await client.execute("PRAGMA table_info(memories)");
@@ -1467,4 +1480,301 @@ export async function deleteAgentMemoryById(userId: string, id: string): Promise
   });
 
   return (result.rowsAffected ?? 0) > 0;
+}
+
+// =============================================================================
+// Reinforcement & Decay Functions
+// =============================================================================
+
+export type MemoryWithEmbedding = {
+  id: string;
+  embedding: number[];
+  strength: number;
+  mentionCount: number;
+  entities: string[];
+  sourceConversations: string[];
+  halflifeDays: number;
+  lastAccessedAt: string | null;
+  lastMentionedAt: string | null;
+};
+
+export async function getMemoriesWithEmbeddings(
+  userId: string,
+  namespaceId?: string | null,
+  limit = 500
+): Promise<MemoryWithEmbedding[]> {
+  await ensureInitialized();
+  const client = getDb();
+  const hasNamespace = typeof namespaceId !== "undefined";
+  
+  const result = await client.execute({
+    sql: `
+      SELECT id, embedding, strength, mention_count, entities_json, 
+             source_conversations, halflife_days, last_accessed_at, last_mentioned_at
+      FROM memories
+      WHERE user_id = ? 
+      ${hasNamespace ? "AND namespace_id = ?" : ""}
+      AND embedding IS NOT NULL
+      AND archived_at IS NULL
+      ORDER BY created_at DESC
+      LIMIT ?
+    `,
+    args: hasNamespace ? [userId, namespaceId ?? null, limit] : [userId, limit],
+  });
+
+  return result.rows.map((row) => {
+    const record = row as Record<string, unknown>;
+    let embedding: number[] = [];
+    try {
+      embedding = JSON.parse((record.embedding as string) || "[]") as number[];
+    } catch {
+      // no-op
+    }
+    
+    let entities: string[] = [];
+    try {
+      entities = JSON.parse((record.entities_json as string) || "[]") as string[];
+    } catch {
+      // no-op
+    }
+    
+    let sourceConversations: string[] = [];
+    try {
+      sourceConversations = JSON.parse((record.source_conversations as string) || "[]") as string[];
+    } catch {
+      // no-op
+    }
+
+    return {
+      id: record.id as string,
+      embedding,
+      strength: Number(record.strength ?? 1.0),
+      mentionCount: Number(record.mention_count ?? 1),
+      entities,
+      sourceConversations,
+      halflifeDays: Number(record.halflife_days ?? 60),
+      lastAccessedAt: (record.last_accessed_at as string | null) ?? null,
+      lastMentionedAt: (record.last_mentioned_at as string | null) ?? null,
+    };
+  });
+}
+
+export async function reinforceMemory(
+  memoryId: string,
+  userId: string,
+  update: {
+    newStrength: number;
+    mentionCount: number;
+    entities?: string[];
+    conversationId?: string;
+  }
+): Promise<void> {
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+
+  // Get current values to merge
+  const current = await client.execute({
+    sql: `SELECT entities_json, source_conversations FROM memories WHERE id = ? AND user_id = ?`,
+    args: [memoryId, userId],
+  });
+  
+  const row = current.rows[0] as Record<string, unknown> | undefined;
+  
+  let existingEntities: string[] = [];
+  let existingConversations: string[] = [];
+  
+  try {
+    existingEntities = JSON.parse((row?.entities_json as string) || "[]") as string[];
+  } catch { /* no-op */ }
+  
+  try {
+    existingConversations = JSON.parse((row?.source_conversations as string) || "[]") as string[];
+  } catch { /* no-op */ }
+
+  // Merge entities (dedupe)
+  const mergedEntities = [...new Set([...existingEntities, ...(update.entities || [])])];
+  
+  // Append conversation ID
+  if (update.conversationId && !existingConversations.includes(update.conversationId)) {
+    existingConversations.push(update.conversationId);
+  }
+
+  await client.execute({
+    sql: `
+      UPDATE memories
+      SET strength = ?,
+          mention_count = ?,
+          entities_json = ?,
+          source_conversations = ?,
+          last_mentioned_at = ?
+      WHERE id = ? AND user_id = ?
+    `,
+    args: [
+      update.newStrength,
+      update.mentionCount,
+      JSON.stringify(mergedEntities),
+      JSON.stringify(existingConversations),
+      now,
+      memoryId,
+      userId,
+    ],
+  });
+}
+
+export async function updateMemoryAccess(memoryId: string, userId: string): Promise<void> {
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+
+  await client.execute({
+    sql: `
+      UPDATE memories
+      SET access_count = access_count + 1,
+          last_accessed_at = ?
+      WHERE id = ? AND user_id = ?
+    `,
+    args: [now, memoryId, userId],
+  });
+}
+
+export async function getMemoriesForDecay(userId: string): Promise<Array<{
+  id: string;
+  strength: number;
+  baseStrength: number;
+  halflifeDays: number;
+  lastAccessedAt: string | null;
+  archivedAt: string | null;
+}>> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const result = await client.execute({
+    sql: `
+      SELECT id, strength, base_strength, halflife_days, last_accessed_at, archived_at
+      FROM memories
+      WHERE user_id = ?
+    `,
+    args: [userId],
+  });
+
+  return result.rows.map((row) => {
+    const record = row as Record<string, unknown>;
+    return {
+      id: record.id as string,
+      strength: Number(record.strength ?? 1.0),
+      baseStrength: Number(record.base_strength ?? 1.0),
+      halflifeDays: Number(record.halflife_days ?? 60),
+      lastAccessedAt: (record.last_accessed_at as string | null) ?? null,
+      archivedAt: (record.archived_at as string | null) ?? null,
+    };
+  });
+}
+
+export async function updateMemoryStrength(memoryId: string, userId: string, newStrength: number): Promise<void> {
+  await ensureInitialized();
+  const client = getDb();
+
+  await client.execute({
+    sql: `UPDATE memories SET strength = ? WHERE id = ? AND user_id = ?`,
+    args: [newStrength, memoryId, userId],
+  });
+}
+
+export async function archiveMemory(memoryId: string, userId: string): Promise<void> {
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+
+  await client.execute({
+    sql: `UPDATE memories SET archived_at = ? WHERE id = ? AND user_id = ?`,
+    args: [now, memoryId, userId],
+  });
+}
+
+export async function deleteArchivedMemories(userId: string, olderThanDays: number = 30): Promise<number> {
+  await ensureInitialized();
+  const client = getDb();
+  const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString();
+
+  const result = await client.execute({
+    sql: `
+      DELETE FROM memories
+      WHERE user_id = ? AND archived_at IS NOT NULL AND archived_at < ?
+    `,
+    args: [userId, cutoff],
+  });
+
+  return result.rowsAffected ?? 0;
+}
+
+export async function insertMemoryWithMetadata(params: {
+  userId: string;
+  title?: string;
+  text: string;
+  embedding?: number[];
+  memoryType?: string;
+  importance?: number;
+  halflifeDays?: number;
+  entities?: string[];
+  conversationId?: string;
+  namespaceId?: string | null;
+  sessionId?: string | null;
+  metadata?: Record<string, unknown> | null;
+}): Promise<AgentMemoryRecord> {
+  await ensureInitialized();
+  const client = getDb();
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const text = params.text.trim();
+  const title = (params.title?.trim() || text.slice(0, 80) || "Untitled Memory").trim();
+  const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
+  const contentHash = crypto.createHash("sha256").update(text, "utf8").digest("hex");
+  const embeddingJson = params.embedding ? JSON.stringify(params.embedding) : null;
+  const entitiesJson = params.entities ? JSON.stringify(params.entities) : null;
+  const conversationsJson = params.conversationId ? JSON.stringify([params.conversationId]) : null;
+
+  await client.execute({
+    sql: `
+      INSERT INTO memories (
+        id, user_id, title, source_type, memory_type, importance, tags_csv,
+        source_url, file_name, content_text, content_iv, content_encrypted, content_hash, arweave_tx_id,
+        sync_status, sync_error, created_at, namespace_id, session_id, metadata_json,
+        embedding, strength, base_strength, halflife_days, entities_json, source_conversations,
+        first_mentioned_at, last_mentioned_at, last_accessed_at
+      ) VALUES (?, ?, ?, 'text', ?, ?, '', NULL, NULL, ?, NULL, 0, ?, NULL, 'pending', NULL, ?, ?, ?, ?,
+                ?, 1.0, 1.0, ?, ?, ?, ?, ?, ?)
+    `,
+    args: [
+      id,
+      params.userId,
+      title,
+      params.memoryType ?? 'episodic',
+      params.importance ?? 5,
+      text,
+      contentHash,
+      now,
+      params.namespaceId ?? null,
+      params.sessionId ?? null,
+      metadataJson,
+      embeddingJson,
+      params.halflifeDays ?? 60,
+      entitiesJson,
+      conversationsJson,
+      now,  // first_mentioned_at
+      now,  // last_mentioned_at
+      now,  // last_accessed_at
+    ],
+  });
+
+  return {
+    id,
+    userId: params.userId,
+    title,
+    text,
+    metadata: params.metadata ?? null,
+    namespaceId: params.namespaceId ?? null,
+    sessionId: params.sessionId ?? null,
+    createdAt: now,
+  };
 }
