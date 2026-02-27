@@ -44,7 +44,7 @@ export function MemoryCard({ memory }: { memory: MemoryListItem }) {
           ) : memory.syncStatus === "failed" ? (
             <div className="text-rose-300">Arweave sync failed: {memory.syncError ?? "Unknown error"}</div>
           ) : memory.syncStatus === "pending" ? (
-            <div className="text-amber-300">Arweave sync pending (add a per-user wallet in Settings or use ARWEAVE_JWK)</div>
+            <div className="text-amber-300">Not committed to Arweave yet</div>
           ) : (
             <div className="text-zinc-400">Stored locally</div>
           )}

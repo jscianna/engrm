@@ -58,14 +58,12 @@ export async function uploadTextToArweave({
 }): Promise<string | null> {
   const privateKey = jwk ?? getArweaveKeyFromEnv();
 
+  // Wallet required to sign data items - free subsidy covers upload cost but not signing
   if (!privateKey) {
     return null;
   }
 
-  const turbo = TurboFactory.authenticated({
-    privateKey,
-    token: turboToken,
-  });
+  const turbo = TurboFactory.authenticated({ privateKey, token: turboToken });
 
   const hasEncryptedPayload = Boolean(encryptedContent && iv);
   const uploadContent = hasEncryptedPayload

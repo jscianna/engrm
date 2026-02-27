@@ -149,12 +149,8 @@ export default async function MemoryDetailPage({
 
           <div>
             <p className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Memory Content</p>
-            {memory.isEncrypted ? (
-              memory.contentIv ? (
-                <EncryptedContentViewer ciphertext={memory.contentText} iv={memory.contentIv} />
-              ) : (
-                <p className="text-sm text-rose-300">Encrypted memory is missing IV metadata.</p>
-              )
+            {memory.isEncrypted || memory.contentText.startsWith('{"ciphertext"') ? (
+              <EncryptedContentViewer ciphertext={memory.contentText} iv={memory.contentIv} />
             ) : (
               <>
                 <p className="mb-2 text-xs text-amber-300">
