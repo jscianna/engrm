@@ -1,4 +1,5 @@
 import { embedText } from "@/lib/embeddings";
+import { strengthenCoRetrievedMemories } from "@/lib/memories";
 import { semanticSearchVectors } from "@/lib/vector";
 import { getAgentMemoriesByIds, listAgentMemories } from "@/lib/db";
 import { ApiAuthError, validateApiKey } from "@/lib/api-auth";
@@ -89,6 +90,13 @@ export async function POST(request: Request) {
         return `[${index + 1}] ${item.title}\nid: ${item.id}\ncreated_at: ${item.createdAt}${score}${metadata}\ncontent: ${item.text}`;
       })
       .join("\n\n");
+
+    // "Memories that fire together, wire together"
+    // Strengthen bonds between memories that activated together
+    const activatedIds = selected.slice(0, 5).map((m) => m.id);
+    if (activatedIds.length >= 2) {
+      strengthenCoRetrievedMemories(identity.userId, activatedIds, 0.02).catch(() => {});
+    }
 
     return Response.json({
       context: contextText,

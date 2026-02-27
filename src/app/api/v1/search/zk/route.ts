@@ -7,6 +7,7 @@
  */
 
 import { semanticSearchVectorsDirect } from "@/lib/vector";
+import { strengthenCoRetrievedMemories } from "@/lib/memories";
 import { getAgentMemoriesByIds } from "@/lib/db";
 import { ApiAuthError, validateApiKey } from "@/lib/api-auth";
 import { isObject, jsonError, normalizeLimit, resolveNamespaceIdOrError } from "@/lib/api-v1";
@@ -75,6 +76,12 @@ export async function POST(request: Request) {
         };
       })
       .filter(Boolean);
+
+    // "Memories that fire together, wire together"
+    const activatedIds = results.slice(0, 5).map((r) => r?.id).filter(Boolean) as string[];
+    if (activatedIds.length >= 2) {
+      strengthenCoRetrievedMemories(identity.userId, activatedIds, 0.02).catch(() => {});
+    }
 
     return Response.json({ results });
   } catch (error) {
