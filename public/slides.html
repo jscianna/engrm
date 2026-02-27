@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MEMRY - Architecture Overview</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #09090b;
+      color: white;
+    }
+    
+    .slide {
+      width: 1920px;
+      height: 1080px;
+      padding: 80px;
+      background: linear-gradient(135deg, #09090b 0%, #18181b 100%);
+      position: relative;
+      page-break-after: always;
+      margin-bottom: 40px;
+    }
+    
+    .slide::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: 
+        radial-gradient(circle at 20% 80%, rgba(34, 211, 238, 0.1) 0%, transparent 40%),
+        radial-gradient(circle at 80% 20%, rgba(168, 85, 247, 0.1) 0%, transparent 40%);
+      pointer-events: none;
+    }
+    
+    .logo {
+      position: absolute;
+      top: 60px;
+      left: 80px;
+      font-size: 28px;
+      font-weight: 700;
+      color: #22d3ee;
+      letter-spacing: 2px;
+    }
+    
+    .slide-number {
+      position: absolute;
+      bottom: 60px;
+      right: 80px;
+      font-size: 18px;
+      color: #52525b;
+    }
+    
+    h1 {
+      font-size: 72px;
+      font-weight: 700;
+      margin-bottom: 40px;
+      background: linear-gradient(135deg, #fff 0%, #a1a1aa 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    h2 {
+      font-size: 48px;
+      font-weight: 600;
+      margin-bottom: 40px;
+      color: #fafafa;
+    }
+    
+    h3 {
+      font-size: 32px;
+      font-weight: 600;
+      margin-bottom: 24px;
+      color: #22d3ee;
+    }
+    
+    .subtitle {
+      font-size: 32px;
+      color: #a1a1aa;
+      margin-bottom: 60px;
+    }
+    
+    .content {
+      position: relative;
+      z-index: 1;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .center-content {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      height: 100%;
+    }
+    
+    .two-column {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+      flex: 1;
+    }
+    
+    .three-column {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 40px;
+      flex: 1;
+    }
+    
+    .box {
+      background: rgba(24, 24, 27, 0.8);
+      border: 1px solid #27272a;
+      border-radius: 16px;
+      padding: 32px;
+    }
+    
+    .highlight-box {
+      background: linear-gradient(135deg, rgba(34, 211, 238, 0.1) 0%, rgba(34, 211, 238, 0.05) 100%);
+      border: 1px solid rgba(34, 211, 238, 0.3);
+    }
+    
+    .diagram {
+      font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+      font-size: 18px;
+      line-height: 1.6;
+      color: #a1a1aa;
+      white-space: pre;
+      background: #0a0a0b;
+      padding: 40px;
+      border-radius: 16px;
+      border: 1px solid #27272a;
+    }
+    
+    .cyan { color: #22d3ee; }
+    .purple { color: #a855f7; }
+    .green { color: #22c55e; }
+    .amber { color: #f59e0b; }
+    .red { color: #ef4444; }
+    .pink { color: #ec4899; }
+    .blue { color: #3b82f6; }
+    
+    ul {
+      list-style: none;
+      font-size: 28px;
+      line-height: 2;
+    }
+    
+    ul li::before {
+      content: '→';
+      color: #22d3ee;
+      margin-right: 16px;
+    }
+    
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 32px;
+      margin-top: 40px;
+    }
+    
+    .stat-card {
+      background: rgba(24, 24, 27, 0.8);
+      border: 1px solid #27272a;
+      border-radius: 16px;
+      padding: 32px;
+      text-align: center;
+    }
+    
+    .stat-value {
+      font-size: 56px;
+      font-weight: 700;
+      color: #22d3ee;
+    }
+    
+    .stat-label {
+      font-size: 20px;
+      color: #71717a;
+      margin-top: 8px;
+    }
+    
+    .flow-diagram {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      margin: 60px 0;
+    }
+    
+    .flow-step {
+      background: rgba(24, 24, 27, 0.9);
+      border: 1px solid #27272a;
+      border-radius: 16px;
+      padding: 32px 40px;
+      text-align: center;
+      min-width: 200px;
+    }
+    
+    .flow-step.highlight {
+      border-color: #22d3ee;
+      box-shadow: 0 0 40px rgba(34, 211, 238, 0.2);
+    }
+    
+    .flow-arrow {
+      font-size: 32px;
+      color: #22d3ee;
+    }
+    
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 24px;
+    }
+    
+    .table th {
+      text-align: left;
+      padding: 20px;
+      background: rgba(34, 211, 238, 0.1);
+      border-bottom: 2px solid #22d3ee;
+      color: #22d3ee;
+    }
+    
+    .table td {
+      padding: 20px;
+      border-bottom: 1px solid #27272a;
+    }
+    
+    .bar {
+      height: 24px;
+      background: linear-gradient(90deg, #22d3ee 0%, #06b6d4 100%);
+      border-radius: 4px;
+      margin-top: 8px;
+    }
+    
+    .tag {
+      display: inline-block;
+      padding: 8px 16px;
+      background: rgba(34, 211, 238, 0.2);
+      border: 1px solid rgba(34, 211, 238, 0.3);
+      border-radius: 8px;
+      font-size: 18px;
+      margin: 4px;
+    }
+    
+    @media print {
+      .slide {
+        margin: 0;
+        page-break-after: always;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Slide 1: Title -->
+<div class="slide">
+  <div class="content center-content">
+    <h1 style="font-size: 120px; margin-bottom: 24px;">MEMRY</h1>
+    <p class="subtitle" style="font-size: 48px; margin-bottom: 80px;">Zero-Knowledge Memory for AI Agents</p>
+    <div style="display: flex; gap: 24px;">
+      <span class="tag">Permanent Storage</span>
+      <span class="tag">True Encryption</span>
+      <span class="tag">Local Embeddings</span>
+      <span class="tag">Biological Decay</span>
+    </div>
+  </div>
+  <div class="slide-number">1</div>
+</div>
+
+<!-- Slide 2: The Problem -->
+<div class="slide">
+  <div class="logo">MEMRY</div>
+  <div class="content">
+    <h2>The Problem</h2>
+    <div class="two-column" style="margin-top: 40px;">
+      <div>
+        <h3>Current AI Memory</h3>
+        <ul style="color: #ef4444;">
+          <li>Context window limitations</li>
+          <li>No persistence across sessions</li>
+          <li>Centralized, readable by providers</li>
+          <li>No biological memory dynamics</li>
+          <li>Flat storage, no associations</li>
+        </ul>
+      </div>
+      <div>
+        <h3>What Agents Need</h3>
+        <ul style="color: #22c55e;">
+          <li>Unlimited long-term memory</li>
+          <li>True privacy (zero-knowledge)</li>
+          <li>Intelligent recall & linking</li>
+          <li>Natural forgetting (decay)</li>
+          <li>Associative memory graph</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="slide-number">2</div>
+</div>
+
+<!-- Slide 3: Architecture Overview -->
+<div class="slide">
+  <div class="logo">MEMRY</div>
+  <div class="content">
+    <h2>Zero-Knowledge Architecture</h2>
+    <div class="flow-diagram">
+      <div class="flow-step">
+        <div style="font-size: 48px; margin-bottom: 16px;">💬</div>
+        <div style="font-size: 24px; font-weight: 600;">Conversation</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div style="font-size: 48px; margin-bottom: 16px;">🧠</div>
+        <div style="font-size: 24px; font-weight: 600;">Heuristics</div>
+        <div style="font-size: 16px; color: #71717a;">score ≥ 6.0?</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div style="font-size: 48px; margin-bottom: 16px;">📊</div>
+        <div style="font-size: 24px; font-weight: 600;">Local Embed</div>
+        <div style="font-size: 16px; color: #71717a;">FastEmbed ONNX</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step highlight">
+        <div style="font-size: 48px; margin-bottom: 16px;">🔒</div>
+        <div style="font-size: 24px; font-weight: 600;">Encrypt</div>
+        <div style="font-size: 16px; color: #71717a;">AES-256-GCM</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div style="font-size: 48px; margin-bottom: 16px;">☁️</div>
+        <div style="font-size: 24px; font-weight: 600;">MEMRY</div>
+        <div style="font-size: 16px; color: #71717a;">Store + Link</div>
+      </div>
+    </div>
+    <div class="box highlight-box" style="text-align: center; margin-top: 40px;">
+      <p style="font-size: 28px;">
+        <span class="cyan">Server receives:</span> Vector + Encrypted blob<br>
+        <span class="red">Server CANNOT:</span> Read content • See queries • Decrypt data
+      </p>
+    </div>
+  </div>
+  <div class="slide-number">3</div>
+</div>
+
+<!-- Slide 4: Heuristic Scoring -->
+<div class="slide">
+  <div class="logo">MEMRY</div>
+  <div class="content">
+    <h2>Intelligent Extraction (No LLM Cost)</h2>
+    <p class="subtitle" style="font-size: 24px;">Deterministic heuristics decide what's worth remembering</p>
+    <table class="table" style="margin-top: 20px;">
+      <thead>
+        <tr>
+          <th>Signal</th>
+          <th>Points</th>
+          <th>Pattern Examples</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="cyan">Explicit Markers</span></td>
+          <td><strong>+3.0</strong></td>
+          <td>"remember this", "my name is", "don't forget"</td>
+        </tr>
+        <tr>
+          <td><span class="purple">Decision</span></td>
+          <td><strong>+2.0</strong></td>
+          <td>"decided", "going with", "committed to"</td>
+        </tr>
+        <tr>
+          <td><span class="amber">Correction</span></td>
+          <td><strong>+1.5</strong></td>
+          <td>"actually", "no wait", "I meant"</td>
+        </tr>
+        <tr>
+          <td><span class="pink">Emotional</span></td>
+          <td><strong>+1.5</strong></td>
+          <td>CAPS, "amazing!!!", high arousal words</td>
+        </tr>
+        <tr>
+          <td><span class="green">Temporal</span></td>
+          <td><strong>+1.0</strong></td>
+          <td>"January 5th", "next Tuesday", "every morning"</td>
+        </tr>
+        <tr>
+          <td><span class="blue">Entities</span></td>
+          <td><strong>+2.0</strong></td>
+          <td>Names, URLs, dates, companies</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="text-align: center; margin-top: 40px; font-size: 24px; color: #71717a;">
+      Final Score = Base (0-7) × Type Multiplier (0.8-1.3) → Store if ≥ 6.0
+    </p>
+  </div>
+  <div class="slide-number">4</div>
+</div>
+
+<!-- Slide 5: Memory Types -->
+<div class="slide">
+  <div class="logo">MEMRY</div>
+  <div class="content">
+    <h2>Memory Types & Decay</h2>
+    <p class="subtitle" style="font-size: 24px;">Biological memory dynamics — important things persist, trivia fades</p>
+    <div style="margin-top: 40px;">
+      <div style="display: grid; grid-template-columns: 200px 1fr 100px; gap: 16px; align-items: center; margin-bottom: 24px;">
+        <span style="font-size: 24px;"><span class="red">●</span> Constraint</span>
+        <div class="bar" style="width: 100%;"></div>
+        <span style="font-size: 20px; color: #71717a;">180 days</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 200px 1fr 100px; gap: 16px; align-items: center; margin-bottom: 24px;">
+        <span style="font-size: 24px;"><span class="purple">●</span> Identity</span>
+        <div class="bar" style="width: 67%;"></div>
+        <span style="font-size: 20px; color: #71717a;">120 days</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 200px 1fr 100px; gap: 16px; align-items: center; margin-bottom: 24px;">
+        <span style="font-size: 24px;"><span class="green">●</span> How-to</span>
+        <div class="bar" style="width: 67%;"></div>
+        <span style="font-size: 20px; color: #71717a;">120 days</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 200px 1fr 100px; gap: 16px; align-items: center; margin-bottom: 24px;">
+        <span style="font-size: 24px;"><span class="blue">●</span> Fact</span>
+        <div class="bar" style="width: 50%;"></div>
+        <span style="font-size: 20px; color: #71717a;">90 days</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 200px 1fr 100px; gap: 16px; align-items: center; margin-bottom: 24px;">
+        <span style="font-size: 24px;"><span class="cyan">●</span> Preference</span>
+        <div class="bar" style="width: 33%;"></div>
+        <span style="font-size: 20px; color: #71717a;">60 days</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 200px 1fr 100px; gap: 16px; align-items: center; margin-bottom: 24px;">
+        <span style="font-size: 24px;"><span class="pink">●</span> Relationship</span>
+        <div class="bar" style="width: 17%;"></div>
+        <span style="font-size: 20px; color: #71717a;">30 days</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 200px 1fr 100px; gap: 16px; align-items: center; margin-bottom: 24px;">
+        <span style="font-size: 24px;"><span class="amber">●</span> Event</span>
+        <div class="bar" style="width: 8%;"></div>
+        <span style="font-size: 20px; color: #71717a;">14 days</span>
+      </div>
+    </div>
+    <div class="box" style="margin-top: 40px; text-align: center;">
+      <p style="font-size: 24px; font-family: monospace;">
+        strength = base × (0.9 ^ (days_since_access / halflife))
+      </p>
+      <p style="font-size: 20px; color: #71717a; margin-top: 16px;">
+        Access resets the clock • Repeated mentions strengthen memories • Below 0.3 → archive → delete
+      </p>
+    </div>
+  </div>
+  <div class="slide-number">5</div>
+</div>
+
+<!-- Slide 6: Reinforcement -->
+<div class="slide">
+  <div class="logo">MEMRY</div>
+  <div class="content">
+    <h2>Fire Together, Wire Together</h2>
+    <p class="subtitle" style="font-size: 24px;">Repeated mentions strengthen memories instead of duplicating</p>
+    <div class="two-column" style="margin-top: 60px;">
+      <div>
+        <h3>Reinforcement Logic</h3>
+        <div class="diagram" style="font-size: 20px;">
+New memory arrives
+        ↓
+Find similar (cosine > 0.85)?
+        ↓
+   ┌────┴────┐
+   ↓         ↓
+  YES        NO
+   ↓         ↓
+REINFORCE   CREATE
+• strength↑  • strength=1.0
+• mentions↑  • set halflife
+• merge      • auto-link
+  entities     similar</div>
+      </div>
+      <div>
+        <h3>Frequency Boost</h3>
+        <div class="box" style="margin-top: 24px;">
+          <table style="width: 100%; font-size: 24px;">
+            <tr><td>1st mention</td><td style="text-align: right; color: #22d3ee;">1.0×</td></tr>
+            <tr><td>2nd mention</td><td style="text-align: right; color: #22d3ee;">1.4× (+40%)</td></tr>
+            <tr><td>3rd mention</td><td style="text-align: right; color: #22d3ee;">1.6× (+20%)</td></tr>
+            <tr><td>4th mention</td><td style="text-align: right; color: #22d3ee;">1.8× (+20%)</td></tr>
+            <tr><td>5th+ mention</td><td style="text-align: right; color: #22d3ee;">+5% each</td></tr>
+            <tr style="border-top: 2px solid #27272a;"><td><strong>Maximum</strong></td><td style="text-align: right; color: #22c55e;"><strong>2.5× cap</strong></td></tr>
+          </table>
+        </div>
+        <p style="margin-top: 24px; font-size: 20px; color: #71717a;">
+          Example: Dog "Rex" mentioned 5 times<br>
+          0.6 → 0.84 → 0.97 → 1.08 → 1.13
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-number">6</div>
+</div>
+
+<!-- Slide 7: Tech Stack -->
+<div class="slide">
+  <div class="logo">MEMRY</div>
+  <div class="content">
+    <h2>Technology Stack</h2>
+    <div class="three-column" style="margin-top: 60px;">
+      <div class="box">
+        <h3 style="margin-bottom: 32px;">Storage</h3>
+        <ul style="font-size: 22px;">
+          <li><strong>Turso</strong> — Edge SQLite</li>
+          <li><strong>Arweave</strong> — Permanent</li>
+          <li><strong>Vector Index</strong> — Similarity</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3 style="margin-bottom: 32px;">Security</h3>
+        <ul style="font-size: 22px;">
+          <li><strong>AES-256-GCM</strong> — Encryption</li>
+          <li><strong>PBKDF2</strong> — Key derivation</li>
+          <li><strong>Client-side</strong> — All crypto</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3 style="margin-bottom: 32px;">Intelligence</h3>
+        <ul style="font-size: 22px;">
+          <li><strong>FastEmbed</strong> — Local ONNX</li>
+          <li><strong>Heuristics</strong> — No LLM cost</li>
+          <li><strong>Graph</strong> — Associations</li>
+        </ul>
+      </div>
+    </div>
+    <div class="stat-grid" style="margin-top: 60px;">
+      <div class="stat-card">
+        <div class="stat-value">$0</div>
+        <div class="stat-label">LLM Cost per Extract</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">384</div>
+        <div class="stat-label">Embedding Dimensions</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">~200ms</div>
+        <div class="stat-label">Local Embed Time</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">∞</div>
+        <div class="stat-label">Storage on Arweave</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-number">7</div>
+</div>
+
+<!-- Slide 8: Integration -->
+<div class="slide">
+  <div class="logo">MEMRY</div>
+  <div class="content">
+    <h2>Easy Integration</h2>
+    <div class="three-column" style="margin-top: 60px;">
+      <div class="box highlight-box">
+        <h3 style="margin-bottom: 24px;">MCP Server</h3>
+        <p style="font-size: 20px; color: #a1a1aa; margin-bottom: 24px;">For Claude Desktop & MCP-compatible agents</p>
+        <div class="diagram" style="font-size: 16px; padding: 20px;">npm install -g @memry/mcp
+
+// claude_desktop_config.json
+{
+  "mcpServers": {
+    "memry": {
+      "command": "memry-mcp"
+    }
+  }
+}</div>
+      </div>
+      <div class="box highlight-box">
+        <h3 style="margin-bottom: 24px;">Python SDK</h3>
+        <p style="font-size: 20px; color: #a1a1aa; margin-bottom: 24px;">Full ZK with local FastEmbed</p>
+        <div class="diagram" style="font-size: 16px; padding: 20px;">pip install memry-sdk
+
+from memry import MemryClient
+
+client = MemryClient(
+  api_key="mem_xxx",
+  vault_password="***"
+)
+
+client.store("User likes dark theme")</div>
+      </div>
+      <div class="box highlight-box">
+        <h3 style="margin-bottom: 24px;">REST API</h3>
+        <p style="font-size: 20px; color: #a1a1aa; margin-bottom: 24px;">Direct HTTP for any platform</p>
+        <div class="diagram" style="font-size: 16px; padding: 20px;">POST /api/v1/memories
+{
+  "content": "encrypted...",
+  "embedding": [0.1, ...],
+  "type": "preference"
+}
+
+POST /api/v1/context
+{
+  "query_embedding": [...]
+}</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-number">8</div>
+</div>
+
+<!-- Slide 9: Summary -->
+<div class="slide">
+  <div class="logo">MEMRY</div>
+  <div class="content center-content">
+    <h1 style="font-size: 80px;">Give Your Agent<br><span class="cyan">Real Memory</span></h1>
+    <div style="display: flex; gap: 60px; margin-top: 80px;">
+      <div style="text-align: center;">
+        <div style="font-size: 64px; margin-bottom: 16px;">🔒</div>
+        <div style="font-size: 24px; font-weight: 600;">Zero-Knowledge</div>
+        <div style="font-size: 18px; color: #71717a;">We can't read your data</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 64px; margin-bottom: 16px;">🧠</div>
+        <div style="font-size: 24px; font-weight: 600;">Biological Dynamics</div>
+        <div style="font-size: 18px; color: #71717a;">Decay, reinforcement, linking</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 64px; margin-bottom: 16px;">💰</div>
+        <div style="font-size: 24px; font-weight: 600;">Zero LLM Cost</div>
+        <div style="font-size: 18px; color: #71717a;">Heuristics, not AI, for extraction</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 64px; margin-bottom: 16px;">♾️</div>
+        <div style="font-size: 24px; font-weight: 600;">Permanent</div>
+        <div style="font-size: 18px; color: #71717a;">Arweave storage forever</div>
+      </div>
+    </div>
+    <div style="margin-top: 80px;">
+      <p style="font-size: 32px; color: #22d3ee;">memry.ai</p>
+    </div>
+  </div>
+  <div class="slide-number">9</div>
+</div>
+
+</body>
+</html>
