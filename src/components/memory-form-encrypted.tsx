@@ -13,6 +13,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { encryptClientSide } from "@/lib/client-crypto";
 import type { MemoryKind } from "@/lib/types";
 
+import { memoryTypeLabels } from "@/lib/memory-labels";
+
 const memoryTypes: MemoryKind[] = ["episodic", "semantic", "procedural", "self-model"];
 
 export function MemoryFormEncrypted() {
@@ -131,7 +133,7 @@ export function MemoryFormEncrypted() {
                         : "border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
                     }
                   >
-                    {type}
+                    {memoryTypeLabels[type]}
                   </Button>
                 ))}
               </div>

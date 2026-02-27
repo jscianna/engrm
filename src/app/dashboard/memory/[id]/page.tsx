@@ -11,6 +11,7 @@ import { ArweaveVerifyButton } from "@/components/arweave-verify-button";
 import { EncryptedContentViewer } from "@/components/encrypted-content-viewer";
 import { MemoryRelationships } from "@/components/memory-relationships";
 import { getCachedMemory, getCachedRelatedMemories } from "@/lib/memories";
+import { getMemoryTypeLabel } from "@/lib/memory-labels";
 
 async function RelatedMemoriesSection({
   userId,
@@ -42,7 +43,7 @@ async function RelatedMemoriesSection({
                 <div>
                   <p className="text-sm font-medium text-zinc-100">{result.memory.title}</p>
                   <p className="text-xs text-zinc-400">
-                    {result.memory.memoryType} • Importance {result.memory.importance}/10
+                    {getMemoryTypeLabel(result.memory.memoryType)} • Importance {result.memory.importance}/10
                   </p>
                 </div>
                 <p className="text-xs text-cyan-300">{(result.score * 100).toFixed(1)}%</p>
@@ -89,7 +90,7 @@ export default async function MemoryDetailPage({
                   {memory.sourceType}
                 </Badge>
                 <Badge variant="outline" className="border-cyan-800/60 text-cyan-200">
-                  {memory.memoryType}
+                  {getMemoryTypeLabel(memory.memoryType)}
                 </Badge>
                 <Badge variant="outline" className="border-zinc-700 text-zinc-300">
                   Importance {memory.importance}/10
