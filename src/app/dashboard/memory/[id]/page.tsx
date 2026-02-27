@@ -142,7 +142,7 @@ export default async function MemoryDetailPage({
           )}
 
           <div>
-            <p className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Content Hash (SHA-256)</p>
+            <p className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Content Fingerprint</p>
             <code className="block rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-300">
               {memory.contentHash}
             </code>

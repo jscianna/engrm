@@ -131,10 +131,10 @@ export function ArweaveWalletCard() {
         )}
 
         <form className="space-y-3" onSubmit={onSaveWallet}>
-          <p className="text-xs uppercase tracking-wide text-zinc-500">Set custom JWK (per user)</p>
+          <p className="text-xs uppercase tracking-wide text-zinc-500">Import wallet key (advanced)</p>
           <Textarea
             rows={8}
-            placeholder='{"kty":"RSA", ...}'
+            placeholder='Paste your Arweave wallet JSON here...'
             value={jwk}
             onChange={(event) => setJwk(event.target.value)}
             className="border-zinc-700 bg-zinc-900 font-mono text-xs text-zinc-100"

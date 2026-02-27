@@ -20,33 +20,33 @@ import { Input } from "@/components/ui/input";
 
 const features = [
   {
-    title: "Zero-knowledge encryption",
+    title: "Private by design",
     body: "Your data is encrypted on your device before upload. We can't read your memories — only you can.",
     icon: Lock,
   },
   {
-    title: "Semantic search & retrieval",
-    body: "Find memories by meaning, not keywords. Embeddings are generated locally for complete privacy.",
+    title: "Find by meaning",
+    body: "Search memories by what they mean, not exact keywords. All search happens on your device for complete privacy.",
     icon: Sparkles,
   },
   {
     title: "Permanent storage",
-    body: "Commit memories to Arweave for immutable, verifiable permanence with public TX proofs.",
+    body: "Save important memories forever with cryptographic proof they existed. Immutable, verifiable, yours.",
     icon: ShieldCheck,
   },
   {
-    title: "Memory graph",
-    body: "Connect memories with typed relationships. See how your knowledge evolves over time.",
+    title: "Connected knowledge",
+    body: "Link related memories together. See how your knowledge evolves and connects over time.",
     icon: DatabaseZap,
   },
   {
-    title: "Agent-native API",
-    body: "Drop-in memory retrieval APIs with namespace isolation, session context, and secure commit flows.",
+    title: "Built for AI agents",
+    body: "Simple APIs to store and retrieve memories, organized by project and session. Drop into any workflow.",
     icon: Brain,
   },
   {
-    title: "Fast context recall",
-    body: "Sub-second semantic lookup so agents stay stateful in real time, even across long-running workflows.",
+    title: "Instant recall",
+    body: "Sub-second search so your AI stays in context, even across long-running conversations.",
     icon: Activity,
   },
 ];
@@ -62,7 +62,7 @@ const integrations = [
       "command": "memry-mcp",
       "env": {
         "MEMRY_API_KEY": "mk_live_xxx",
-        "MEMRY_NAMESPACE": "prod-agent"
+        "MEMRY_PROJECT": "my-assistant"
       }
     }
   }
@@ -77,13 +77,13 @@ const integrations = [
 const memry = new MemryClient({ apiKey: process.env.MEMRY_API_KEY! });
 
 await memry.store({
-  namespace: "support-agent",
+  project: "support-agent",
   content: "User prefers concise responses",
   tags: ["prefs", "tone"]
 });
 
 const context = await memry.search({
-  namespace: "support-agent",
+  project: "support-agent",
   query: "How should I respond to this user?"
 });`,
     icon: DatabaseZap,
@@ -92,10 +92,10 @@ const context = await memry.search({
     title: "Python CLI",
     description: "For local automations, cron jobs, and agent memory pipelines.",
     code: `memry auth login --api-key "$MEMRY_API_KEY"
-memry store --namespace prod-agent \\
+memry store --project prod-agent \\
   --content "Customer uses SOC2-compliant infrastructure"
 
-memry search --namespace prod-agent \\
+memry search --project prod-agent \\
   --query "compliance requirements" --limit 5`,
     icon: Terminal,
   },
@@ -188,7 +188,7 @@ export default function Home() {
                 </div>
                 <div className="rounded-xl border border-zinc-700/70 bg-zinc-900/55 p-4 backdrop-blur">
                   <p className="text-2xl font-semibold text-cyan-200">&lt;90ms</p>
-                  <p className="text-sm text-zinc-400">Median semantic retrieval</p>
+                  <p className="text-sm text-zinc-400">Median search time</p>
                 </div>
                 <div className="rounded-xl border border-zinc-700/70 bg-zinc-900/55 p-4 backdrop-blur">
                   <p className="text-2xl font-semibold text-cyan-200">24/7</p>
@@ -209,21 +209,21 @@ export default function Home() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-xl border border-zinc-700/70 bg-zinc-900/90 p-3">
-                    <p className="text-xs text-zinc-500">Vector hash</p>
+                    <p className="text-xs text-zinc-500">Fingerprint</p>
                     <p className="mt-1 font-mono text-xs text-cyan-300">0x7ca4...8d1f</p>
                   </div>
                   <div className="rounded-xl border border-zinc-700/70 bg-zinc-900/90 p-3">
-                    <p className="text-xs text-zinc-500">Namespace</p>
+                    <p className="text-xs text-zinc-500">Project</p>
                     <p className="mt-1 font-mono text-xs text-cyan-300">prod-assistant</p>
                   </div>
                 </div>
                 <div className="rounded-xl border border-zinc-700/70 bg-zinc-900/90 p-3 font-mono text-xs text-zinc-300">
-                  <p><span className="text-zinc-500">ciphertext:</span> 8a2f7b11e6d0c4...</p>
-                  <p><span className="text-zinc-500">embedding:</span> [0.118, -0.042, 0.911, ...]</p>
+                  <p><span className="text-zinc-500">encrypted:</span> 8a2f7b11e6d0c4...</p>
+                  <p><span className="text-zinc-500">searchable:</span> [0.118, -0.042, 0.911, ...]</p>
                 </div>
               </div>
               <p className="mt-4 text-sm text-zinc-400">
-                MEMRY stores unreadable vectors and ciphertext only. <span className="text-cyan-200">Your content never appears in plaintext on our servers.</span>
+                We only store scrambled data. <span className="text-cyan-200">Your actual content never touches our servers.</span>
               </p>
             </div>
           </div>
@@ -235,12 +235,12 @@ export default function Home() {
             <Badge className="border border-cyan-300/30 bg-cyan-300/10 text-cyan-200">Product Preview</Badge>
             <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">See memory state evolve in real time.</h2>
             <p className="text-zinc-300">
-              Built for teams shipping serious AI products. Track context freshness, namespace quality, and retrieval confidence from a single dashboard.
+              Built for teams shipping serious AI products. Track memory health and search quality from a single dashboard.
             </p>
             <div className="space-y-3 text-sm text-zinc-300">
-              <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-cyan-300" /> Session-level memory views for each agent run</p>
-              <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-cyan-300" /> One-click commit proofs for immutable records</p>
-              <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-cyan-300" /> Namespace metrics to tune retrieval quality</p>
+              <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-cyan-300" /> See memories for each conversation or agent run</p>
+              <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-cyan-300" /> One-click permanent storage with proof</p>
+              <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-cyan-300" /> Project-level insights to improve search quality</p>
             </div>
           </div>
           <Card className="overflow-hidden border-zinc-700/70 bg-zinc-900/45 backdrop-blur-xl shadow-[0_25px_80px_rgba(8,145,178,0.2)]">
@@ -310,27 +310,27 @@ export default function Home() {
               <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-300 animate-pulse">
                 1
               </div>
-              <h3 className="mb-2 font-medium">Encrypt locally</h3>
+              <h3 className="mb-2 font-medium">Encrypt on your device</h3>
               <p className="text-sm text-zinc-400">
-                Your vault password derives a key on your device. Content is encrypted with AES-256-GCM before upload.
+                Your password creates a secret key that never leaves your device. Your content is scrambled before upload.
               </p>
             </div>
             <div className="rounded-2xl border border-zinc-700/70 bg-zinc-950/85 p-5 text-center">
               <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-300 animate-pulse">
                 2
               </div>
-              <h3 className="mb-2 font-medium">Embed locally</h3>
+              <h3 className="mb-2 font-medium">Search privately</h3>
               <p className="text-sm text-zinc-400">
-                Search queries are converted to vectors on your device. We never see what you&apos;re looking for.
+                Your search queries are processed on your device. We never see what you&apos;re looking for.
               </p>
             </div>
             <div className="rounded-2xl border border-zinc-700/70 bg-zinc-950/85 p-5 text-center">
               <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-300 animate-pulse">
                 3
               </div>
-              <h3 className="mb-2 font-medium">Store blindly</h3>
+              <h3 className="mb-2 font-medium">We stay blind</h3>
               <p className="text-sm text-zinc-400">
-                Our servers store vectors and ciphertext. Even with full database access, your data is unreadable.
+                Our servers store only encrypted data. Even with full database access, your memories are unreadable.
               </p>
             </div>
           </div>
@@ -406,7 +406,7 @@ export default function Home() {
                 <div className="rounded-xl border border-cyan-300/35 bg-cyan-400/10 p-4">
                   <p className="text-sm text-zinc-100">Team Early Access</p>
                   <p className="mt-1 text-2xl font-semibold text-cyan-100">Invite-only</p>
-                  <p className="text-sm text-zinc-200/80">Higher throughput, shared namespaces, priority support.</p>
+                  <p className="text-sm text-zinc-200/80">Higher limits, team collaboration, priority support.</p>
                 </div>
               </div>
             </div>
