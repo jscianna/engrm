@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import { ArrowRight, Check, Copy, Key, Loader2, Lock, Sparkles, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -194,20 +194,30 @@ function PasswordStep({
 function ApiKeyStep({
   apiKey,
   onNext,
+  onSkip,
   loading,
   onGenerateKey,
 }: {
   apiKey: string | null;
   onNext: () => void;
+  onSkip: () => void;
   loading: boolean;
   onGenerateKey: () => Promise<void>;
 }) {
   const [copied, setCopied] = useState(false);
 
+  // Auto-generate key when step loads
+  useEffect(() => {
+    if (!apiKey && !loading) {
+      onGenerateKey();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const copyKey = useCallback(() => {
     if (apiKey) {
       navigator.clipboard.writeText(apiKey);
       setCopied(true);
+      toast.success("Copied to clipboard!");
       setTimeout(() => setCopied(false), 2000);
     }
   }, [apiKey]);
@@ -226,16 +236,12 @@ function ApiKeyStep({
         </p>
       </div>
 
-      {!apiKey ? (
-        <Button
-          onClick={onGenerateKey}
-          disabled={loading}
-          className="w-full bg-cyan-400 text-zinc-950 hover:bg-cyan-300"
-        >
-          {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Key className="mr-2 h-4 w-4" />}
-          Generate API Key
-        </Button>
-      ) : (
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-8">
+          <Loader2 className="h-8 w-8 animate-spin text-cyan-400 mb-3" />
+          <p className="text-sm text-zinc-400">Generating your API key...</p>
+        </div>
+      ) : apiKey ? (
         <div className="space-y-4">
           <div className="relative">
             <Input
@@ -261,6 +267,22 @@ function ApiKeyStep({
             Continue
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <Button
+            onClick={onGenerateKey}
+            className="w-full bg-cyan-400 text-zinc-950 hover:bg-cyan-300"
+          >
+            <Key className="mr-2 h-4 w-4" />
+            Generate API Key
+          </Button>
+          <button
+            onClick={onSkip}
+            className="w-full text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+          >
+            Skip for now — I'll create one later
+          </button>
         </div>
       )}
     </div>
@@ -290,8 +312,9 @@ function CompleteStep() {
             <span className="text-xs text-cyan-400 bg-cyan-400/10 px-2 py-0.5 rounded">POST</span>
           </div>
           <pre className="overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-400 font-mono">
-{`curl https://memry.ai/api/v1/memories \\
+{`curl -X POST /api/v1/memories \\
   -H "Authorization: Bearer YOUR_KEY" \\
+  -H "Content-Type: application/json" \\
   -d '{"text": "User prefers dark mode"}'`}
           </pre>
         </div>
@@ -302,8 +325,9 @@ function CompleteStep() {
             <span className="text-xs text-violet-400 bg-violet-400/10 px-2 py-0.5 rounded">POST</span>
           </div>
           <pre className="overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-400 font-mono">
-{`curl https://memry.ai/api/v1/search \\
+{`curl -X POST /api/v1/search \\
   -H "Authorization: Bearer YOUR_KEY" \\
+  -H "Content-Type: application/json" \\
   -d '{"query": "user preferences"}'`}
           </pre>
         </div>
@@ -415,6 +439,7 @@ export function OnboardingWizard({ userId, onComplete }: OnboardingWizardProps) 
           <ApiKeyStep
             apiKey={apiKey}
             onNext={handleComplete}
+            onSkip={handleComplete}
             loading={loading}
             onGenerateKey={handleGenerateApiKey}
           />
