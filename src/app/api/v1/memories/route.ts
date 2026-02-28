@@ -1,5 +1,5 @@
 import { embedText } from "@/lib/embeddings";
-import { upsertMemoryVector } from "@/lib/vector";
+import { upsertMemoryVector } from "@/lib/qdrant";
 import { getSessionById, insertAgentMemory, listAgentMemories } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";

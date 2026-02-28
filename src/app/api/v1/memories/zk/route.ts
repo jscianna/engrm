@@ -13,7 +13,8 @@
  */
 
 import crypto from "node:crypto";
-import { upsertMemoryVector, semanticSearchVectorsDirect, validateVector, EMBEDDING_DIMENSIONS } from "@/lib/vector";
+import { upsertMemoryVector, semanticSearchVectorsDirect, EMBEDDING_DIMENSIONS } from "@/lib/qdrant";
+import { validateVector } from "@/lib/vector";
 import { insertMemoryWithMetadata, reinforceMemory, getMemoriesWithEmbeddings, checkEmbeddingHashExists } from "@/lib/db";
 import { calculateFrequencyBoost, TYPE_HALFLIVES, type MemoryType } from "@/lib/memory-heuristics";
 import { validateApiKey } from "@/lib/api-auth";

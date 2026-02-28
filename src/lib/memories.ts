@@ -22,7 +22,7 @@ import type {
   MemorySearchResult,
   MemorySourceType,
 } from "@/lib/types";
-import { semanticSearchVectors, upsertMemoryVector } from "@/lib/vector";
+import { semanticSearchVectors, upsertMemoryVector } from "@/lib/qdrant";
 
 const MAX_FILE_UPLOAD_BYTES = 10 * 1024 * 1024;
 

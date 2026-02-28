@@ -1,5 +1,5 @@
 import { embedText } from "@/lib/embeddings";
-import { semanticSearchVectors } from "@/lib/vector";
+import { semanticSearchVectors } from "@/lib/qdrant";
 import { getAgentMemoriesByIds } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
