@@ -21,6 +21,7 @@ import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { checkMemoryQuota, recordMemoryCreated } from "@/lib/rate-limiter";
 import { isObject, resolveNamespaceIdOrError } from "@/lib/api-v1";
+import { logAuditEvent, extractRequestInfo } from "@/lib/audit-log";
 
 export const runtime = "nodejs";
 
@@ -219,6 +220,18 @@ export async function POST(request: Request) {
       memoryType,
       importance,
       vector: body.vector,
+    });
+
+    // Audit log
+    const { ipAddress, userAgent } = extractRequestInfo(request);
+    await logAuditEvent({
+      userId: identity.userId,
+      action: "memory.create",
+      resourceType: "memory",
+      resourceId: memory.id,
+      ipAddress: ipAddress ?? undefined,
+      userAgent: userAgent ?? undefined,
+      metadata: { memoryType, importance, encrypted: true },
     });
 
     return Response.json({ 
