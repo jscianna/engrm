@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { base64ToBytes, bytesToBase64, deriveKeyFromPassword, encryptClientSide, exportKeyToBase64, generateSalt, importKeyFromBase64 } from "@/lib/client-crypto";
 import { generateArweaveWallet, getWalletAddress } from "@/lib/arweave-wallet";
 import { VaultPasswordModal } from "@/components/vault-password-modal";
+import { OnboardingWizard } from "@/components/onboarding-wizard";
 
 type VaultContextValue = {
   key: CryptoKey | null;
@@ -173,11 +174,20 @@ export function VaultProvider({ children, initialHasVault, userId }: VaultProvid
     [exportRecoveryKey, hasVault, importRecoveryKey, key, lockVault],
   );
 
+  const handleOnboardingComplete = useCallback((derivedKey: CryptoKey) => {
+    setKey(derivedKey);
+    setHasVault(true);
+  }, []);
+
   return (
     <VaultContext.Provider value={value}>
       {children}
       {!initializing && !key ? (
-        <VaultPasswordModal mode={hasVault ? "unlock" : "setup"} loading={loading} onSubmit={hasVault ? unlock : setup} />
+        hasVault ? (
+          <VaultPasswordModal mode="unlock" loading={loading} onSubmit={unlock} />
+        ) : (
+          <OnboardingWizard userId={userId} onComplete={handleOnboardingComplete} />
+        )
       ) : null}
     </VaultContext.Provider>
   );

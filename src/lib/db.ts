@@ -336,6 +336,7 @@ function parseTags(tagsCsv: string): string[] {
 export type ApiKeyIdentity = {
   userId: string;
   agentId: string;
+  keyId: string;
 };
 
 export type NamespaceRecord = {
@@ -1055,7 +1056,7 @@ export async function validateApiKey(rawApiKey: string): Promise<ApiKeyIdentity 
 
   const result = await client.execute({
     sql: `
-      SELECT user_id, agent_id
+      SELECT id, user_id, agent_id
       FROM api_keys
       WHERE key_hash = ?
       LIMIT 1
@@ -1080,6 +1081,7 @@ export async function validateApiKey(rawApiKey: string): Promise<ApiKeyIdentity 
   return {
     userId: row.user_id as string,
     agentId: row.agent_id as string,
+    keyId: row.id as string,
   };
 }
 

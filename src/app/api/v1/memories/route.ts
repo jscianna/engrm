@@ -1,14 +1,16 @@
 import { embedText } from "@/lib/embeddings";
 import { upsertMemoryVector } from "@/lib/vector";
 import { getSessionById, insertAgentMemory, listAgentMemories } from "@/lib/db";
-import { ApiAuthError, validateApiKey } from "@/lib/api-auth";
+import { validateApiKey } from "@/lib/api-auth";
+import { MemryError, errorResponse } from "@/lib/errors";
+import { checkMemoryQuota, recordMemoryCreated } from "@/lib/rate-limiter";
 import { isObject, jsonError, normalizeLimit, resolveNamespaceIdOrError } from "@/lib/api-v1";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   try {
-    const identity = await validateApiKey(request);
+    const identity = await validateApiKey(request, "memories.list");
     const url = new URL(request.url);
     const namespace = url.searchParams.get("namespace") ?? undefined;
     const limit = normalizeLimit(url.searchParams.get("limit"), 50, 200);
@@ -28,22 +30,21 @@ export async function GET(request: Request) {
 
     return Response.json({ memories });
   } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return jsonError(error.message, error.code, error.status);
-    }
-    const message = error instanceof Error ? error.message : "Failed to list memories";
-    return jsonError(message, "MEMORIES_LIST_FAILED", 400);
+    return errorResponse(error);
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const identity = await validateApiKey(request);
+    const identity = await validateApiKey(request, "memories.create");
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body) || typeof body.text !== "string" || !body.text.trim()) {
-      return jsonError("'text' is required", "VALIDATION_ERROR", 400);
+      throw new MemryError("VALIDATION_ERROR", { field: "text", reason: "required" });
     }
+
+    // Check memory quota before creating
+    await checkMemoryQuota(identity.userId);
 
     const namespace = typeof body.namespace === "string" ? body.namespace : undefined;
     const resolved = await resolveNamespaceIdOrError(identity.userId, namespace);
@@ -55,10 +56,13 @@ export async function POST(request: Request) {
     if (sessionId) {
       const session = await getSessionById(identity.userId, sessionId);
       if (!session) {
-        return jsonError("Session not found", "SESSION_NOT_FOUND", 404);
+        throw new MemryError("SESSION_NOT_FOUND");
       }
       if (resolved.namespaceId && session.namespaceId !== resolved.namespaceId) {
-        return jsonError("Session namespace does not match request namespace", "SESSION_NAMESPACE_MISMATCH", 400);
+        throw new MemryError("VALIDATION_ERROR", {
+          field: "sessionId",
+          reason: "Session namespace does not match request namespace",
+        });
       }
     }
 
@@ -71,6 +75,10 @@ export async function POST(request: Request) {
       namespaceId: resolved.namespaceId,
       sessionId,
     });
+
+    // Track usage
+    const sizeBytes = Buffer.byteLength(body.text, "utf8");
+    await recordMemoryCreated(identity.userId, sizeBytes);
 
     const vector = await embedText(memory.text.slice(0, 6000));
     await upsertMemoryVector({
@@ -85,10 +93,6 @@ export async function POST(request: Request) {
 
     return Response.json({ memory }, { status: 201 });
   } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return jsonError(error.message, error.code, error.status);
-    }
-    const message = error instanceof Error ? error.message : "Failed to store memory";
-    return jsonError(message, "MEMORY_CREATE_FAILED", 400);
+    return errorResponse(error);
   }
 }

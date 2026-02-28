@@ -2,6 +2,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SecurityKeyCard } from "@/components/security-key-card";
 import { ApiKeysCard } from "@/components/api-keys-card";
+import { UsageCard } from "@/components/usage-card";
 
 export default async function SettingsPage() {
   const [{ userId }, user] = await Promise.all([auth(), currentUser()]);
@@ -11,6 +12,9 @@ export default async function SettingsPage() {
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-4">
+      {/* Usage Stats */}
+      <UsageCard />
+
       {/* Profile */}
       <Card className="border-zinc-800 bg-zinc-900/60">
         <CardHeader>

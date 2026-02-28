@@ -1,32 +1,58 @@
 import { validateApiKey as validateApiKeyInDb } from "@/lib/db";
+import { MemryError, ApiAuthError, errorResponse } from "@/lib/errors";
+import { checkRateLimit } from "@/lib/rate-limiter";
 
-export class ApiAuthError extends Error {
-  status: number;
-  code: string;
+// Re-export for backward compatibility
+export { ApiAuthError };
 
-  constructor(message: string, status: number, code: string) {
-    super(message);
-    this.status = status;
-    this.code = code;
-  }
-}
+export type ApiKeyIdentity = {
+  userId: string;
+  agentId: string;
+  keyId: string;
+};
 
-export async function validateApiKey(request: Request): Promise<{ userId: string; agentId: string }> {
+/**
+ * Validate API key and check rate limits
+ * Returns identity if valid, throws MemryError if not
+ */
+export async function validateApiKey(
+  request: Request,
+  endpoint: string = "unknown"
+): Promise<ApiKeyIdentity> {
   const header = request.headers.get("authorization") ?? request.headers.get("Authorization");
   if (!header) {
-    throw new ApiAuthError("Missing Authorization header", 401, "AUTH_MISSING");
+    throw new MemryError("AUTH_MISSING");
   }
 
   const [scheme, token] = header.trim().split(/\s+/, 2);
   if (scheme?.toLowerCase() !== "bearer" || !token) {
-    throw new ApiAuthError("Invalid Authorization header", 401, "AUTH_INVALID");
+    throw new MemryError("AUTH_INVALID");
   }
 
-  // TODO: Add per-key rate limiting.
   const identity = await validateApiKeyInDb(token);
   if (!identity) {
-    throw new ApiAuthError("Invalid API key", 401, "AUTH_INVALID_KEY");
+    throw new MemryError("AUTH_INVALID_KEY");
   }
 
+  // Check rate limits and record the API call
+  await checkRateLimit(identity.userId, identity.keyId, endpoint);
+
   return identity;
+}
+
+/**
+ * Wrapper for API routes that need auth + rate limiting
+ */
+export function withApiAuth(
+  handler: (request: Request, identity: ApiKeyIdentity) => Promise<Response>,
+  endpoint: string
+) {
+  return async (request: Request): Promise<Response> => {
+    try {
+      const identity = await validateApiKey(request, endpoint);
+      return await handler(request, identity);
+    } catch (error) {
+      return errorResponse(error);
+    }
+  };
 }
