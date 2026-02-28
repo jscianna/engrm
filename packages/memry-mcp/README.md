@@ -22,7 +22,28 @@ npm install -g memry-mcp
 MEMRY_API_KEY=mem_xxx           # Required: Your MEMRY API key
 MEMRY_VAULT_PASSWORD=xxx        # Required: Password for client-side encryption
 MEMRY_API_URL=https://...       # Optional: API URL (defaults to memry-sand.vercel.app)
+
+# Auto-namespace (optional) - isolates memories per chat/project
+MEMRY_NAMESPACE=my-project      # Or use MEMRY_CHAT_ID / MEMRY_SESSION_ID
 ```
+
+### Auto-Namespace for Chat Isolation
+
+Memories can be automatically isolated by chat context. Set `MEMRY_NAMESPACE` and all store/search operations will be scoped to that namespace:
+
+```bash
+# Different chats → different namespaces → isolated memories
+MEMRY_NAMESPACE="deals-chat"      # Memories only visible in deals chat
+MEMRY_NAMESPACE="gnkscan-project" # Memories only visible in gnkscan context
+```
+
+For OpenClaw, you can set this dynamically per session:
+```bash
+MEMRY_NAMESPACE="${chat_id}"       # Use Telegram/Discord chat ID
+MEMRY_NAMESPACE="${conversation_label}"  # Use conversation label
+```
+
+Use `global: true` in search/context tools to search across ALL namespaces.
 
 ### Claude Desktop
 

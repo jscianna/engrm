@@ -15,7 +15,7 @@ import { storeZkMemory, searchByVector, listMemories, deleteMemory } from "./api
 const TOOLS = [
     {
         name: "memry_store",
-        description: "Store a memory for later recall. Use for important facts, preferences, decisions, or anything worth remembering.",
+        description: "Store a memory for later recall. Use for important facts, preferences, decisions, or anything worth remembering. Memories are auto-isolated by chat/namespace.",
         inputSchema: {
             type: "object",
             properties: {
@@ -36,13 +36,17 @@ const TOOLS = [
                     items: { type: "string" },
                     description: "Tags for categorization",
                 },
+                namespace: {
+                    type: "string",
+                    description: "Override auto-namespace (optional, defaults to current chat context)",
+                },
             },
             required: ["content"],
         },
     },
     {
         name: "memry_search",
-        description: "Search memories semantically. Use to recall relevant information before responding.",
+        description: "Search memories semantically. Use to recall relevant information before responding. Searches within current chat/namespace by default.",
         inputSchema: {
             type: "object",
             properties: {
@@ -53,6 +57,14 @@ const TOOLS = [
                 limit: {
                     type: "number",
                     description: "Max results (default 5)",
+                },
+                namespace: {
+                    type: "string",
+                    description: "Override auto-namespace (optional, defaults to current chat context)",
+                },
+                global: {
+                    type: "boolean",
+                    description: "Search across ALL namespaces (ignores namespace filter)",
                 },
             },
             required: ["query"],
@@ -72,19 +84,27 @@ const TOOLS = [
                     type: "number",
                     description: "Max memories to include (default 5)",
                 },
+                global: {
+                    type: "boolean",
+                    description: "Search across ALL namespaces (default: current chat only)",
+                },
             },
             required: ["query"],
         },
     },
     {
         name: "memry_list",
-        description: "List recent memories",
+        description: "List recent memories in current namespace",
         inputSchema: {
             type: "object",
             properties: {
                 limit: {
                     type: "number",
                     description: "Max results (default 10)",
+                },
+                namespace: {
+                    type: "string",
+                    description: "Override auto-namespace (optional)",
                 },
             },
         },
@@ -123,6 +143,7 @@ async function handleStore(params) {
             importance: params.importance || 5,
             tags: params.tags || [],
         },
+        namespace: params.namespace, // Will use env auto-namespace if undefined
     });
     return `✓ Stored memory: ${result.id}`;
 }
@@ -133,9 +154,12 @@ async function handleSearch(params) {
     }
     // Generate embedding locally - search query never leaves device
     const vector = await embedLocal(params.query);
+    // If global=true, don't pass namespace (search all)
+    const namespace = params.global ? undefined : params.namespace;
     const { results } = await searchByVector({
         vector,
         topK: params.limit || 5,
+        namespace,
     });
     if (results.length === 0) {
         return "No relevant memories found.";
@@ -157,6 +181,7 @@ async function handleContext(params) {
     const result = await handleSearch({
         query: params.query,
         limit: params.maxResults || 5,
+        global: params.global,
     });
     if (result.startsWith("No relevant") || result.startsWith("Error:")) {
         return result;
@@ -168,7 +193,10 @@ async function handleList(params) {
     if (!vaultPassword) {
         return "Error: MEMRY_VAULT_PASSWORD not set. Cannot decrypt memories.";
     }
-    const { memories } = await listMemories({ limit: params.limit || 10 });
+    const { memories } = await listMemories({
+        limit: params.limit || 10,
+        namespace: params.namespace,
+    });
     if (memories.length === 0) {
         return "No memories found.";
     }
