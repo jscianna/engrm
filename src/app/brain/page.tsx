@@ -84,7 +84,7 @@ function Brain3D({
   const isDraggingRef = useRef(false);
   const lastMouseRef = useRef({ x: 0, y: 0 });
   const nodesRef = useRef<MemoryNode[]>([]);
-  const zoomRef = useRef(1.5); // Start slightly zoomed out
+  const zoomRef = useRef(2.5); // Start zoomed in for bigger brain
 
   // Update nodes ref when nodes change
   useEffect(() => {
@@ -255,10 +255,15 @@ function Brain3D({
         ctx.stroke();
       }
 
-      // Draw nodes
+      // Draw nodes and store positions for click detection
+      const clickableNodes: Array<{ node: MemoryNode; x: number; y: number; radius: number }> = [];
+      
       for (const { node, proj } of projected) {
         const baseRadius = Math.max(2, node.radius * proj.scale * 0.8);
         const color = TYPE_COLORS[node.type] || "#22d3ee";
+        
+        // Store for click detection
+        clickableNodes.push({ node, x: proj.x, y: proj.y, radius: baseRadius });
         
         // Subtle glow effect
         if (baseRadius > 3) {
@@ -288,6 +293,9 @@ function Brain3D({
           ctx.fill();
         }
       }
+      
+      // Store projected positions for click detection (reverse so front nodes checked first)
+      projectedNodesRef.current = clickableNodes.reverse();
 
       animationRef.current = requestAnimationFrame(render);
     };
@@ -317,12 +325,20 @@ function Brain3D({
   }, []);
 
   // Mouse interaction
+  // Store projected positions for click detection
+  const projectedNodesRef = useRef<Array<{ node: MemoryNode; x: number; y: number; radius: number }>>([]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    
+    let dragStartPos = { x: 0, y: 0 };
+    let hasDragged = false;
 
     const handleMouseDown = (e: MouseEvent) => {
       isDraggingRef.current = true;
+      dragStartPos = { x: e.clientX, y: e.clientY };
+      hasDragged = false;
       lastMouseRef.current = { x: e.clientX, y: e.clientY };
     };
 
@@ -332,19 +348,44 @@ function Brain3D({
       const dx = e.clientX - lastMouseRef.current.x;
       const dy = e.clientY - lastMouseRef.current.y;
       
+      // Check if we've moved enough to count as a drag
+      const totalDx = e.clientX - dragStartPos.x;
+      const totalDy = e.clientY - dragStartPos.y;
+      if (Math.abs(totalDx) > 5 || Math.abs(totalDy) > 5) {
+        hasDragged = true;
+      }
+      
       rotationRef.current.y += dx * 0.005;
       rotationRef.current.x += dy * 0.005;
       
       lastMouseRef.current = { x: e.clientX, y: e.clientY };
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: MouseEvent) => {
       isDraggingRef.current = false;
+      
+      // If we didn't drag, check for node click
+      if (!hasDragged) {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = (e.clientX - rect.left) * window.devicePixelRatio;
+        const mouseY = (e.clientY - rect.top) * window.devicePixelRatio;
+        
+        // Check if we clicked on a node
+        for (const { node, x, y, radius } of projectedNodesRef.current) {
+          const dx = mouseX - x;
+          const dy = mouseY - y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < radius + 10) { // Add some padding for easier clicking
+            onNodeClick(node);
+            break;
+          }
+        }
+      }
     };
 
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
-      zoomRef.current = Math.max(0.5, Math.min(3, zoomRef.current - e.deltaY * 0.001));
+      zoomRef.current = Math.max(0.5, Math.min(4, zoomRef.current - e.deltaY * 0.001));
     };
 
     canvas.addEventListener("mousedown", handleMouseDown);
@@ -360,7 +401,7 @@ function Brain3D({
       canvas.removeEventListener("mouseleave", handleMouseUp);
       canvas.removeEventListener("wheel", handleWheel);
     };
-  }, []);
+  }, [onNodeClick]);
 
   // Auto-rotate when not dragging
   useEffect(() => {
@@ -386,31 +427,31 @@ function Brain3D({
 // Demo Data Generator
 // =============================================================================
 
-// Demo memories - generic mainstream content for demo purposes
+// Demo memories - fictional example data for visualization
 const DEMO_MEMORIES = [
-  // Identity
-  { type: "identity", title: "Prefers coffee over tea", importance: 0.7 },
-  { type: "identity", title: "Works in software engineering", importance: 0.9 },
-  { type: "identity", title: "Lives in San Francisco", importance: 0.8 },
-  { type: "identity", title: "Speaks English and Spanish", importance: 0.6 },
+  // Identity (fictional user "Alex")
+  { type: "identity", title: "Name is Alex Chen", importance: 0.9 },
+  { type: "identity", title: "Product designer at TechCorp", importance: 0.8 },
+  { type: "identity", title: "Based in Austin, Texas", importance: 0.7 },
+  { type: "identity", title: "Birthday is March 15th", importance: 0.6 },
   
   // Preferences
-  { type: "preference", title: "Likes action movies", importance: 0.5 },
-  { type: "preference", title: "Prefers dark mode UI", importance: 0.8 },
-  { type: "preference", title: "Morning person", importance: 0.6 },
-  { type: "preference", title: "Prefers async communication", importance: 0.7 },
-  { type: "preference", title: "Likes minimalist design", importance: 0.6 },
-  { type: "preference", title: "Prefers walking over driving", importance: 0.4 },
+  { type: "preference", title: "Prefers morning standup at 9am", importance: 0.7 },
+  { type: "preference", title: "Uses Figma for design work", importance: 0.8 },
+  { type: "preference", title: "Likes bullet-point summaries", importance: 0.6 },
+  { type: "preference", title: "Prefers Slack over email", importance: 0.7 },
+  { type: "preference", title: "Tea over coffee", importance: 0.5 },
+  { type: "preference", title: "Outdoor meetings when possible", importance: 0.4 },
   
   // Facts
-  { type: "fact", title: "Python is a programming language", importance: 0.5 },
-  { type: "fact", title: "The Earth orbits the Sun", importance: 0.3 },
-  { type: "fact", title: "HTTP uses port 80 by default", importance: 0.6 },
-  { type: "fact", title: "Water boils at 100°C", importance: 0.4 },
-  { type: "fact", title: "JavaScript runs in browsers", importance: 0.7 },
-  { type: "fact", title: "Git is version control software", importance: 0.8 },
-  { type: "fact", title: "SQL queries databases", importance: 0.6 },
-  { type: "fact", title: "JSON is a data format", importance: 0.5 },
+  { type: "fact", title: "Project Horizon deadline: April 1st", importance: 0.9 },
+  { type: "fact", title: "Team has 5 designers", importance: 0.5 },
+  { type: "fact", title: "Q2 budget is $50k", importance: 0.7 },
+  { type: "fact", title: "Main competitor is DesignFlow", importance: 0.6 },
+  { type: "fact", title: "Using React for the frontend", importance: 0.5 },
+  { type: "fact", title: "API rate limit is 1000/min", importance: 0.4 },
+  { type: "fact", title: "Database is PostgreSQL", importance: 0.5 },
+  { type: "fact", title: "Staging server: staging.techcorp.io", importance: 0.6 },
   
   // Events
   { type: "event", title: "Had meeting about Q4 planning", importance: 0.6 },
@@ -447,12 +488,12 @@ function generateDemoData(): { nodes: MemoryNode[]; edges: MemoryEdge[] } {
   const nodes: MemoryNode[] = [];
   const edges: MemoryEdge[] = [];
 
-  // Create nodes from demo memories - tight initial cluster
+  // Create nodes from demo memories - spread out for visibility
   DEMO_MEMORIES.forEach((mem, i) => {
     // Arrange in a sphere-like distribution
     const phi = Math.acos(-1 + (2 * i) / DEMO_MEMORIES.length);
     const theta = Math.sqrt(DEMO_MEMORIES.length * Math.PI) * phi;
-    const radius = 30 + Math.random() * 20;
+    const radius = 60 + Math.random() * 40; // Larger spread for desktop
     
     nodes.push({
       id: `mem_${i}`,
@@ -525,6 +566,7 @@ export default function BrainPage() {
     avgImportance: 0,
   });
   const [hoveredNode, setHoveredNode] = useState<MemoryNode | null>(null);
+  const [selectedNode, setSelectedNode] = useState<MemoryNode | null>(null);
   const [isLive, setIsLive] = useState(true);
   const [latestThought, setLatestThought] = useState("Initializing neural network...");
 
@@ -598,7 +640,7 @@ export default function BrainPage() {
           nodes={nodes}
           edges={edges}
           onNodeHover={setHoveredNode}
-          onNodeClick={(node) => console.log("Clicked:", node)}
+          onNodeClick={setSelectedNode}
         />
       </div>
 
@@ -691,9 +733,76 @@ export default function BrainPage() {
       {/* Instructions overlay - Center bottom */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
         <div className="bg-zinc-900/60 backdrop-blur border border-zinc-800 rounded-lg px-4 py-2 text-xs text-zinc-500">
-          Drag to rotate • Scroll to zoom
+          Drag to rotate • Scroll to zoom • Click nodes for details
         </div>
       </div>
+
+      {/* Selected Node Detail Panel */}
+      {selectedNode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setSelectedNode(null)}>
+          <div 
+            className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div 
+                  className="w-4 h-4 rounded-full" 
+                  style={{ backgroundColor: TYPE_COLORS[selectedNode.type] || "#22d3ee" }} 
+                />
+                <span className="text-sm font-mono text-zinc-400 capitalize">{selectedNode.type.replace("_", " ")}</span>
+              </div>
+              <button 
+                onClick={() => setSelectedNode(null)}
+                className="text-zinc-500 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Content */}
+            <h3 className="text-xl font-semibold text-white mb-4">{selectedNode.title}</h3>
+            
+            {/* Stats */}
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="bg-zinc-800/50 rounded-lg p-3">
+                <div className="text-xs text-zinc-500 mb-1">Strength</div>
+                <div className="text-lg font-mono text-cyan-400">{Math.round(selectedNode.strength * 100)}%</div>
+                <div className="h-1 bg-zinc-700 rounded-full mt-2">
+                  <div 
+                    className="h-full bg-cyan-500 rounded-full" 
+                    style={{ width: `${selectedNode.strength * 100}%` }} 
+                  />
+                </div>
+              </div>
+              <div className="bg-zinc-800/50 rounded-lg p-3">
+                <div className="text-xs text-zinc-500 mb-1">Importance</div>
+                <div className="text-lg font-mono text-amber-400">{Math.round(selectedNode.importance * 100)}%</div>
+                <div className="h-1 bg-zinc-700 rounded-full mt-2">
+                  <div 
+                    className="h-full bg-amber-500 rounded-full" 
+                    style={{ width: `${selectedNode.importance * 100}%` }} 
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Connections info */}
+            <div className="bg-zinc-800/50 rounded-lg p-3 mb-4">
+              <div className="text-xs text-zinc-500 mb-2">Connected Memories</div>
+              <div className="text-sm text-zinc-300">
+                {edges.filter(e => e.source === selectedNode.id || e.target === selectedNode.id).length} connections
+              </div>
+            </div>
+
+            {/* Demo note */}
+            <div className="text-xs text-zinc-600 text-center">
+              This is demo data • Sign in to see your real memories
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
