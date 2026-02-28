@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Copy, Key, Loader2, Plus, Trash2 } from "lucide-react";
+import { Ban, Copy, Key, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +12,10 @@ type ApiKey = {
   agentName: string;
   keyPrefix: string;
   createdAt: string;
+  lastUsed: string | null;
+  revokedAt: string | null;
+  expiresAt: string | null;
+  isActive: boolean;
 };
 
 export function ApiKeysCard() {
@@ -21,6 +25,7 @@ export function ApiKeysCard() {
   const [newKeyName, setNewKeyName] = useState("");
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
 
   const fetchKeys = useCallback(async () => {
     try {
@@ -91,6 +96,35 @@ export function ApiKeysCard() {
       toast.error(message);
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  async function revokeKey(id: string) {
+    try {
+      setRevokingId(id);
+      const res = await fetch(`/api/settings/api-keys/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "revoke" }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to revoke key");
+      }
+
+      // Update key status locally
+      setKeys((prev) =>
+        prev.map((k) =>
+          k.id === id ? { ...k, isActive: false, revokedAt: new Date().toISOString() } : k
+        )
+      );
+      toast.success("API key revoked — it can no longer be used");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to revoke key";
+      toast.error(message);
+    } finally {
+      setRevokingId(null);
     }
   }
 
@@ -174,27 +208,68 @@ export function ApiKeysCard() {
             {keys.map((key) => (
               <div
                 key={key.id}
-                className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2"
+                className={`flex items-center justify-between rounded-lg border px-3 py-2 ${
+                  key.isActive 
+                    ? "border-zinc-800 bg-zinc-950" 
+                    : "border-rose-900/50 bg-rose-950/20"
+                }`}
               >
-                <div>
-                  <p className="text-sm font-medium text-zinc-200">{key.agentName}</p>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-zinc-200">{key.agentName}</p>
+                    {key.isActive ? (
+                      <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-400">
+                        Active
+                      </span>
+                    ) : key.revokedAt ? (
+                      <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-xs text-rose-400">
+                        Revoked
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs text-amber-400">
+                        Expired
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-zinc-500">
                     {key.keyPrefix}••• · Created {new Date(key.createdAt).toLocaleDateString()}
+                    {key.lastUsed && (
+                      <> · Last used {new Date(key.lastUsed).toLocaleDateString()}</>
+                    )}
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-zinc-400 hover:text-rose-400"
-                  onClick={() => void deleteKey(key.id)}
-                  disabled={deletingId === key.id}
-                >
-                  {deletingId === key.id ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4" />
+                <div className="flex items-center gap-1">
+                  {key.isActive && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-zinc-400 hover:text-amber-400"
+                      onClick={() => void revokeKey(key.id)}
+                      disabled={revokingId === key.id}
+                      title="Revoke key"
+                    >
+                      {revokingId === key.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Ban className="h-4 w-4" />
+                      )}
+                    </Button>
                   )}
-                </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-zinc-400 hover:text-rose-400"
+                    onClick={() => void deleteKey(key.id)}
+                    disabled={deletingId === key.id}
+                    title="Delete key permanently"
+                  >
+                    {deletingId === key.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
               </div>
             ))}
           </div>

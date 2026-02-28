@@ -30,14 +30,20 @@ async function ensureSaltTable(): Promise<void> {
 
   const client = getDb();
   
-  // Add salt column to user_settings if not exists
+  // Create user_salts table with salt and hmac_secret
   await client.execute(`
     CREATE TABLE IF NOT EXISTS user_salts (
       user_id TEXT PRIMARY KEY,
       salt TEXT NOT NULL,
+      hmac_secret TEXT,
       created_at TEXT NOT NULL
     )
   `).catch(() => {});
+  
+  // Add hmac_secret column if it doesn't exist (migration)
+  await client.execute(`
+    ALTER TABLE user_salts ADD COLUMN hmac_secret TEXT
+  `).catch(() => {}); // Ignore if already exists
 
   initialized = true;
 }
@@ -146,4 +152,37 @@ export async function getSaltInfo(userId: string): Promise<{
     exists: true,
     createdAt: result.rows[0].created_at as string,
   };
+}
+
+/**
+ * Get or create user's HMAC secret for content verification
+ */
+export async function getUserHMACSecret(userId: string): Promise<string> {
+  await ensureSaltTable();
+  const client = getDb();
+
+  // First ensure user has a salt record
+  await getUserSalt(userId);
+
+  // Check if user has HMAC secret
+  const result = await client.execute({
+    sql: `SELECT hmac_secret FROM user_salts WHERE user_id = ?`,
+    args: [userId],
+  });
+
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+
+  if (row?.hmac_secret) {
+    return row.hmac_secret as string;
+  }
+
+  // Generate new HMAC secret
+  const hmacSecret = crypto.randomBytes(32).toString("hex");
+
+  await client.execute({
+    sql: `UPDATE user_salts SET hmac_secret = ? WHERE user_id = ?`,
+    args: [hmacSecret, userId],
+  });
+
+  return hmacSecret;
 }

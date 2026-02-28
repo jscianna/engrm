@@ -187,7 +187,9 @@ async function ensureInitialized(): Promise<void> {
       agent_id TEXT NOT NULL,
       agent_name TEXT,
       created_at TEXT NOT NULL,
-      last_used TEXT
+      last_used TEXT,
+      revoked_at TEXT,
+      expires_at TEXT
     );
 
     CREATE INDEX IF NOT EXISTS idx_api_keys_user_created_at
@@ -286,6 +288,7 @@ async function ensureMemoriesColumns(client: Client): Promise<void> {
     { name: "entities_json", ddl: "TEXT" },  // JSON array
     { name: "embedding", ddl: "TEXT" },  // JSON array of floats
     { name: "embedding_hash", ddl: "TEXT" },  // SHA256 hash of embedding for dedup
+    { name: "content_mac", ddl: "TEXT" },  // HMAC-SHA256 for content integrity
   ];
 
   const tableInfo = await client.execute("PRAGMA table_info(memories)");
@@ -1062,7 +1065,7 @@ export async function validateApiKey(rawApiKey: string): Promise<ApiKeyIdentity 
 
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, agent_id
+      SELECT id, user_id, agent_id, revoked_at, expires_at
       FROM api_keys
       WHERE key_hash = ?
       LIMIT 1
@@ -1073,6 +1076,19 @@ export async function validateApiKey(rawApiKey: string): Promise<ApiKeyIdentity 
   const row = result.rows[0] as Record<string, unknown> | undefined;
   if (!row) {
     return null;
+  }
+
+  // Check if key is revoked
+  if (row.revoked_at) {
+    return null;
+  }
+
+  // Check if key is expired
+  if (row.expires_at) {
+    const expiresAt = new Date(row.expires_at as string);
+    if (expiresAt < new Date()) {
+      return null;
+    }
   }
 
   await client.execute({
@@ -1098,13 +1114,16 @@ export async function listApiKeys(userId: string): Promise<Array<{
   keyPrefix: string;
   createdAt: string;
   lastUsed: string;
+  revokedAt: string | null;
+  expiresAt: string | null;
+  isActive: boolean;
 }>> {
   await ensureInitialized();
   const client = getDb();
 
   const result = await client.execute({
     sql: `
-      SELECT id, agent_id, agent_name, created_at, last_used
+      SELECT id, agent_id, agent_name, created_at, last_used, revoked_at, expires_at
       FROM api_keys
       WHERE user_id = ?
       ORDER BY created_at DESC
@@ -1112,14 +1131,26 @@ export async function listApiKeys(userId: string): Promise<Array<{
     args: [userId],
   });
 
-  return result.rows.map((row) => ({
-    id: row.id as string,
-    agentId: row.agent_id as string,
-    agentName: (row.agent_name as string) || "Unnamed Agent",
-    keyPrefix: "mem_",
-    createdAt: row.created_at as string,
-    lastUsed: row.last_used as string,
-  }));
+  const now = new Date();
+  
+  return result.rows.map((row) => {
+    const revokedAt = (row.revoked_at as string) || null;
+    const expiresAt = (row.expires_at as string) || null;
+    const isExpired = expiresAt ? new Date(expiresAt) < now : false;
+    const isActive = !revokedAt && !isExpired;
+    
+    return {
+      id: row.id as string,
+      agentId: row.agent_id as string,
+      agentName: (row.agent_name as string) || "Unnamed Agent",
+      keyPrefix: "mem_",
+      createdAt: row.created_at as string,
+      lastUsed: row.last_used as string,
+      revokedAt,
+      expiresAt,
+      isActive,
+    };
+  });
 }
 
 export async function deleteApiKey(userId: string, keyId: string): Promise<boolean> {
@@ -1132,6 +1163,43 @@ export async function deleteApiKey(userId: string, keyId: string): Promise<boole
       WHERE user_id = ? AND id = ?
     `,
     args: [userId, keyId],
+  });
+
+  return (result.rowsAffected ?? 0) > 0;
+}
+
+export async function revokeApiKey(userId: string, keyId: string): Promise<boolean> {
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+
+  const result = await client.execute({
+    sql: `
+      UPDATE api_keys
+      SET revoked_at = ?
+      WHERE user_id = ? AND id = ? AND revoked_at IS NULL
+    `,
+    args: [now, userId, keyId],
+  });
+
+  return (result.rowsAffected ?? 0) > 0;
+}
+
+export async function setApiKeyExpiration(
+  userId: string, 
+  keyId: string, 
+  expiresAt: Date | null
+): Promise<boolean> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const result = await client.execute({
+    sql: `
+      UPDATE api_keys
+      SET expires_at = ?
+      WHERE user_id = ? AND id = ?
+    `,
+    args: [expiresAt?.toISOString() ?? null, userId, keyId],
   });
 
   return (result.rowsAffected ?? 0) > 0;
