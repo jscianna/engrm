@@ -1382,7 +1382,7 @@ export async function listAgentMemories(params: {
   const hasSince = typeof params.since === "string" && params.since.length > 0;
   const limit = Math.max(1, Math.min(params.limit ?? 50, 200));
   const args: Array<string | number | null> = [params.userId];
-  let where = "WHERE user_id = ?";
+  let where = "WHERE user_id = ? AND archived_at IS NULL";
 
   if (hasNamespaceFilter) {
     where += " AND namespace_id = ?";
