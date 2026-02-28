@@ -96,6 +96,35 @@ def hash_namespace(namespace: str, vault_password: str) -> str:
     return f"ns_{hash_bytes[:16]}"  # e.g., "ns_a3f2b8c1d4e5f6a7"
 
 
+# Global namespace constant (hashed with password at runtime)
+GLOBAL_NAMESPACE_RAW = "__global__"
+
+def get_global_namespace(vault_password: str) -> str:
+    """Get the hashed global namespace for identity/preferences."""
+    return hash_namespace(GLOBAL_NAMESPACE_RAW, vault_password)
+
+
+# Patterns that indicate identity/global memories
+IDENTITY_PATTERNS = [
+    r"\b(i am|i'm|my name is)\b",
+    r"\b(i live|i'm from|i'm based)\b", 
+    r"\b(i work at|i work for|my job|my role)\b",
+    r"\b(i prefer|i like|i hate|i always|i never)\b",
+    r"\b(i'm allergic|i can't eat|i don't eat)\b",
+    r"\b(my email|my phone|my address)\b",
+    r"\b(my wife|my husband|my partner|my kids)\b",
+]
+
+def is_identity_memory(text: str) -> bool:
+    """Check if text contains identity/preference patterns that should be global."""
+    import re
+    text_lower = text.lower()
+    for pattern in IDENTITY_PATTERNS:
+        if re.search(pattern, text_lower):
+            return True
+    return False
+
+
 # =============================================================================
 # LOCAL EMBEDDINGS (FastEmbed ONNX)
 # =============================================================================
@@ -247,9 +276,15 @@ def cmd_store(args):
     """Store a memory with zero-knowledge encryption."""
     _, _, vault_password, auto_namespace = get_config()
     raw_namespace = getattr(args, 'namespace', None) or auto_namespace
+    force_global = getattr(args, 'global_store', False)
+    
+    # Check if this is an identity/preference memory that should be global
+    is_identity = is_identity_memory(args.text)
+    store_global = force_global or is_identity
     
     # Hash namespace for zero-knowledge (server can't see actual chat name)
     namespace = hash_namespace(raw_namespace, vault_password) if raw_namespace else None
+    global_ns = get_global_namespace(vault_password)
     
     print("[ZK] Encrypting locally...", file=sys.stderr)
     
@@ -271,126 +306,203 @@ def cmd_store(args):
         metadata["importance"] = args.importance
     if args.tags:
         metadata["tags"] = [t.strip() for t in args.tags.split(",")]
+    if is_identity:
+        metadata["memory_type"] = "identity"
     
     print("[ZK] Uploading encrypted blob + vector...", file=sys.stderr)
     
-    # Build request payload
-    payload = {
-        "encryptedTitle": encrypted_title,
-        "encryptedContent": encrypted_content,
-        "vector": vector,
-        "metadata": metadata,
-    }
-    if namespace:
-        payload["namespace"] = namespace
+    stored_ids = []
     
-    # Send only encrypted data + vector to server
-    result = api_request("POST", "/api/v1/memories/zk", payload)
+    # Store in chat namespace (unless --global-only)
+    if namespace and not getattr(args, 'global_only', False):
+        payload = {
+            "encryptedTitle": encrypted_title,
+            "encryptedContent": encrypted_content,
+            "vector": vector,
+            "metadata": metadata,
+            "namespace": namespace,
+        }
+        result = api_request("POST", "/api/v1/memories/zk", payload)
+        if result:
+            stored_ids.append(f"chat:{result.get('id', '?')}")
     
-    ns_msg = f" [namespace: {namespace}]" if namespace else ""
-    print(f"✓ Stored: {result.get('id', 'unknown')}{ns_msg}")
+    # Also store in global namespace for identity/preferences
+    if store_global:
+        global_metadata = {**metadata, "global": True}
+        payload = {
+            "encryptedTitle": encrypted_title,
+            "encryptedContent": encrypted_content,
+            "vector": vector,
+            "metadata": global_metadata,
+            "namespace": global_ns,
+        }
+        result = api_request("POST", "/api/v1/memories/zk", payload)
+        if result:
+            stored_ids.append(f"global:{result.get('id', '?')}")
+    
+    # Output
+    if is_identity and not force_global:
+        print(f"✓ Detected identity memory → stored globally + chat", file=sys.stderr)
+    
+    print(f"✓ Stored: {', '.join(stored_ids)}")
     print(f"  Server received: vector + encrypted blob (cannot read content)")
 
 
 def cmd_search(args):
-    """Search memories with zero-knowledge query."""
+    """Search memories with zero-knowledge query. Uses layered search: chat + global."""
     _, _, vault_password, auto_namespace = get_config()
-    
-    # Handle namespace: --global ignores namespace, otherwise use arg or auto
-    if getattr(args, 'all_namespaces', False):
-        namespace = None
-        print(f"[ZK] Searching ALL namespaces...", file=sys.stderr)
-    else:
-        raw_namespace = getattr(args, 'namespace', None) or auto_namespace
-        # Hash namespace for zero-knowledge
-        namespace = hash_namespace(raw_namespace, vault_password) if raw_namespace else None
-        if raw_namespace:
-            print(f"[ZK] Searching namespace: {raw_namespace} (hashed)", file=sys.stderr)
     
     print(f"[ZK] Embedding query locally...", file=sys.stderr)
     
     # Embed query locally - server never sees search text
     vector = embed_local(args.query)
     
-    print("[ZK] Searching by vector only...", file=sys.stderr)
+    all_results = []
     
-    # Build search payload
-    payload = {
-        "vector": vector,
-        "topK": args.limit,
-    }
-    if namespace:
-        payload["namespace"] = namespace
+    # Handle namespace: --global searches everything, otherwise layered search
+    if getattr(args, 'all_namespaces', False):
+        print(f"[ZK] Searching ALL namespaces...", file=sys.stderr)
+        result = api_request("POST", "/api/v1/search/zk", {
+            "vector": vector,
+            "topK": args.limit,
+        })
+        all_results = result.get("results", [])
+    else:
+        # Layered search: current chat + global (like a brain)
+        raw_namespace = getattr(args, 'namespace', None) or auto_namespace
+        chat_ns = hash_namespace(raw_namespace, vault_password) if raw_namespace else None
+        global_ns = get_global_namespace(vault_password)
+        
+        print(f"[ZK] Layered search: chat + global identity...", file=sys.stderr)
+        
+        seen_ids = set()
+        
+        # Search chat namespace
+        if chat_ns:
+            result = api_request("POST", "/api/v1/search/zk", {
+                "vector": vector,
+                "topK": args.limit,
+                "namespace": chat_ns,
+            })
+            for r in result.get("results", []):
+                r["_source"] = "chat"
+                r["_boost"] = 1.1  # Boost current context
+                all_results.append(r)
+                seen_ids.add(r.get("id"))
+        
+        # Search global namespace (identity/preferences)
+        result = api_request("POST", "/api/v1/search/zk", {
+            "vector": vector,
+            "topK": args.limit,
+            "namespace": global_ns,
+        })
+        for r in result.get("results", []):
+            if r.get("id") not in seen_ids:
+                r["_source"] = "global"
+                r["_boost"] = 1.0
+                all_results.append(r)
+        
+        # Sort by boosted score
+        all_results.sort(key=lambda x: x.get("score", 0) * x.get("_boost", 1), reverse=True)
+        all_results = all_results[:args.limit]
     
-    # Search using only the vector
-    result = api_request("POST", "/api/v1/search/zk", payload)
-    
-    results = result.get("results", [])
-    
-    if not results:
+    if not all_results:
         print("No memories found.")
         return
     
-    print(f"\nFound {len(results)} results (decrypting locally):\n")
+    print(f"\nFound {len(all_results)} results (decrypting locally):\n")
     
-    for item in results:
+    for item in all_results:
         score = item.get("score", 0)
+        boost = item.get("_boost", 1)
+        source = item.get("_source", "?")
         mem_id = item.get("id", "?")
+        
+        # Source indicator
+        source_icon = "🧠" if source == "global" else "💬"
         
         # Decrypt locally
         try:
             title = decrypt_local(json.loads(item["encryptedTitle"]), vault_password)
             content = decrypt_local(json.loads(item["encryptedContent"]), vault_password)
-            print(f"[{score:.0%}] {title}")
+            print(f"{source_icon} [{score:.0%}] {title}")
             print(f"  ID: {mem_id}")
             print(f"  {content[:200]}{'...' if len(content) > 200 else ''}")
             print()
         except Exception as e:
             # Might be a non-ZK memory or different vault password
-            print(f"[{score:.0%}] [Cannot decrypt - different vault or plaintext memory]")
+            print(f"{source_icon} [{score:.0%}] [Cannot decrypt - different vault or plaintext memory]")
             print(f"  ID: {mem_id}")
             print()
 
 
 def cmd_context(args):
-    """Get relevant context for LLM prompt (zero-knowledge)."""
+    """Get relevant context for LLM prompt (zero-knowledge). Uses layered search."""
     _, _, vault_password, auto_namespace = get_config()
-    
-    # Handle namespace
-    if getattr(args, 'all_namespaces', False):
-        namespace = None
-    else:
-        raw_namespace = getattr(args, 'namespace', None) or auto_namespace
-        # Hash namespace for zero-knowledge
-        namespace = hash_namespace(raw_namespace, vault_password) if raw_namespace else None
     
     print(f"[ZK] Embedding query locally...", file=sys.stderr)
     vector = embed_local(args.query)
     
-    print("[ZK] Fetching relevant memories...", file=sys.stderr)
+    all_results = []
     
-    payload = {
-        "vector": vector,
-        "topK": args.max_results,
-    }
-    if namespace:
-        payload["namespace"] = namespace
+    # Handle namespace: --global searches everything, otherwise layered search
+    if getattr(args, 'all_namespaces', False):
+        print("[ZK] Fetching from ALL namespaces...", file=sys.stderr)
+        result = api_request("POST", "/api/v1/search/zk", {
+            "vector": vector,
+            "topK": args.max_results,
+        })
+        all_results = result.get("results", [])
+    else:
+        # Layered search: current chat + global identity
+        raw_namespace = getattr(args, 'namespace', None) or auto_namespace
+        chat_ns = hash_namespace(raw_namespace, vault_password) if raw_namespace else None
+        global_ns = get_global_namespace(vault_password)
+        
+        print("[ZK] Fetching from chat + global identity...", file=sys.stderr)
+        
+        seen_ids = set()
+        
+        # Search chat namespace
+        if chat_ns:
+            result = api_request("POST", "/api/v1/search/zk", {
+                "vector": vector,
+                "topK": args.max_results,
+                "namespace": chat_ns,
+            })
+            for r in result.get("results", []):
+                r["_source"] = "chat"
+                all_results.append(r)
+                seen_ids.add(r.get("id"))
+        
+        # Search global namespace
+        result = api_request("POST", "/api/v1/search/zk", {
+            "vector": vector,
+            "topK": args.max_results,
+            "namespace": global_ns,
+        })
+        for r in result.get("results", []):
+            if r.get("id") not in seen_ids:
+                r["_source"] = "global"
+                all_results.append(r)
+        
+        # Sort by score and limit
+        all_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        all_results = all_results[:args.max_results]
     
-    result = api_request("POST", "/api/v1/search/zk", payload)
-    
-    results = result.get("results", [])
-    
-    if not results:
+    if not all_results:
         return
     
     # Build context from decrypted memories
     context_parts = []
-    for i, item in enumerate(results, 1):
+    for i, item in enumerate(all_results, 1):
         try:
             title = decrypt_local(json.loads(item["encryptedTitle"]), vault_password)
             content = decrypt_local(json.loads(item["encryptedContent"]), vault_password)
             score = item.get("score", 0)
-            context_parts.append(f"[{i}] {title}\nRelevance: {score:.0%}\n{content}")
+            source = item.get("_source", "")
+            source_tag = " [identity]" if source == "global" else ""
+            context_parts.append(f"[{i}] {title}{source_tag}\nRelevance: {score:.0%}\n{content}")
         except:
             pass  # Skip memories we can't decrypt
     
@@ -466,6 +578,10 @@ Examples:
     store_p.add_argument("--importance", type=int, choices=range(1, 11), metavar="1-10")
     store_p.add_argument("--tags", help="Comma-separated tags")
     store_p.add_argument("--namespace", "-n", help="Override auto-namespace")
+    store_p.add_argument("--global-store", "-g", action="store_true",
+                         help="Store in global namespace (available everywhere)")
+    store_p.add_argument("--global-only", action="store_true",
+                         help="Store ONLY in global namespace (not in chat)")
     store_p.set_defaults(func=cmd_store)
     
     # search

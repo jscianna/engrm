@@ -54,15 +54,65 @@ Namespace names are hashed with your vault password before sending to the server
 ```
 "telegram-123" + password → "ns_a3f2b8c1d4e5f6a7"
 ```
-The server sees opaque IDs, not your actual chat names. This prevents metadata leakage about which chats/projects you have.
+The server sees opaque IDs, not your actual chat names.
 
-**Behavior:**
-- All `store`, `search`, `context`, `list` commands use the auto-namespace
-- Namespaces are hashed automatically (ZK)
-- Use `--global` to search across ALL namespaces
-- Use `--namespace NAME` to override for one command
-- Cross-namespace memories don't auto-link (privacy by design)
-- Use `--global` search to find memories across all chats when needed
+## Brain Model (Layered Memory)
+
+MEMRY works like a brain with compartments that are still connected:
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    YOUR BRAIN                        │
+│   ┌─────────┐  ┌─────────┐  ┌─────────┐            │
+│   │  MEMRY  │──│  Deals  │──│  Main   │ ← Chats    │
+│   │  chat   │  │  chat   │  │ session │            │
+│   └────┬────┘  └────┬────┘  └────┬────┘            │
+│        └────────────┼────────────┘                  │
+│              ┌──────▼──────┐                        │
+│              │   IDENTITY   │  ← Always active      │
+│              │ "I'm John"   │                       │
+│              │ "Singapore"  │                       │
+│              └─────────────┘                        │
+└─────────────────────────────────────────────────────┘
+```
+
+**Layered Search:**
+- Every search checks: **current chat + global identity**
+- Identity memories (who you are, preferences) are always available
+- Chat-specific context stays in its chat but can be found with `--global`
+
+**Auto-Detection:**
+These patterns are auto-stored globally:
+- "I am...", "I'm...", "My name is..."
+- "I live in...", "I'm from...", "I'm based in..."
+- "I work at...", "My job is..."
+- "I prefer...", "I like...", "I hate..."
+- "I'm allergic to...", "I can't eat..."
+
+**Commands:**
+```bash
+# Auto-detected as identity → stored in chat + global
+python3 scripts/memry.py store "I'm John and I live in Singapore"
+
+# Project-specific → stays in current chat only
+python3 scripts/memry.py store "The deadline for this deal is March 15"
+
+# Force global storage
+python3 scripts/memry.py store "My favorite stack is Next.js" --global-store
+
+# Store ONLY global (not in current chat)
+python3 scripts/memry.py store "My timezone is GMT+8" --global-only
+
+# Search always checks chat + global
+python3 scripts/memry.py search "where do I live"  # Finds global identity
+
+# Search ALL chats (cross-reference)
+python3 scripts/memry.py search "React setup" --global
+```
+
+**Icons in results:**
+- 🧠 = Global/identity memory
+- 💬 = Chat-specific memory
 
 ## Commands
 
