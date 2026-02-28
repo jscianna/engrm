@@ -30,10 +30,17 @@ _embedder = None
 _crypto_available = False
 
 def get_config():
-    """Load API key, URL, and vault password from environment or secrets file."""
+    """Load API key, URL, vault password, and namespace from environment or secrets file."""
     api_key = os.environ.get("MEMRY_API_KEY")
     api_url = os.environ.get("MEMRY_API_URL", "https://memry-sand.vercel.app")
     vault_password = os.environ.get("MEMRY_VAULT_PASSWORD")
+    
+    # Auto-namespace: MEMRY_NAMESPACE > MEMRY_CHAT_ID > MEMRY_SESSION_ID
+    namespace = (
+        os.environ.get("MEMRY_NAMESPACE") or
+        os.environ.get("MEMRY_CHAT_ID") or
+        os.environ.get("MEMRY_SESSION_ID")
+    )
     
     # Try secrets file if not in env
     secrets_path = Path.home() / ".openclaw" / "secrets" / "memry.env"
@@ -51,6 +58,8 @@ def get_config():
                     api_url = value
                 elif key == "MEMRY_VAULT_PASSWORD" and not vault_password:
                     vault_password = value
+                elif key == "MEMRY_NAMESPACE" and not namespace:
+                    namespace = value
     
     if not api_key:
         print("Error: MEMRY_API_KEY not set.", file=sys.stderr)
@@ -62,7 +71,13 @@ def get_config():
         print("Required for zero-knowledge encryption.", file=sys.stderr)
         sys.exit(1)
     
-    return api_key, api_url.rstrip("/"), vault_password
+    return api_key, api_url.rstrip("/"), vault_password, namespace
+
+
+def get_namespace():
+    """Get current namespace from config."""
+    _, _, _, namespace = get_config()
+    return namespace
 
 
 # =============================================================================
@@ -181,7 +196,7 @@ def decrypt_local(encrypted: dict, password: str) -> str:
 
 def api_request(method: str, endpoint: str, data: dict = None):
     """Make authenticated API request."""
-    api_key, api_url, _ = get_config()
+    api_key, api_url, _, _ = get_config()
     url = f"{api_url}{endpoint}"
     
     headers = {
@@ -214,7 +229,8 @@ def api_request(method: str, endpoint: str, data: dict = None):
 
 def cmd_store(args):
     """Store a memory with zero-knowledge encryption."""
-    _, _, vault_password = get_config()
+    _, _, vault_password, auto_namespace = get_config()
+    namespace = getattr(args, 'namespace', None) or auto_namespace
     
     print("[ZK] Encrypting locally...", file=sys.stderr)
     
@@ -239,21 +255,36 @@ def cmd_store(args):
     
     print("[ZK] Uploading encrypted blob + vector...", file=sys.stderr)
     
-    # Send only encrypted data + vector to server
-    result = api_request("POST", "/api/v1/memories/zk", {
+    # Build request payload
+    payload = {
         "encryptedTitle": encrypted_title,
         "encryptedContent": encrypted_content,
         "vector": vector,
         "metadata": metadata,
-    })
+    }
+    if namespace:
+        payload["namespace"] = namespace
     
-    print(f"✓ Stored: {result.get('id', 'unknown')}")
+    # Send only encrypted data + vector to server
+    result = api_request("POST", "/api/v1/memories/zk", payload)
+    
+    ns_msg = f" [namespace: {namespace}]" if namespace else ""
+    print(f"✓ Stored: {result.get('id', 'unknown')}{ns_msg}")
     print(f"  Server received: vector + encrypted blob (cannot read content)")
 
 
 def cmd_search(args):
     """Search memories with zero-knowledge query."""
-    _, _, vault_password = get_config()
+    _, _, vault_password, auto_namespace = get_config()
+    
+    # Handle namespace: --global ignores namespace, otherwise use arg or auto
+    if getattr(args, 'all_namespaces', False):
+        namespace = None
+        print(f"[ZK] Searching ALL namespaces...", file=sys.stderr)
+    else:
+        namespace = getattr(args, 'namespace', None) or auto_namespace
+        if namespace:
+            print(f"[ZK] Searching namespace: {namespace}", file=sys.stderr)
     
     print(f"[ZK] Embedding query locally...", file=sys.stderr)
     
@@ -262,11 +293,16 @@ def cmd_search(args):
     
     print("[ZK] Searching by vector only...", file=sys.stderr)
     
-    # Search using only the vector
-    result = api_request("POST", "/api/v1/search/zk", {
+    # Build search payload
+    payload = {
         "vector": vector,
         "topK": args.limit,
-    })
+    }
+    if namespace:
+        payload["namespace"] = namespace
+    
+    # Search using only the vector
+    result = api_request("POST", "/api/v1/search/zk", payload)
     
     results = result.get("results", [])
     
@@ -297,16 +333,27 @@ def cmd_search(args):
 
 def cmd_context(args):
     """Get relevant context for LLM prompt (zero-knowledge)."""
-    _, _, vault_password = get_config()
+    _, _, vault_password, auto_namespace = get_config()
+    
+    # Handle namespace
+    if getattr(args, 'all_namespaces', False):
+        namespace = None
+    else:
+        namespace = getattr(args, 'namespace', None) or auto_namespace
     
     print(f"[ZK] Embedding query locally...", file=sys.stderr)
     vector = embed_local(args.query)
     
     print("[ZK] Fetching relevant memories...", file=sys.stderr)
-    result = api_request("POST", "/api/v1/search/zk", {
+    
+    payload = {
         "vector": vector,
         "topK": args.max_results,
-    })
+    }
+    if namespace:
+        payload["namespace"] = namespace
+    
+    result = api_request("POST", "/api/v1/search/zk", payload)
     
     results = result.get("results", [])
     
@@ -330,9 +377,16 @@ def cmd_context(args):
 
 def cmd_list(args):
     """List recent memories."""
-    _, _, vault_password = get_config()
+    _, _, vault_password, auto_namespace = get_config()
+    namespace = getattr(args, 'namespace', None) or auto_namespace
     
-    result = api_request("GET", f"/api/v1/memories?limit={args.limit}")
+    # Build endpoint with namespace
+    endpoint = f"/api/v1/memories?limit={args.limit}"
+    if namespace:
+        from urllib.parse import quote
+        endpoint += f"&namespace={quote(namespace)}"
+    
+    result = api_request("GET", endpoint)
     memories = result.get("memories", [])
     
     if not memories:
@@ -385,23 +439,31 @@ Examples:
     store_p.add_argument("--title", help="Optional title")
     store_p.add_argument("--importance", type=int, choices=range(1, 11), metavar="1-10")
     store_p.add_argument("--tags", help="Comma-separated tags")
+    store_p.add_argument("--namespace", "-n", help="Override auto-namespace")
     store_p.set_defaults(func=cmd_store)
     
     # search
     search_p = subparsers.add_parser("search", help="Search memories (query embedded locally)")
     search_p.add_argument("query", help="Search query")
     search_p.add_argument("--limit", type=int, default=5)
+    search_p.add_argument("--namespace", "-n", help="Override auto-namespace")
+    search_p.add_argument("--global", dest="all_namespaces", action="store_true", 
+                          help="Search ALL namespaces")
     search_p.set_defaults(func=cmd_search)
     
     # context
     context_p = subparsers.add_parser("context", help="Get context for LLM")
     context_p.add_argument("query", help="Current task/query")
     context_p.add_argument("--max-results", type=int, default=5)
+    context_p.add_argument("--namespace", "-n", help="Override auto-namespace")
+    context_p.add_argument("--global", dest="all_namespaces", action="store_true",
+                           help="Search ALL namespaces")
     context_p.set_defaults(func=cmd_context)
     
     # list
     list_p = subparsers.add_parser("list", help="List recent memories")
     list_p.add_argument("--limit", type=int, default=10)
+    list_p.add_argument("--namespace", "-n", help="Override auto-namespace")
     list_p.set_defaults(func=cmd_list)
     
     args = parser.parse_args()

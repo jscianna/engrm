@@ -22,6 +22,7 @@ Store and recall memories with true zero-knowledge privacy:
 MEMRY_API_KEY=mem_xxx
 MEMRY_API_URL=https://memry-sand.vercel.app
 MEMRY_VAULT_PASSWORD=your-strong-password
+MEMRY_NAMESPACE=main  # Optional: auto-namespace for this session
 ```
 
 4. **Install dependencies** (first time only):
@@ -29,25 +30,61 @@ MEMRY_VAULT_PASSWORD=your-strong-password
 pip3 install fastembed pycryptodome
 ```
 
+## Auto-Namespace (Chat Isolation)
+
+Memories are automatically isolated per chat/project using namespaces.
+
+**Environment variables** (priority order):
+1. `MEMRY_NAMESPACE` - explicit namespace
+2. `MEMRY_CHAT_ID` - chat ID (e.g., Telegram group ID)
+3. `MEMRY_SESSION_ID` - session identifier
+
+**For OpenClaw**, set dynamically per session:
+```bash
+# In your chat, memories are isolated:
+MEMRY_NAMESPACE="telegram-1234567890"  # From chat_id
+MEMRY_NAMESPACE="deals-project"         # By project name
+
+# Main session uses a different namespace:
+MEMRY_NAMESPACE="main"
+```
+
+**Behavior:**
+- All `store`, `search`, `context`, `list` commands use the auto-namespace
+- Use `--global` to search across ALL namespaces
+- Use `--namespace NAME` to override for one command
+
 ## Commands
 
 ### Manual Storage & Search
 
 ```bash
-# Store a memory (encrypted locally)
+# Store a memory (encrypted locally, uses auto-namespace)
 python3 scripts/memry.py store "User prefers morning meetings"
 
 # Store with metadata
 python3 scripts/memry.py store "Project deadline is March 15" --importance 8 --tags "project,deadline"
 
-# Search memories (query embedded locally)
+# Store in a specific namespace (override auto)
+python3 scripts/memry.py store "Deal terms agreed" --namespace "deals"
+
+# Search memories (query embedded locally, uses auto-namespace)
 python3 scripts/memry.py search "meeting preferences"
+
+# Search across ALL namespaces
+python3 scripts/memry.py search "meeting preferences" --global
 
 # Get context for current task
 python3 scripts/memry.py context "scheduling a meeting"
 
-# List recent memories
+# Get context from all namespaces
+python3 scripts/memry.py context "scheduling a meeting" --global
+
+# List recent memories in current namespace
 python3 scripts/memry.py list --limit 10
+
+# List memories in a specific namespace
+python3 scripts/memry.py list --namespace "deals"
 ```
 
 ### Auto-Extraction (NEW)

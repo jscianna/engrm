@@ -44,6 +44,13 @@ def get_config():
     api_url = os.environ.get("MEMRY_API_URL", "https://memry-sand.vercel.app")
     vault_password = os.environ.get("MEMRY_VAULT_PASSWORD")
     
+    # Auto-namespace: MEMRY_NAMESPACE > MEMRY_CHAT_ID > MEMRY_SESSION_ID
+    namespace = (
+        os.environ.get("MEMRY_NAMESPACE") or
+        os.environ.get("MEMRY_CHAT_ID") or
+        os.environ.get("MEMRY_SESSION_ID")
+    )
+    
     secrets_path = Path.home() / ".openclaw" / "secrets" / "memry.env"
     if secrets_path.exists():
         for line in secrets_path.read_text().splitlines():
@@ -59,8 +66,10 @@ def get_config():
                     api_url = value
                 elif key == "MEMRY_VAULT_PASSWORD" and not vault_password:
                     vault_password = value
+                elif key == "MEMRY_NAMESPACE" and not namespace:
+                    namespace = value
     
-    return api_key, api_url.rstrip("/"), vault_password
+    return api_key, api_url.rstrip("/"), vault_password, namespace
 
 
 # =============================================================================
@@ -132,7 +141,7 @@ def api_request(method: str, endpoint: str, data: dict = None):
     from urllib.request import Request, urlopen
     from urllib.error import HTTPError, URLError
     
-    api_key, api_url, _ = get_config()
+    api_key, api_url, _, _ = get_config()
     if not api_key:
         return None
     
@@ -191,10 +200,13 @@ def process_single_text(
         return output
     
     # Store the memory
-    api_key, _, vault_password = get_config()
+    api_key, _, vault_password, auto_namespace = get_config()
     if not api_key or not vault_password:
         output["reason"] = "Missing API key or vault password"
         return output
+    
+    # Use provided namespace or fall back to auto-namespace
+    namespace = namespace or auto_namespace
     
     # Encrypt and embed locally
     title = text[:100]
