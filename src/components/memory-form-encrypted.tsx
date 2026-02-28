@@ -74,7 +74,7 @@ export function MemoryFormEncrypted() {
       }
 
       if (sourceType !== "text") {
-        toast.warning("URL/File submission is currently stored unencrypted. Use Text for zero-knowledge encryption.");
+        toast.warning("URL/File submission is currently stored unencrypted. Use Text for client-side encryption.");
       } else {
         toast.success("Encrypted memory saved permanently.");
       }
@@ -107,7 +107,7 @@ export function MemoryFormEncrypted() {
             {sourceType !== "text" ? (
               <p className="rounded-lg border border-amber-800/50 bg-amber-950/40 p-3 text-xs text-amber-200">
                 <AlertTriangle className="mr-1 inline h-3 w-3" />
-                End-to-end zero-knowledge mode currently applies to Text memories.
+                End-to-end encryption currently applies to Text memories.
               </p>
             ) : null}
 
@@ -194,7 +194,7 @@ export function MemoryFormEncrypted() {
 
             <Button type="submit" disabled={loading} className="w-full bg-cyan-400 text-zinc-950 hover:bg-cyan-300">
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              Save to MEMRY
+              Save to Engrm
             </Button>
           </form>
         </CardContent>

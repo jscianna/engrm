@@ -155,7 +155,7 @@ export default async function MemoryDetailPage({
             ) : (
               <>
                 <p className="mb-2 text-xs text-amber-300">
-                  Warning: this memory is stored unencrypted and is not zero-knowledge protected.
+                  Warning: this memory is stored unencrypted (not client-side encrypted).
                 </p>
                 <pre className="max-h-[460px] overflow-auto whitespace-pre-wrap rounded-md border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-200">
                   {memory.contentText}

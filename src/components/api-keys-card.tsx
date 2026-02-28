@@ -109,7 +109,7 @@ export function ApiKeysCard() {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-zinc-400">
-          Create API keys for AI agents to access your memories via the MEMRY API.
+          Create API keys for AI agents to access your memories via the Engrm API.
         </p>
 
         {/* New key display (shown once after creation) */}
@@ -205,7 +205,7 @@ export function ApiKeysCard() {
           <p className="mb-2 text-xs font-medium text-zinc-400">Usage</p>
           <code className="block text-xs text-zinc-300">
             curl -H &quot;Authorization: Bearer mem_xxx&quot; \<br />
-            &nbsp;&nbsp;{typeof window !== "undefined" ? window.location.origin : "https://memry-sand.vercel.app"}/api/v1/memories
+            &nbsp;&nbsp;{typeof window !== "undefined" ? window.location.origin : "https://engrm.xyz"}/api/v1/memories
           </code>
         </div>
       </CardContent>

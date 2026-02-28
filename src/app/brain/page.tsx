@@ -84,7 +84,7 @@ function Brain3D({
   const isDraggingRef = useRef(false);
   const lastMouseRef = useRef({ x: 0, y: 0 });
   const nodesRef = useRef<MemoryNode[]>([]);
-  const zoomRef = useRef(2.5); // Start zoomed in for bigger brain
+  const zoomRef = useRef(4.5); // Large zoom for prominent brain visualization
 
   // Update nodes ref when nodes change
   useEffect(() => {
@@ -427,61 +427,129 @@ function Brain3D({
 // Demo Data Generator
 // =============================================================================
 
-// Demo memories - fictional example data for visualization
+// Demo memories - fictional example data for visualization (120+ nodes)
 const DEMO_MEMORIES = [
-  // Identity (fictional user "Alex")
-  { type: "identity", title: "Name is Alex Chen", importance: 0.9 },
-  { type: "identity", title: "Product designer at TechCorp", importance: 0.8 },
-  { type: "identity", title: "Based in Austin, Texas", importance: 0.7 },
+  // Identity (fictional user "Alex Chen")
+  { type: "identity", title: "Name is Alex Chen", importance: 0.95 },
+  { type: "identity", title: "Senior Product Designer at TechCorp", importance: 0.9 },
+  { type: "identity", title: "Based in Austin, Texas", importance: 0.8 },
   { type: "identity", title: "Birthday is March 15th", importance: 0.6 },
+  { type: "identity", title: "Speaks English and Mandarin", importance: 0.7 },
+  { type: "identity", title: "University of Texas alumni", importance: 0.5 },
+  { type: "identity", title: "10 years in product design", importance: 0.8 },
+  { type: "identity", title: "Remote worker since 2022", importance: 0.6 },
+  { type: "identity", title: "Timezone is CST (UTC-6)", importance: 0.7 },
+  { type: "identity", title: "Prefers they/them pronouns", importance: 0.8 },
   
-  // Preferences
-  { type: "preference", title: "Prefers morning standup at 9am", importance: 0.7 },
-  { type: "preference", title: "Uses Figma for design work", importance: 0.8 },
+  // Preferences (expanded)
+  { type: "preference", title: "Morning standup at 9am CST", importance: 0.7 },
+  { type: "preference", title: "Uses Figma for design work", importance: 0.9 },
   { type: "preference", title: "Likes bullet-point summaries", importance: 0.6 },
   { type: "preference", title: "Prefers Slack over email", importance: 0.7 },
   { type: "preference", title: "Tea over coffee", importance: 0.5 },
   { type: "preference", title: "Outdoor meetings when possible", importance: 0.4 },
+  { type: "preference", title: "Dark mode in all applications", importance: 0.8 },
+  { type: "preference", title: "Keyboard shortcuts over mouse", importance: 0.6 },
+  { type: "preference", title: "Async communication preferred", importance: 0.7 },
+  { type: "preference", title: "Lo-fi music while working", importance: 0.4 },
+  { type: "preference", title: "Standing desk in afternoons", importance: 0.5 },
+  { type: "preference", title: "No meetings on Wednesdays", importance: 0.8 },
+  { type: "preference", title: "Notion for personal notes", importance: 0.6 },
+  { type: "preference", title: "Linear for task tracking", importance: 0.7 },
+  { type: "preference", title: "Weekly 1:1 on Thursdays", importance: 0.6 },
   
-  // Facts
-  { type: "fact", title: "Project Horizon deadline: April 1st", importance: 0.9 },
-  { type: "fact", title: "Team has 5 designers", importance: 0.5 },
-  { type: "fact", title: "Q2 budget is $50k", importance: 0.7 },
-  { type: "fact", title: "Main competitor is DesignFlow", importance: 0.6 },
-  { type: "fact", title: "Using React for the frontend", importance: 0.5 },
-  { type: "fact", title: "API rate limit is 1000/min", importance: 0.4 },
-  { type: "fact", title: "Database is PostgreSQL", importance: 0.5 },
-  { type: "fact", title: "Staging server: staging.techcorp.io", importance: 0.6 },
+  // Facts (expanded)
+  { type: "fact", title: "Project Horizon deadline: April 1st", importance: 0.95 },
+  { type: "fact", title: "Design team has 5 members", importance: 0.6 },
+  { type: "fact", title: "Q2 budget is $50,000", importance: 0.8 },
+  { type: "fact", title: "Main competitor is DesignFlow", importance: 0.7 },
+  { type: "fact", title: "Frontend uses React 19", importance: 0.6 },
+  { type: "fact", title: "API rate limit is 1000/min", importance: 0.5 },
+  { type: "fact", title: "Database is PostgreSQL 16", importance: 0.5 },
+  { type: "fact", title: "Staging: staging.techcorp.io", importance: 0.6 },
+  { type: "fact", title: "Production: app.techcorp.io", importance: 0.7 },
+  { type: "fact", title: "AWS region is us-east-1", importance: 0.5 },
+  { type: "fact", title: "Design system version 4.2", importance: 0.6 },
+  { type: "fact", title: "Mobile app has 50k users", importance: 0.7 },
+  { type: "fact", title: "NPS score is 72", importance: 0.6 },
+  { type: "fact", title: "Churn rate at 3.2%", importance: 0.7 },
+  { type: "fact", title: "Series B raised $25M", importance: 0.8 },
+  { type: "fact", title: "Founded in 2019", importance: 0.5 },
+  { type: "fact", title: "HQ in San Francisco", importance: 0.4 },
+  { type: "fact", title: "120 employees total", importance: 0.5 },
+  { type: "fact", title: "Engineering is 40 people", importance: 0.5 },
+  { type: "fact", title: "Slack workspace: techcorp.slack.com", importance: 0.4 },
   
-  // Events
-  { type: "event", title: "Had meeting about Q4 planning", importance: 0.6 },
-  { type: "event", title: "Completed project milestone", importance: 0.8 },
-  { type: "event", title: "Attended conference last month", importance: 0.5 },
-  { type: "event", title: "Fixed critical production bug", importance: 0.9 },
-  { type: "event", title: "Shipped v2.0 release", importance: 0.9 },
-  { type: "event", title: "Team lunch on Friday", importance: 0.4 },
+  // Events (expanded)
+  { type: "event", title: "Q4 planning meeting completed", importance: 0.7 },
+  { type: "event", title: "Project milestone achieved", importance: 0.8 },
+  { type: "event", title: "Attended Config 2026", importance: 0.6 },
+  { type: "event", title: "Fixed critical auth bug", importance: 0.9 },
+  { type: "event", title: "Shipped v2.0 release", importance: 0.95 },
+  { type: "event", title: "Team offsite in Denver", importance: 0.5 },
+  { type: "event", title: "Design review approved", importance: 0.7 },
+  { type: "event", title: "User research completed", importance: 0.8 },
+  { type: "event", title: "A/B test concluded", importance: 0.6 },
+  { type: "event", title: "Onboarded new designer", importance: 0.5 },
+  { type: "event", title: "Presented at all-hands", importance: 0.7 },
+  { type: "event", title: "Customer interview done", importance: 0.6 },
+  { type: "event", title: "Shipped mobile redesign", importance: 0.8 },
+  { type: "event", title: "Won design award", importance: 0.7 },
+  { type: "event", title: "Launched dark mode", importance: 0.8 },
+  { type: "event", title: "Performance review done", importance: 0.6 },
+  { type: "event", title: "Budget approved for Q3", importance: 0.7 },
+  { type: "event", title: "Accessibility audit passed", importance: 0.8 },
   
-  // How-to
-  { type: "how_to", title: "Deploy to production: git push main", importance: 0.8 },
-  { type: "how_to", title: "Reset password via settings page", importance: 0.5 },
-  { type: "how_to", title: "Create PR: branch, commit, push, open PR", importance: 0.7 },
-  { type: "how_to", title: "Run tests: npm test", importance: 0.6 },
-  { type: "how_to", title: "Check logs: docker logs -f app", importance: 0.7 },
-  { type: "how_to", title: "Connect to database: psql $DATABASE_URL", importance: 0.6 },
+  // How-to (expanded)
+  { type: "how_to", title: "Deploy: git push origin main", importance: 0.8 },
+  { type: "how_to", title: "Reset password in settings", importance: 0.5 },
+  { type: "how_to", title: "Create PR: branch → commit → push", importance: 0.7 },
+  { type: "how_to", title: "Run tests: npm run test", importance: 0.6 },
+  { type: "how_to", title: "Check logs: docker logs -f app", importance: 0.6 },
+  { type: "how_to", title: "Connect DB: psql $DATABASE_URL", importance: 0.5 },
+  { type: "how_to", title: "Update design tokens in Figma", importance: 0.7 },
+  { type: "how_to", title: "Export assets: File → Export", importance: 0.5 },
+  { type: "how_to", title: "Create prototype: P shortcut", importance: 0.6 },
+  { type: "how_to", title: "Share design: Get link button", importance: 0.5 },
+  { type: "how_to", title: "Request review in Linear", importance: 0.6 },
+  { type: "how_to", title: "Schedule user interview", importance: 0.6 },
+  { type: "how_to", title: "Submit expense report", importance: 0.4 },
+  { type: "how_to", title: "Book meeting room via Calendly", importance: 0.4 },
+  { type: "how_to", title: "Access VPN: connect to corp-vpn", importance: 0.6 },
+  { type: "how_to", title: "File PTO in Workday", importance: 0.5 },
   
-  // Constraints
-  { type: "constraint", title: "No deployments on Fridays", importance: 0.9 },
-  { type: "constraint", title: "Max 100 API calls per minute", importance: 0.8 },
-  { type: "constraint", title: "Password must be 12+ characters", importance: 0.7 },
-  { type: "constraint", title: "Code review required before merge", importance: 0.9 },
+  // Constraints (expanded)
+  { type: "constraint", title: "No deployments on Fridays", importance: 0.95 },
+  { type: "constraint", title: "Max 1000 API calls per minute", importance: 0.8 },
+  { type: "constraint", title: "Password minimum 12 characters", importance: 0.7 },
+  { type: "constraint", title: "Code review required for merge", importance: 0.9 },
   { type: "constraint", title: "Use UTC for all timestamps", importance: 0.6 },
+  { type: "constraint", title: "No PII in logs", importance: 0.9 },
+  { type: "constraint", title: "WCAG 2.1 AA compliance", importance: 0.8 },
+  { type: "constraint", title: "48-hour SLA for bug fixes", importance: 0.8 },
+  { type: "constraint", title: "Two-factor auth required", importance: 0.9 },
+  { type: "constraint", title: "Data retention: 7 years", importance: 0.7 },
+  { type: "constraint", title: "GDPR compliant storage", importance: 0.9 },
+  { type: "constraint", title: "Max 5MB image uploads", importance: 0.5 },
+  { type: "constraint", title: "Support response within 4h", importance: 0.7 },
+  { type: "constraint", title: "Weekly security scans", importance: 0.8 },
   
-  // Relationships
-  { type: "relationship", title: "Works with design team", importance: 0.6 },
-  { type: "relationship", title: "Reports to engineering manager", importance: 0.7 },
-  { type: "relationship", title: "Mentors junior developers", importance: 0.5 },
-  { type: "relationship", title: "Collaborates with product team", importance: 0.6 },
-  { type: "relationship", title: "Part of platform squad", importance: 0.7 },
+  // Relationships (expanded)
+  { type: "relationship", title: "Works with design team", importance: 0.7 },
+  { type: "relationship", title: "Reports to Sarah (VP Design)", importance: 0.8 },
+  { type: "relationship", title: "Mentors Jamie (junior designer)", importance: 0.6 },
+  { type: "relationship", title: "Collaborates with product team", importance: 0.7 },
+  { type: "relationship", title: "Part of platform squad", importance: 0.6 },
+  { type: "relationship", title: "Partners with Mike (eng lead)", importance: 0.7 },
+  { type: "relationship", title: "Works with Lisa (PM)", importance: 0.8 },
+  { type: "relationship", title: "Coordinates with QA team", importance: 0.5 },
+  { type: "relationship", title: "Presents to exec team", importance: 0.6 },
+  { type: "relationship", title: "Member of design guild", importance: 0.5 },
+  { type: "relationship", title: "Slack DM with Tom (CEO)", importance: 0.7 },
+  { type: "relationship", title: "Weekly sync with Karen (UXR)", importance: 0.6 },
+  { type: "relationship", title: "Design system committee", importance: 0.6 },
+  { type: "relationship", title: "Hiring committee member", importance: 0.5 },
+  { type: "relationship", title: "Buddies with new hires", importance: 0.4 },
 ];
 
 function generateDemoData(): { nodes: MemoryNode[]; edges: MemoryEdge[] } {
@@ -493,7 +561,7 @@ function generateDemoData(): { nodes: MemoryNode[]; edges: MemoryEdge[] } {
     // Arrange in a sphere-like distribution
     const phi = Math.acos(-1 + (2 * i) / DEMO_MEMORIES.length);
     const theta = Math.sqrt(DEMO_MEMORIES.length * Math.PI) * phi;
-    const radius = 60 + Math.random() * 40; // Larger spread for desktop
+    const radius = 80 + Math.random() * 60; // Large spread for 120+ nodes
     
     nodes.push({
       id: `mem_${i}`,

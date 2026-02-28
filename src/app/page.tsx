@@ -447,7 +447,7 @@ POST /api/v1/context
             <a href="https://github.com/jscianna/engrm" className="text-sm text-zinc-400 hover:text-white">GitHub</a>
           </div>
           <p className="text-sm text-zinc-500">
-            Built by <a href="https://web3.com" className="text-cyan-400 hover:underline">Web3.com Ventures</a>
+            Built by <a href="https://x.com/scianna" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">John Scianna</a>
           </p>
         </div>
       </footer>

@@ -350,7 +350,7 @@ Results:
 }`}</CodeBlock>
 
             <Note>
-              When memories are retrieved together, MEMRY automatically strengthens the edges between them. 
+              When memories are retrieved together, Engrm automatically strengthens the edges between them. 
               This creates an associative network where related memories surface together more often.
             </Note>
           </section>
@@ -359,7 +359,7 @@ Results:
           <section id="heuristic-scoring" className="mb-16">
             <h2 className="text-3xl font-bold mb-4">Heuristic Scoring</h2>
             <p className="text-zinc-400 mb-6">
-              MEMRY scores memory importance using deterministic heuristics—no LLM required at extraction time.
+              Engrm scores memory importance using deterministic heuristics—no LLM required at extraction time.
               This keeps costs at zero while maintaining high accuracy.
             </p>
 
@@ -396,7 +396,7 @@ Threshold: ≥ 6.0 for storage`}</CodeBlock>
           <section id="reinforcement" className="mb-16">
             <h2 className="text-3xl font-bold mb-4">Reinforcement</h2>
             <p className="text-zinc-400 mb-6">
-              Instead of deduplicating, MEMRY <strong>strengthens</strong> memories that are mentioned repeatedly.
+              Instead of deduplicating, Engrm <strong>strengthens</strong> memories that are mentioned repeatedly.
               This mirrors how biological memory consolidation works.
             </p>
 
@@ -638,7 +638,7 @@ python engrm.py store "I'm John, a software engineer in Singapore"
           {/* Footer */}
           <footer className="border-t border-zinc-800 pt-8 mt-16">
             <p className="text-zinc-500 text-sm">
-              Built by <a href="https://web3.com" className="text-cyan-400 hover:underline">Web3.com Ventures</a>.
+              Built by <a href="https://x.com/scianna" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">John Scianna</a>.
               Open source on <a href="https://github.com/jscianna/engrm" className="text-cyan-400 hover:underline">GitHub</a>.
             </p>
           </footer>

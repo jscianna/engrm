@@ -63,7 +63,7 @@ export function VaultPasswordModal({ mode, loading, onSubmit }: VaultPasswordMod
 
         <p className="mb-4 text-sm text-zinc-300">
           {mode === "setup"
-            ? "Create a vault password. MEMRY cannot recover this password or your derived key."
+            ? "Create a vault password. Engrm cannot recover this password or your derived key."
             : "Enter your vault password to derive your in-memory key for this session."}
         </p>
 

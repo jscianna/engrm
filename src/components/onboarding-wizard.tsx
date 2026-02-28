@@ -58,7 +58,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
         <div className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
           <Shield className="mt-0.5 h-5 w-5 text-cyan-400 shrink-0" />
           <div>
-            <p className="text-sm font-medium text-zinc-200">True Zero-Knowledge</p>
+            <p className="text-sm font-medium text-zinc-200">Client-Side Encryption</p>
             <p className="text-xs text-zinc-500">Encryption happens in your browser</p>
           </div>
         </div>

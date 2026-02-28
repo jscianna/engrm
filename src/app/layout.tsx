@@ -4,8 +4,8 @@ import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MEMRY",
-  description: "Permanent memory SaaS built on Arweave",
+  title: "Engrm",
+  description: "Encrypted memory infrastructure for AI agents",
 };
 
 export default function RootLayout({
