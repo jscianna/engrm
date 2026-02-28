@@ -13,7 +13,7 @@ const NAV_SECTIONS = [
   { id: "reinforcement", label: "Reinforcement" },
   { id: "memory-decay", label: "Memory Decay" },
   { id: "memory-types", label: "Memory Types" },
-  { id: "zero-knowledge", label: "Zero-Knowledge" },
+  { id: "privacy-encryption", label: "Privacy & Encryption" },
   { id: "mcp-server", label: "MCP Server" },
   { id: "python-cli", label: "Python CLI" },
 ];
@@ -191,8 +191,8 @@ export default function DocsPage() {
   }'`}</CodeBlock>
 
             <Note type="tip">
-              For zero-knowledge retrieval, encrypt your content client-side before storing. 
-              Engrm never sees your plaintext—only encrypted blobs and embedding vectors.
+              For private retrieval, encrypt your content client-side before storing. 
+              Engrm stores only encrypted ciphertext and embedding vectors.
             </Note>
           </section>
 
@@ -210,7 +210,7 @@ export default function DocsPage() {
               rows={[
                 ["Authorization", "Yes", "Bearer token with your API key"],
                 ["Content-Type", "Yes", "application/json for POST requests"],
-                ["X-Namespace", "Optional", "Hashed namespace for ZK isolation"],
+                ["X-Namespace", "Optional", "Hashed namespace for privacy isolation"],
               ]}
             />
 
@@ -243,7 +243,7 @@ export default function DocsPage() {
             <h3 className="text-xl font-semibold mb-4 mt-8">Chat-Specific Layer (💬)</h3>
             <p className="text-zinc-400 mb-4">
               Context-specific memories that only matter in a particular conversation.
-              Isolated by hashed namespace for full zero-knowledge privacy.
+              Isolated by hashed namespace for privacy.
             </p>
             <CodeBlock>{`// Chat about Project Alpha
 "We decided to use PostgreSQL for this project"
@@ -304,7 +304,7 @@ Results:
             <Table
               headers={["Field", "Type", "Description"]}
               rows={[
-                ["content", "string", "Memory content (encrypted for ZK mode)"],
+                ["content", "string", "Memory content (encrypted client-side)"],
                 ["embedding", "number[]", "384-dimensional embedding vector"],
                 ["type", "MemoryType", "One of: constraint, identity, relationship, preference, how_to, fact, event"],
                 ["importance", "number", "1-10 scale. Auto-scored if omitted"],
@@ -490,12 +490,12 @@ trigger_intensity = heuristic_score / 10`}</CodeBlock>
             </Note>
           </section>
 
-          {/* Zero-Knowledge */}
-          <section id="zero-knowledge" className="mb-16">
-            <h2 className="text-3xl font-bold mb-4">Zero-Knowledge Architecture</h2>
+          {/* Privacy & Encryption */}
+          <section id="privacy-encryption" className="mb-16">
+            <h2 className="text-3xl font-bold mb-4">Privacy & Encryption</h2>
             <p className="text-zinc-400 mb-6">
-              Engrm is designed so the server <strong>never</strong> sees your plaintext data.
-              All encryption and embedding happens client-side.
+              Engrm encrypts your memory content client-side before upload.
+              The server stores only ciphertext and embedding vectors.
             </p>
 
             <h3 className="text-xl font-semibold mb-4">What Engrm Sees</h3>
@@ -511,15 +511,22 @@ trigger_intensity = heuristic_score / 10`}</CodeBlock>
               ]}
             />
 
+            <Note type="warning">
+              <strong>Important:</strong> Embedding vectors encode semantic meaning. While we cannot read 
+              your plaintext, embeddings reveal topic similarity. This is inherent to vector search — 
+              true zero-knowledge would require homomorphic encryption (impractical for search).
+            </Note>
+
             <h3 className="text-xl font-semibold mb-4 mt-8">Hashed Namespaces</h3>
             <p className="text-zinc-400 mb-4">
-              Even namespace/chat names are hidden from the server. We hash them with your vault password:
+              Namespace/chat names are hashed with your vault password before upload:
             </p>
             <CodeBlock language="text">{`Input: "telegram-chat-12345"
-Hash:  SHA256(namespace + vault_password)[:16]
-Stored: "ns_a3f2b8c1e4d7f9a2"
+Hash:  PBKDF2(vault_password, namespace, 100k iterations)
+Stored: "ns_a3f2b8c1e4d7f9a2..."
 
-// Server sees only the hash, never "telegram-chat-12345"`}</CodeBlock>
+// Server sees only the hash, never "telegram-chat-12345"
+// PBKDF2 makes brute-force attacks computationally expensive`}</CodeBlock>
 
             <h3 className="text-xl font-semibold mb-4 mt-8">Encryption Flow</h3>
             <CodeBlock language="text">{`1. Agent extracts memory from conversation
@@ -527,7 +534,7 @@ Stored: "ns_a3f2b8c1e4d7f9a2"
 3. Agent hashes namespace with vault password
 4. Agent encrypts content with vault key (AES-256-GCM)
 5. Agent sends encrypted blob + embedding to Engrm
-6. Engrm stores without decryption capability`}</CodeBlock>
+6. Engrm stores ciphertext + vectors (cannot decrypt)`}</CodeBlock>
 
             <Note type="tip">
               The MCP Server and Python CLI handle encryption and namespace hashing automatically.
@@ -583,7 +590,7 @@ Stored: "ns_a3f2b8c1e4d7f9a2"
           <section id="python-cli" className="mb-16">
             <h2 className="text-3xl font-bold mb-4">Python CLI</h2>
             <p className="text-zinc-400 mb-6">
-              The Python CLI (<code>engrm.py</code>) provides full ZK encryption with local embeddings via FastEmbed.
+              The Python CLI (<code>engrm.py</code>) provides client-side encryption with local embeddings via FastEmbed.
               All encryption and embedding happens on your machine.
             </p>
 

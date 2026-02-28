@@ -309,24 +309,24 @@ export default function Home() {
               </CardContent>
             </Card>
 
-            {/* Zero Knowledge */}
+            {/* Encrypted Storage */}
             <Card className="bg-zinc-900/50 border-zinc-800">
               <CardHeader>
                 <div className="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center mb-4">
                   <Lock className="w-6 h-6 text-cyan-400" />
                 </div>
-                <CardTitle className="text-xl">True Privacy</CardTitle>
+                <CardTitle className="text-xl">Encrypted Storage</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-zinc-400 mb-4">
-                  Encrypted on your device. We literally cannot read your memories — 
-                  even with full database access.
+                  Encrypted on your device before upload. We store ciphertext — 
+                  your memories stay private.
                 </p>
                 <div className="text-sm font-mono text-zinc-500">
                   Embeddings → generated locally<br />
                   Encryption → AES-256-GCM<br />
                   Server sees → vectors + ciphertext<br />
-                  <span className="text-cyan-400">Zero-knowledge by design</span>
+                  <span className="text-cyan-400">Private by design</span>
                 </div>
               </CardContent>
             </Card>
@@ -368,7 +368,7 @@ export default function Home() {
                 <Terminal className="w-6 h-6 text-cyan-400" />
                 <h3 className="font-semibold text-lg">Python CLI</h3>
               </div>
-              <p className="text-zinc-400 text-sm mb-4">Full ZK with local embeddings</p>
+              <p className="text-zinc-400 text-sm mb-4">Encrypted with local embeddings</p>
               <pre className="bg-zinc-950 rounded-lg p-4 text-sm font-mono text-zinc-300 overflow-x-auto">
 {`# engrm.py store/search/context
 python engrm.py store \\

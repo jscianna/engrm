@@ -75,14 +75,20 @@ def get_config():
 
 def hash_namespace(namespace: str, vault_password: str) -> str:
     """
-    Hash namespace with vault password for zero-knowledge.
+    Hash namespace with vault password using PBKDF2 for privacy.
     Server sees opaque ID, can't know the actual chat/project name.
     """
     if not namespace:
         return None
-    combined = f"{namespace}:{vault_password}"
-    hash_bytes = hashlib.sha256(combined.encode('utf-8')).hexdigest()
-    return f"ns_{hash_bytes[:16]}"
+    # Use PBKDF2 with high iterations for brute-force resistance
+    key = hashlib.pbkdf2_hmac(
+        'sha256',
+        vault_password.encode('utf-8'),
+        namespace.encode('utf-8'),
+        iterations=100_000,
+        dklen=16
+    )
+    return f"ns_{key.hex()}"
 
 
 # =============================================================================

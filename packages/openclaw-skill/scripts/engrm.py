@@ -83,17 +83,24 @@ def get_namespace():
 
 def hash_namespace(namespace: str, vault_password: str) -> str:
     """
-    Hash namespace with vault password for zero-knowledge.
+    Hash namespace with vault password using PBKDF2 for privacy.
     Server sees opaque ID, can't know the actual chat/project name.
     
-    Uses first 16 chars of SHA256(namespace + password) for readability.
+    Uses PBKDF2 with 100k iterations for brute-force resistance.
     Deterministic: same input always produces same hash.
     """
     if not namespace:
         return None
-    combined = f"{namespace}:{vault_password}"
-    hash_bytes = hashlib.sha256(combined.encode('utf-8')).hexdigest()
-    return f"ns_{hash_bytes[:16]}"  # e.g., "ns_a3f2b8c1d4e5f6a7"
+    # Use PBKDF2 with high iterations for brute-force resistance
+    # Salt is the namespace itself (deterministic but unique per namespace)
+    key = hashlib.pbkdf2_hmac(
+        'sha256',
+        vault_password.encode('utf-8'),
+        namespace.encode('utf-8'),  # namespace as salt
+        iterations=100_000,
+        dklen=16  # 16 bytes = 32 hex chars
+    )
+    return f"ns_{key.hex()}"  # e.g., "ns_a3f2b8c1d4e5f6a7..."
 
 
 # Global namespace constant (hashed with password at runtime)

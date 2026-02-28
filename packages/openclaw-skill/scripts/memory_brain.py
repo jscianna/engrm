@@ -60,12 +60,17 @@ def get_config():
 
 
 def hash_namespace(namespace: str, vault_password: str) -> str:
-    """Hash namespace for ZK."""
+    """Hash namespace using PBKDF2 for privacy."""
     if not namespace:
         return None
-    combined = f"{namespace}:{vault_password}"
-    hash_bytes = hashlib.sha256(combined.encode('utf-8')).hexdigest()
-    return f"ns_{hash_bytes[:16]}"
+    key = hashlib.pbkdf2_hmac(
+        'sha256',
+        vault_password.encode('utf-8'),
+        namespace.encode('utf-8'),
+        iterations=100_000,
+        dklen=16
+    )
+    return f"ns_{key.hex()}"
 
 
 GLOBAL_NAMESPACE_RAW = "__global__"

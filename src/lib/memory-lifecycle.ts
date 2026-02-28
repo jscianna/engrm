@@ -374,8 +374,14 @@ export function maybeAutoMaintenance(userId: string): void {
   // Mark as running (prevents concurrent triggers)
   maintenanceCooldowns.set(userId, now);
 
-  // Run async - don't block the API response
-  runLifecycleMaintenance(userId)
+  // Timeout cap: 10 seconds max to prevent DoS
+  const MAINTENANCE_TIMEOUT_MS = 10_000;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error("Maintenance timeout")), MAINTENANCE_TIMEOUT_MS);
+  });
+
+  // Run async with timeout - don't block the API response
+  Promise.race([runLifecycleMaintenance(userId), timeoutPromise])
     .then((stats) => {
       if (stats.archived > 0 || stats.deleted > 0) {
         console.log(`[Lifecycle] Auto-maintenance for ${userId}: archived=${stats.archived}, deleted=${stats.deleted}`);
