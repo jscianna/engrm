@@ -144,7 +144,7 @@ def get_embedder():
         # Use same model family as MCP server (all-MiniLM-L6-v2)
         _embedder = TextEmbedding(
             model_name="sentence-transformers/all-MiniLM-L6-v2",
-            cache_dir=str(Path.home() / ".cache" / "memry" / "models")
+            cache_dir=str(Path.home() / ".cache" / "engrm" / "models")
         )
         print("[ZK] Embedding model ready", file=sys.stderr)
     return _embedder
@@ -239,8 +239,10 @@ def decrypt_local(encrypted: dict, password: str) -> str:
 # API CLIENT (Zero-Knowledge endpoints only)
 # =============================================================================
 
-def api_request(method: str, endpoint: str, data: dict = None):
-    """Make authenticated API request."""
+def api_request(method: str, endpoint: str, data: dict = None, retries: int = 3):
+    """Make authenticated API request with retry logic."""
+    import time
+    
     api_key, api_url, _, _ = get_config()
     url = f"{api_url}{endpoint}"
     
@@ -250,22 +252,47 @@ def api_request(method: str, endpoint: str, data: dict = None):
     }
     
     body = json.dumps(data).encode() if data else None
-    req = Request(url, data=body, headers=headers, method=method)
     
-    try:
-        with urlopen(req, timeout=60) as resp:
-            return json.loads(resp.read().decode())
-    except HTTPError as e:
-        error_body = e.read().decode() if e.fp else ""
+    last_error = None
+    for attempt in range(retries):
+        req = Request(url, data=body, headers=headers, method=method)
+        
         try:
-            error_json = json.loads(error_body)
-            print(f"Error: {error_json.get('error', error_body)}", file=sys.stderr)
-        except:
-            print(f"Error: {e.code} {e.reason} - {error_body}", file=sys.stderr)
-        sys.exit(1)
-    except URLError as e:
-        print(f"Error: {e.reason}", file=sys.stderr)
-        sys.exit(1)
+            with urlopen(req, timeout=60) as resp:
+                return json.loads(resp.read().decode())
+        except HTTPError as e:
+            error_body = e.read().decode() if e.fp else ""
+            
+            # Don't retry client errors (4xx)
+            if 400 <= e.code < 500:
+                try:
+                    error_json = json.loads(error_body)
+                    print(f"Error: {error_json.get('error', error_body)}", file=sys.stderr)
+                except:
+                    print(f"Error: {e.code} {e.reason} - {error_body}", file=sys.stderr)
+                sys.exit(1)
+            
+            # Retry server errors (5xx)
+            last_error = e
+            if attempt < retries - 1:
+                wait = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                print(f"[Retry] Server error {e.code}, waiting {wait}s...", file=sys.stderr)
+                time.sleep(wait)
+                continue
+        except URLError as e:
+            last_error = e
+            if attempt < retries - 1:
+                wait = 2 ** attempt
+                print(f"[Retry] Connection error, waiting {wait}s...", file=sys.stderr)
+                time.sleep(wait)
+                continue
+    
+    # All retries exhausted
+    if isinstance(last_error, HTTPError):
+        print(f"Error: {last_error.code} {last_error.reason} after {retries} attempts", file=sys.stderr)
+    else:
+        print(f"Error: {last_error.reason} after {retries} attempts", file=sys.stderr)
+    sys.exit(1)
 
 
 # =============================================================================

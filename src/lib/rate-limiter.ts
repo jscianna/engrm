@@ -1,9 +1,10 @@
 /**
  * Rate limiting for Engrm API
- * Uses sliding window counters stored in Turso
+ * Uses atomic operations to prevent race conditions
+ * Self-cleaning with probabilistic TTL cleanup
  */
 
-import { createClient, type Client } from "@libsql/client";
+import { getDb } from "./turso";
 import { MemryError } from "./errors";
 
 // Beta limits - generous but protective
@@ -14,23 +15,15 @@ export const LIMITS = {
   STORAGE_BYTES: 100 * 1024 * 1024, // 100MB
 } as const;
 
-let db: Client | null = null;
-
-function getDb(): Client {
-  if (!db) {
-    const url = process.env.TURSO_DATABASE_URL;
-    const authToken = process.env.TURSO_AUTH_TOKEN;
-    if (!url) throw new Error("TURSO_DATABASE_URL is required");
-    db = createClient({ url, authToken });
-  }
-  return db;
-}
+// TTL settings
+const USAGE_RECORD_TTL_DAYS = 7;
+const CLEANUP_PROBABILITY = 0.01; // 1% of requests trigger cleanup
 
 let initialized = false;
 
 async function ensureInitialized(): Promise<void> {
   if (initialized) return;
-  
+
   const client = getDb();
   await client.executeMultiple(`
     CREATE TABLE IF NOT EXISTS api_usage (
@@ -58,7 +51,7 @@ async function ensureInitialized(): Promise<void> {
       updated_at TEXT NOT NULL
     );
   `);
-  
+
   initialized = true;
 }
 
@@ -76,7 +69,7 @@ export type UsageStats = {
 };
 
 /**
- * Check rate limits and record API call
+ * Check rate limits and record API call (atomic)
  * Throws MemryError if limits exceeded
  */
 export async function checkRateLimit(
@@ -89,16 +82,68 @@ export async function checkRateLimit(
   const now = new Date();
   const nowIso = now.toISOString();
   const oneMinuteAgo = new Date(now.getTime() - 60 * 1000).toISOString();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
-  // Check per-minute limit (fast path using recent records)
-  const minuteResult = await client.execute({
-    sql: `SELECT COUNT(*) as count FROM api_usage WHERE api_key_id = ? AND timestamp > ?`,
-    args: [apiKeyId, oneMinuteAgo],
-  });
-  const minuteCount = Number((minuteResult.rows[0] as Record<string, unknown>)?.count ?? 0);
+  // Atomic: Insert the usage record first, then check limits
+  // This prevents race conditions where multiple requests slip through
+  const id = crypto.randomUUID();
   
-  if (minuteCount >= LIMITS.REQUESTS_PER_MINUTE) {
+  // Use a transaction for atomicity
+  const batch = await client.batch([
+    // 1. Insert the new usage record
+    {
+      sql: `INSERT INTO api_usage (id, user_id, api_key_id, endpoint, timestamp) VALUES (?, ?, ?, ?, ?)`,
+      args: [id, userId, apiKeyId, endpoint, nowIso],
+    },
+    // 2. Count requests in last minute (including the one we just inserted)
+    {
+      sql: `SELECT COUNT(*) as count FROM api_usage WHERE api_key_id = ? AND timestamp > ?`,
+      args: [apiKeyId, oneMinuteAgo],
+    },
+    // 3. Upsert and increment daily stats atomically
+    {
+      sql: `
+        INSERT INTO usage_stats (user_id, api_calls_today, api_calls_this_month, memories_this_month, storage_bytes, last_reset_day, last_reset_month, updated_at)
+        VALUES (?, 1, 1, 0, 0, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+          api_calls_today = CASE 
+            WHEN last_reset_day != ? THEN 1 
+            ELSE api_calls_today + 1 
+          END,
+          api_calls_this_month = CASE 
+            WHEN last_reset_month != ? THEN 1 
+            ELSE api_calls_this_month + 1 
+          END,
+          last_reset_day = ?,
+          last_reset_month = ?,
+          updated_at = ?
+      `,
+      args: [
+        userId,
+        nowIso.slice(0, 10), // today
+        nowIso.slice(0, 7),  // this month
+        nowIso,
+        nowIso.slice(0, 10), // for CASE comparison
+        nowIso.slice(0, 7),  // for CASE comparison
+        nowIso.slice(0, 10), // new last_reset_day
+        nowIso.slice(0, 7),  // new last_reset_month
+        nowIso,
+      ],
+    },
+    // 4. Get current stats
+    {
+      sql: `SELECT api_calls_today, api_calls_this_month FROM usage_stats WHERE user_id = ?`,
+      args: [userId],
+    },
+  ], "write");
+
+  // Check per-minute limit
+  const minuteCount = Number((batch[1].rows[0] as Record<string, unknown>)?.count ?? 0);
+  if (minuteCount > LIMITS.REQUESTS_PER_MINUTE) {
+    // Delete the record we just inserted since we're over limit
+    await client.execute({
+      sql: `DELETE FROM api_usage WHERE id = ?`,
+      args: [id],
+    });
     throw new MemryError("RATE_LIMIT_MINUTE", {
       limit: LIMITS.REQUESTS_PER_MINUTE,
       window: "1 minute",
@@ -106,27 +151,20 @@ export async function checkRateLimit(
     });
   }
 
-  // Check daily limit from stats table
-  const stats = await getOrCreateStats(userId);
-  if (stats.apiCallsToday >= LIMITS.REQUESTS_PER_DAY) {
+  // Check daily limit
+  const stats = batch[3].rows[0] as Record<string, unknown> | undefined;
+  const apiCallsToday = Number(stats?.api_calls_today ?? 0);
+  if (apiCallsToday > LIMITS.REQUESTS_PER_DAY) {
     throw new MemryError("RATE_LIMIT_DAILY", {
       limit: LIMITS.REQUESTS_PER_DAY,
       resetAt: getTomorrowMidnightUTC(),
     });
   }
 
-  // Record the API call
-  const id = crypto.randomUUID();
-  await client.execute({
-    sql: `INSERT INTO api_usage (id, user_id, api_key_id, endpoint, timestamp) VALUES (?, ?, ?, ?, ?)`,
-    args: [id, userId, apiKeyId, endpoint, nowIso],
-  });
-
-  // Increment stats
-  await client.execute({
-    sql: `UPDATE usage_stats SET api_calls_today = api_calls_today + 1, api_calls_this_month = api_calls_this_month + 1, updated_at = ? WHERE user_id = ?`,
-    args: [nowIso, userId],
-  });
+  // Probabilistic cleanup - self-healing, no cron needed
+  if (Math.random() < CLEANUP_PROBABILITY) {
+    cleanupOldUsageRecords(USAGE_RECORD_TTL_DAYS).catch(() => {});
+  }
 }
 
 /**
@@ -163,7 +201,7 @@ export async function recordMemoryCreated(userId: string, sizeBytes: number): Pr
   await ensureInitialized();
   const client = getDb();
   const now = new Date().toISOString();
-  
+
   await client.execute({
     sql: `UPDATE usage_stats SET memories_this_month = memories_this_month + 1, storage_bytes = storage_bytes + ?, updated_at = ? WHERE user_id = ?`,
     args: [sizeBytes, now, userId],
@@ -177,7 +215,7 @@ export async function recordMemoryDeleted(userId: string, sizeBytes: number): Pr
   await ensureInitialized();
   const client = getDb();
   const now = new Date().toISOString();
-  
+
   await client.execute({
     sql: `UPDATE usage_stats SET storage_bytes = MAX(0, storage_bytes - ?), updated_at = ? WHERE user_id = ?`,
     args: [sizeBytes, now, userId],
@@ -210,52 +248,37 @@ async function getOrCreateStats(userId: string): Promise<{
   const client = getDb();
   const now = new Date();
   const nowIso = now.toISOString();
-  const today = now.toISOString().slice(0, 10);
-  const thisMonth = now.toISOString().slice(0, 7);
+  const today = nowIso.slice(0, 10);
+  const thisMonth = nowIso.slice(0, 7);
 
-  // Try to get existing stats
+  // Upsert with date reset logic
+  await client.execute({
+    sql: `
+      INSERT INTO usage_stats (user_id, memories_this_month, storage_bytes, api_calls_today, api_calls_this_month, last_reset_day, last_reset_month, updated_at)
+      VALUES (?, 0, 0, 0, 0, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        api_calls_today = CASE WHEN last_reset_day != ? THEN 0 ELSE api_calls_today END,
+        api_calls_this_month = CASE WHEN last_reset_month != ? THEN 0 ELSE api_calls_this_month END,
+        memories_this_month = CASE WHEN last_reset_month != ? THEN 0 ELSE memories_this_month END,
+        last_reset_day = ?,
+        last_reset_month = ?,
+        updated_at = ?
+    `,
+    args: [userId, today, thisMonth, nowIso, today, thisMonth, thisMonth, today, thisMonth, nowIso],
+  });
+
   const result = await client.execute({
-    sql: `SELECT * FROM usage_stats WHERE user_id = ?`,
+    sql: `SELECT api_calls_today, api_calls_this_month, memories_this_month, storage_bytes FROM usage_stats WHERE user_id = ?`,
     args: [userId],
   });
 
-  if (result.rows.length === 0) {
-    // Create new stats record
-    await client.execute({
-      sql: `INSERT INTO usage_stats (user_id, memories_this_month, storage_bytes, api_calls_today, api_calls_this_month, last_reset_day, last_reset_month, updated_at) VALUES (?, 0, 0, 0, 0, ?, ?, ?)`,
-      args: [userId, today, thisMonth, nowIso],
-    });
-    return { apiCallsToday: 0, apiCallsThisMonth: 0, memoriesThisMonth: 0, storageBytes: 0 };
-  }
-
-  const row = result.rows[0] as Record<string, unknown>;
-  let apiCallsToday = Number(row.api_calls_today ?? 0);
-  let apiCallsThisMonth = Number(row.api_calls_this_month ?? 0);
-  let memoriesThisMonth = Number(row.memories_this_month ?? 0);
-  const storageBytes = Number(row.storage_bytes ?? 0);
-  const lastResetDay = row.last_reset_day as string | null;
-  const lastResetMonth = row.last_reset_month as string | null;
-
-  // Reset daily counter if needed
-  if (lastResetDay !== today) {
-    apiCallsToday = 0;
-    await client.execute({
-      sql: `UPDATE usage_stats SET api_calls_today = 0, last_reset_day = ?, updated_at = ? WHERE user_id = ?`,
-      args: [today, nowIso, userId],
-    });
-  }
-
-  // Reset monthly counters if needed
-  if (lastResetMonth !== thisMonth) {
-    apiCallsThisMonth = 0;
-    memoriesThisMonth = 0;
-    await client.execute({
-      sql: `UPDATE usage_stats SET api_calls_this_month = 0, memories_this_month = 0, last_reset_month = ?, updated_at = ? WHERE user_id = ?`,
-      args: [thisMonth, nowIso, userId],
-    });
-  }
-
-  return { apiCallsToday, apiCallsThisMonth, memoriesThisMonth, storageBytes };
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  return {
+    apiCallsToday: Number(row?.api_calls_today ?? 0),
+    apiCallsThisMonth: Number(row?.api_calls_this_month ?? 0),
+    memoriesThisMonth: Number(row?.memories_this_month ?? 0),
+    storageBytes: Number(row?.storage_bytes ?? 0),
+  };
 }
 
 function getTomorrowMidnightUTC(): string {
@@ -265,17 +288,18 @@ function getTomorrowMidnightUTC(): string {
 }
 
 /**
- * Clean up old usage records (run periodically)
+ * Clean up old usage records (TTL-based)
+ * Called probabilistically on each request - self-healing, no cron needed
  */
-export async function cleanupOldUsageRecords(olderThanDays: number = 7): Promise<number> {
+export async function cleanupOldUsageRecords(olderThanDays: number = USAGE_RECORD_TTL_DAYS): Promise<number> {
   await ensureInitialized();
   const client = getDb();
   const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString();
-  
+
   const result = await client.execute({
     sql: `DELETE FROM api_usage WHERE timestamp < ?`,
     args: [cutoff],
   });
-  
+
   return result.rowsAffected ?? 0;
 }

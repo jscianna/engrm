@@ -1473,6 +1473,8 @@ export async function getAgentMemoriesByIds(params: {
 export async function deleteAgentMemoryById(userId: string, id: string): Promise<boolean> {
   await ensureInitialized();
   const client = getDb();
+  
+  // Delete memory from main table
   const result = await client.execute({
     sql: `
       DELETE FROM memories
@@ -1481,7 +1483,22 @@ export async function deleteAgentMemoryById(userId: string, id: string): Promise
     args: [userId, id],
   });
 
-  return (result.rowsAffected ?? 0) > 0;
+  const deleted = (result.rowsAffected ?? 0) > 0;
+  
+  // Cascade: delete vector (best-effort, don't fail if vector missing)
+  if (deleted) {
+    try {
+      await client.execute({
+        sql: `DELETE FROM memory_vectors WHERE memory_id = ?`,
+        args: [id],
+      });
+    } catch (e) {
+      console.error(`Failed to delete vector for memory ${id}:`, e);
+      // Don't fail the operation - main memory is deleted
+    }
+  }
+
+  return deleted;
 }
 
 // =============================================================================

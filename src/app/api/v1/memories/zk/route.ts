@@ -8,7 +8,7 @@
  * memory is reinforced instead of creating a duplicate.
  */
 
-import { upsertMemoryVector, semanticSearchVectorsDirect } from "@/lib/vector";
+import { upsertMemoryVector, semanticSearchVectorsDirect, validateVector, EMBEDDING_DIMENSIONS } from "@/lib/vector";
 import { insertMemoryWithMetadata, reinforceMemory, getMemoriesWithEmbeddings } from "@/lib/db";
 import { calculateFrequencyBoost, TYPE_HALFLIVES, type MemoryType } from "@/lib/memory-heuristics";
 import { validateApiKey } from "@/lib/api-auth";
@@ -19,6 +19,9 @@ import { isObject, resolveNamespaceIdOrError } from "@/lib/api-v1";
 export const runtime = "nodejs";
 
 const SIMILARITY_THRESHOLD = 0.85;
+
+// Supported embedding models and their dimensions
+const SUPPORTED_DIMENSIONS = new Set<number>(Object.values(EMBEDDING_DIMENSIONS));
 
 function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length || a.length === 0) return 0;
@@ -54,8 +57,19 @@ export async function POST(request: Request) {
       throw new MemryError("VALIDATION_ERROR", { field: "vector", reason: "must be a non-empty array of numbers" });
     }
 
-    if (!body.vector.every((v: unknown) => typeof v === "number" && !isNaN(v))) {
-      throw new MemryError("VALIDATION_ERROR", { field: "vector", reason: "must contain only valid numbers" });
+    // Validate vector dimension - must match a known embedding model
+    const vectorDim = body.vector.length as number;
+    if (!SUPPORTED_DIMENSIONS.has(vectorDim)) {
+      throw new MemryError("VALIDATION_ERROR", { 
+        field: "vector", 
+        reason: `unsupported dimension ${vectorDim}. Supported: ${Array.from(SUPPORTED_DIMENSIONS).join(", ")}`,
+      });
+    }
+
+    // Full vector validation (validates numbers are finite, no NaN, etc.)
+    const validation = validateVector(body.vector);
+    if (!validation.valid) {
+      throw new MemryError("VALIDATION_ERROR", { field: "vector", reason: validation.error });
     }
 
     const namespace = typeof body.namespace === "string" ? body.namespace : undefined;
