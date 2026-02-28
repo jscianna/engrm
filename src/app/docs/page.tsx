@@ -7,15 +7,15 @@ import Link from "next/link";
 const NAV_SECTIONS = [
   { id: "quick-start", label: "Quick Start" },
   { id: "authentication", label: "Authentication" },
+  { id: "layered-memory", label: "Layered Memory" },
   { id: "storing-memories", label: "Storing Memories" },
   { id: "retrieving-memories", label: "Retrieving Memories" },
-  { id: "heuristic-scoring", label: "Heuristic Scoring" },
   { id: "reinforcement", label: "Reinforcement" },
   { id: "memory-decay", label: "Memory Decay" },
   { id: "memory-types", label: "Memory Types" },
   { id: "zero-knowledge", label: "Zero-Knowledge" },
   { id: "mcp-server", label: "MCP Server" },
-  { id: "python-sdk", label: "Python SDK" },
+  { id: "python-cli", label: "Python CLI" },
 ];
 
 function CodeBlock({ children, language = "typescript" }: { children: string; language?: string }) {
@@ -109,12 +109,12 @@ export default function DocsPage() {
       <header className="fixed top-0 left-0 right-0 z-50 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <span className="text-xl font-bold">MEMRY</span>
+            <span className="text-xl font-bold">Engrm</span>
             <span className="text-zinc-500 text-sm">docs</span>
           </Link>
           <div className="flex items-center gap-4">
             <a
-              href="https://github.com/jscianna/memry"
+              href="https://github.com/jscianna/engrm"
               target="_blank"
               rel="noopener noreferrer"
               className="text-zinc-400 hover:text-white transition-colors text-sm"
@@ -162,7 +162,7 @@ export default function DocsPage() {
 
             <h3 className="text-xl font-semibold mb-4">1. Create a Vault</h3>
             <p className="text-zinc-400 mb-4">
-              Sign up at <a href="https://memry.ai" className="text-cyan-400 hover:underline">memry.ai</a>, 
+              Sign up at <a href="https://engrm.xyz" className="text-cyan-400 hover:underline">engrm.xyz</a>, 
               then create your encrypted vault with a password. Your password never leaves your device.
             </p>
 
@@ -172,7 +172,7 @@ export default function DocsPage() {
             </p>
 
             <h3 className="text-xl font-semibold mb-4 mt-8">3. Store a Memory</h3>
-            <CodeBlock>{`curl -X POST https://memry.ai/api/v1/memories \\
+            <CodeBlock>{`curl -X POST https://engrm.xyz/api/v1/memories \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -182,7 +182,7 @@ export default function DocsPage() {
   }'`}</CodeBlock>
 
             <h3 className="text-xl font-semibold mb-4 mt-8">4. Retrieve Context</h3>
-            <CodeBlock>{`curl -X POST https://memry.ai/api/v1/context \\
+            <CodeBlock>{`curl -X POST https://engrm.xyz/api/v1/context \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -192,7 +192,7 @@ export default function DocsPage() {
 
             <Note type="tip">
               For zero-knowledge retrieval, encrypt your content client-side before storing. 
-              MEMRY never sees your plaintext—only encrypted blobs and embedding vectors.
+              Engrm never sees your plaintext—only encrypted blobs and embedding vectors.
             </Note>
           </section>
 
@@ -210,7 +210,7 @@ export default function DocsPage() {
               rows={[
                 ["Authorization", "Yes", "Bearer token with your API key"],
                 ["Content-Type", "Yes", "application/json for POST requests"],
-                ["X-Vault-Key", "Optional", "Encrypted vault key for ZK operations"],
+                ["X-Namespace", "Optional", "Hashed namespace for ZK isolation"],
               ]}
             />
 
@@ -220,21 +220,68 @@ export default function DocsPage() {
             </Note>
           </section>
 
+          {/* Layered Memory */}
+          <section id="layered-memory" className="mb-16">
+            <h2 className="text-3xl font-bold mb-4">Layered Memory</h2>
+            <p className="text-zinc-400 mb-6">
+              Engrm uses a brain-like layered memory model with two tiers: <strong>global identity</strong> 
+              and <strong>chat-specific context</strong>. This mirrors how humans have persistent self-knowledge 
+              while also maintaining conversation-specific memories.
+            </p>
+
+            <h3 className="text-xl font-semibold mb-4">Global Identity Layer (🧠)</h3>
+            <p className="text-zinc-400 mb-4">
+              Memories that define who the user <em>is</em> — stored once, available everywhere.
+              Auto-detected from patterns like "I am", "I live in", "my name is".
+            </p>
+            <CodeBlock>{`// Auto-detected as identity → stored globally
+"I'm John, a software engineer in Singapore"
+
+// Stored in: __global__ namespace
+// Available in: ALL conversations`}</CodeBlock>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Chat-Specific Layer (💬)</h3>
+            <p className="text-zinc-400 mb-4">
+              Context-specific memories that only matter in a particular conversation.
+              Isolated by hashed namespace for full zero-knowledge privacy.
+            </p>
+            <CodeBlock>{`// Chat about Project Alpha
+"We decided to use PostgreSQL for this project"
+
+// Stored in: ns_a3f2b8c1... (hashed)
+// Available in: ONLY this chat namespace`}</CodeBlock>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Layered Search</h3>
+            <p className="text-zinc-400 mb-4">
+              Every search automatically queries both your current namespace AND the global identity layer.
+              Results are merged and ranked by relevance.
+            </p>
+            <CodeBlock language="text">{`search("What timezone is the user in?")
+
+Results:
+🧠 [Global] User is based in Singapore (GMT+8)     — similarity: 0.92
+💬 [Chat]   Meeting scheduled for 9am SGT          — similarity: 0.78`}</CodeBlock>
+
+            <Note type="tip">
+              Identity memories are <strong>never auto-deleted</strong> and have a 365-day halflife.
+              They form the stable foundation of your agent's understanding of the user.
+            </Note>
+          </section>
+
           {/* Storing Memories */}
           <section id="storing-memories" className="mb-16">
             <h2 className="text-3xl font-bold mb-4">Storing Memories</h2>
             <p className="text-zinc-400 mb-6">
-              Store memories with automatic importance scoring, type detection, and reinforcement.
+              Store memories with automatic type detection, reinforcement, and layered namespace routing.
             </p>
 
             <h3 className="text-xl font-semibold mb-4">POST /api/v1/memories</h3>
             <CodeBlock>{`{
-  "content": "User's timezone is Singapore (GMT+8)",
-  "embedding": [0.1, 0.2, ...],  // 384-dim vector
+  "content": "<encrypted-ciphertext>",
+  "embedding": [0.1, 0.2, ...],  // 384 or 1536-dim vector
   "type": "fact",                 // optional, auto-detected
-  "importance": 7,                // optional, auto-scored
-  "entities": ["Singapore"],      // optional, auto-extracted
-  "namespace": "personal",        // optional, for organization
+  "importance": 7,                // optional
+  "namespace": "ns_a3f2b8c1...",  // hashed namespace
   "session_id": "sess_abc123"     // optional, for grouping
 }`}</CodeBlock>
 
@@ -249,8 +296,8 @@ export default function DocsPage() {
 }`}</CodeBlock>
 
             <Note type="tip">
-              If you store a memory similar to one that already exists (cosine similarity &gt; 0.85), 
-              MEMRY will <strong>reinforce</strong> the existing memory instead of creating a duplicate.
+              If you store a memory similar to one that already exists (cosine similarity &gt; 0.75), 
+              Engrm will <strong>reinforce</strong> the existing memory instead of creating a duplicate.
               This implements the "fire together, wire together" principle.
             </Note>
 
@@ -382,7 +429,7 @@ trigger_intensity = heuristic_score / 10`}</CodeBlock>
             <h2 className="text-3xl font-bold mb-4">Memory Decay</h2>
             <p className="text-zinc-400 mb-6">
               Memories that aren't accessed fade over time, following an Ebbinghaus-inspired forgetting curve.
-              Access resets the decay clock.
+              Recall resets the decay clock and strengthens the memory.
             </p>
 
             <h3 className="text-xl font-semibold mb-4">Decay Formula</h3>
@@ -390,50 +437,56 @@ trigger_intensity = heuristic_score / 10`}</CodeBlock>
 
             <h3 className="text-xl font-semibold mb-4 mt-8">Type-Specific Halflives</h3>
             <Table
-              headers={["Memory Type", "Halflife", "Rationale"]}
+              headers={["Memory Type", "Halflife", "Auto-Delete?"]}
               rows={[
-                ["constraint", "180 days", "Safety-critical, persists longest"],
-                ["how_to", "120 days", "Procedural knowledge, slow decay"],
-                ["identity", "120 days", "Core self-concept, stable"],
-                ["fact", "90 days", "Encyclopedic knowledge"],
-                ["preference", "60 days", "Tastes can change"],
-                ["relationship", "30 days", "Social data needs maintenance"],
-                ["event", "14 days", "Episodic memories fade fast"],
+                ["identity", "365 days", "❌ Never deleted"],
+                ["constraint", "180 days", "When strength < 0.20"],
+                ["how_to", "120 days", "When strength < 0.20"],
+                ["fact", "90 days", "When strength < 0.20"],
+                ["preference", "60 days", "When strength < 0.20"],
+                ["relationship", "30 days", "When strength < 0.20"],
+                ["event", "14 days", "When strength < 0.20"],
               ]}
             />
 
-            <h3 className="text-xl font-semibold mb-4 mt-8">Pruning Strategy</h3>
+            <h3 className="text-xl font-semibold mb-4 mt-8">Memory Lifecycle</h3>
             <ul className="list-disc list-inside text-zinc-400 space-y-2">
-              <li>Strength drops below 0.3 → Memory enters <strong>Limbic Archive</strong> (soft delete)</li>
-              <li>30 days in archive without access → <strong>Hard delete</strong> (true forgetting)</li>
-              <li>Retrieval resets the decay clock to zero</li>
-              <li>3+ retrievals in a week → +50% halflife boost (consolidation)</li>
+              <li><strong>Auto-delete threshold:</strong> strength &lt; 0.20 (~210 days of total neglect)</li>
+              <li><strong>Auto-archive:</strong> 90 days no access → archived (still searchable, deprioritized)</li>
+              <li><strong>Mention protection:</strong> ≥4 mentions protects memory for up to 365 days</li>
+              <li><strong>Identity memories:</strong> Never auto-deleted, 365-day halflife</li>
+              <li><strong>Retrieval = strengthening:</strong> Every recall bumps strength up</li>
             </ul>
+
+            <Note type="tip">
+              Think of it like your brain pruning unused synapses. If you never think about something 
+              for 7+ months, it fades. But anything you recall stays strong.
+            </Note>
           </section>
 
           {/* Memory Types */}
           <section id="memory-types" className="mb-16">
             <h2 className="text-3xl font-bold mb-4">Memory Types</h2>
             <p className="text-zinc-400 mb-6">
-              Each memory type has different scoring multipliers and decay rates, optimized for its use case.
+              Each memory type has different decay rates and protection levels, optimized for its use case.
             </p>
 
             <Table
-              headers={["Type", "Multiplier", "Halflife", "Use Case"]}
+              headers={["Type", "Halflife", "Protection", "Use Case"]}
               rows={[
-                ["constraint", "1.3×", "180 days", "Hard limits, allergies, deadlines, must-nots"],
-                ["identity", "1.2×", "120 days", "Self-concept, roles, core values"],
-                ["relationship", "1.1×", "30 days", "Social graph, colleagues, connections"],
-                ["preference", "1.0×", "60 days", "Likes, dislikes, tastes"],
-                ["how_to", "1.0×", "120 days", "Procedures, workflows, recipes"],
-                ["fact", "0.9×", "90 days", "Objective knowledge, properties"],
-                ["event", "0.8×", "14 days", "Specific occurrences, episodes"],
+                ["identity", "365 days", "Never deleted", "Name, location, core traits, values"],
+                ["constraint", "180 days", "Safety-boosted", "Hard limits, allergies, must-nots"],
+                ["how_to", "120 days", "Standard", "Procedures, workflows, recipes"],
+                ["fact", "90 days", "Standard", "Objective knowledge, properties"],
+                ["preference", "60 days", "Standard", "Likes, dislikes, tastes"],
+                ["relationship", "30 days", "Standard", "Social graph, colleagues"],
+                ["event", "14 days", "Standard", "Specific occurrences, episodes"],
               ]}
             />
 
             <Note type="warning">
               <strong>Safety Rule:</strong> Constraints containing medical/danger keywords 
-              ("allergic", "emergency contact", "diabetic") always receive a +2.0 importance boost.
+              ("allergic", "emergency contact", "diabetic") receive extra protection and slower decay.
             </Note>
           </section>
 
@@ -441,15 +494,16 @@ trigger_intensity = heuristic_score / 10`}</CodeBlock>
           <section id="zero-knowledge" className="mb-16">
             <h2 className="text-3xl font-bold mb-4">Zero-Knowledge Architecture</h2>
             <p className="text-zinc-400 mb-6">
-              MEMRY is designed so the server <strong>never</strong> sees your plaintext data.
+              Engrm is designed so the server <strong>never</strong> sees your plaintext data.
               All encryption and embedding happens client-side.
             </p>
 
-            <h3 className="text-xl font-semibold mb-4">What MEMRY Sees</h3>
+            <h3 className="text-xl font-semibold mb-4">What Engrm Sees</h3>
             <Table
               headers={["Component", "Server Access", "Notes"]}
               rows={[
                 ["Memory content", "❌ No", "Only encrypted ciphertext"],
+                ["Chat/namespace names", "❌ No", "Hashed with vault password"],
                 ["Embedding vectors", "✅ Yes", "Used for similarity search"],
                 ["Memory metadata", "✅ Yes", "Type, importance, timestamps"],
                 ["Vault password", "❌ No", "Never leaves your device"],
@@ -457,17 +511,27 @@ trigger_intensity = heuristic_score / 10`}</CodeBlock>
               ]}
             />
 
+            <h3 className="text-xl font-semibold mb-4 mt-8">Hashed Namespaces</h3>
+            <p className="text-zinc-400 mb-4">
+              Even namespace/chat names are hidden from the server. We hash them with your vault password:
+            </p>
+            <CodeBlock language="text">{`Input: "telegram-chat-12345"
+Hash:  SHA256(namespace + vault_password)[:16]
+Stored: "ns_a3f2b8c1e4d7f9a2"
+
+// Server sees only the hash, never "telegram-chat-12345"`}</CodeBlock>
+
             <h3 className="text-xl font-semibold mb-4 mt-8">Encryption Flow</h3>
             <CodeBlock language="text">{`1. Agent extracts memory from conversation
-2. Agent scores importance (heuristics run locally)
-3. Agent generates embedding (local ONNX model)
+2. Agent generates embedding (local ONNX model)
+3. Agent hashes namespace with vault password
 4. Agent encrypts content with vault key (AES-256-GCM)
-5. Agent sends encrypted blob + embedding to MEMRY
-6. MEMRY stores without decryption capability`}</CodeBlock>
+5. Agent sends encrypted blob + embedding to Engrm
+6. Engrm stores without decryption capability`}</CodeBlock>
 
             <Note type="tip">
-              The MCP Server and Python SDK handle encryption automatically.
-              Just provide your vault password at initialization.
+              The MCP Server and Python CLI handle encryption and namespace hashing automatically.
+              Just set your vault password in the environment.
             </Note>
           </section>
 
@@ -475,21 +539,23 @@ trigger_intensity = heuristic_score / 10`}</CodeBlock>
           <section id="mcp-server" className="mb-16">
             <h2 className="text-3xl font-bold mb-4">MCP Server</h2>
             <p className="text-zinc-400 mb-6">
-              The MEMRY MCP Server integrates with Claude Desktop and other MCP-compatible agents.
+              The Engrm MCP Server integrates with Claude Desktop and other MCP-compatible agents.
+              It handles encryption, embedding, and layered memory automatically.
             </p>
 
             <h3 className="text-xl font-semibold mb-4">Installation</h3>
-            <CodeBlock language="bash">{`npm install -g @memry/mcp-server`}</CodeBlock>
+            <CodeBlock language="bash">{`npm install -g engrm-mcp`}</CodeBlock>
 
             <h3 className="text-xl font-semibold mb-4 mt-8">Configuration (Claude Desktop)</h3>
             <CodeBlock>{`{
   "mcpServers": {
-    "memry": {
-      "command": "memry-mcp",
+    "engrm": {
+      "command": "engrm-mcp",
       "args": [],
       "env": {
-        "MEMRY_API_KEY": "mem_your_api_key",
-        "MEMRY_VAULT_PASSWORD": "your_vault_password"
+        "ENGRM_API_KEY": "mem_your_api_key",
+        "ENGRM_VAULT_PASSWORD": "your_vault_password",
+        "ENGRM_NAMESPACE": "optional-chat-id"
       }
     }
   }
@@ -499,50 +565,65 @@ trigger_intensity = heuristic_score / 10`}</CodeBlock>
             <Table
               headers={["Tool", "Description"]}
               rows={[
-                ["memry_store", "Store an encrypted memory"],
-                ["memry_search", "Search memories by semantic similarity"],
-                ["memry_context", "Get relevant context for a query"],
-                ["memry_list", "List recent memories"],
-                ["memry_delete", "Delete a memory by ID"],
+                ["engrm_store", "Store an encrypted memory (auto-detects identity)"],
+                ["engrm_search", "Search with layered recall (chat + global)"],
+                ["engrm_context", "Get relevant context for a query"],
+                ["engrm_list", "List recent memories"],
+                ["engrm_delete", "Delete a memory by ID"],
               ]}
             />
-          </section>
-
-          {/* Python SDK */}
-          <section id="python-sdk" className="mb-16">
-            <h2 className="text-3xl font-bold mb-4">Python SDK</h2>
-            <p className="text-zinc-400 mb-6">
-              The Python SDK provides full ZK encryption with local embeddings via FastEmbed.
-            </p>
-
-            <h3 className="text-xl font-semibold mb-4">Installation</h3>
-            <CodeBlock language="bash">{`pip install memry-sdk`}</CodeBlock>
-
-            <h3 className="text-xl font-semibold mb-4 mt-8">Usage</h3>
-            <CodeBlock language="python">{`from memry import MemryClient
-
-client = MemryClient(
-    api_key="mem_your_api_key",
-    vault_password="your_vault_password"
-)
-
-# Store a memory (auto-encrypted, auto-embedded)
-client.store(
-    content="User prefers dark theme",
-    memory_type="preference"
-)
-
-# Retrieve context
-memories = client.context(
-    query="What are the user's UI preferences?",
-    limit=5
-)
-
-for mem in memories:
-    print(f"{mem.type}: {mem.content}")`}</CodeBlock>
 
             <Note>
-              The Python SDK uses <code>fastembed</code> for local ONNX embeddings.
+              Identity memories ("I am John", "I live in Singapore") are auto-detected and stored 
+              in the global namespace, available across all conversations.
+            </Note>
+          </section>
+
+          {/* Python CLI */}
+          <section id="python-cli" className="mb-16">
+            <h2 className="text-3xl font-bold mb-4">Python CLI</h2>
+            <p className="text-zinc-400 mb-6">
+              The Python CLI (<code>engrm.py</code>) provides full ZK encryption with local embeddings via FastEmbed.
+              All encryption and embedding happens on your machine.
+            </p>
+
+            <h3 className="text-xl font-semibold mb-4">Environment Setup</h3>
+            <CodeBlock language="bash">{`export ENGRM_API_KEY="mem_your_api_key"
+export ENGRM_VAULT_PASSWORD="your_vault_password"
+export ENGRM_NAMESPACE="optional-chat-id"  # auto-hashed
+export ENGRM_API_URL="https://engrm.xyz"   # optional`}</CodeBlock>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Commands</h3>
+            <CodeBlock language="bash">{`# Store a memory (auto-encrypts, auto-embeds)
+python engrm.py store "User prefers dark theme" --type preference
+
+# Search memories (queries chat + global namespaces)
+python engrm.py search "What are the user's preferences?"
+
+# Search across ALL namespaces
+python engrm.py search "What's the user's timezone?" --global
+
+# Get context for a query
+python engrm.py context "Schedule a meeting" --limit 5
+
+# List recent memories
+python engrm.py list --limit 10
+
+# Delete a memory
+python engrm.py delete mem_abc123`}</CodeBlock>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Identity Auto-Detection</h3>
+            <p className="text-zinc-400 mb-4">
+              The CLI automatically detects identity statements and stores them globally:
+            </p>
+            <CodeBlock language="bash">{`# This is auto-detected as identity
+python engrm.py store "I'm John, a software engineer in Singapore"
+
+# Stored in: __global__ namespace (available everywhere)
+# Type: identity (never auto-deleted)`}</CodeBlock>
+
+            <Note>
+              The CLI uses <code>fastembed</code> for local ONNX embeddings.
               No API calls to external embedding services—everything runs locally.
             </Note>
           </section>
@@ -551,7 +632,7 @@ for mem in memories:
           <footer className="border-t border-zinc-800 pt-8 mt-16">
             <p className="text-zinc-500 text-sm">
               Built by <a href="https://web3.com" className="text-cyan-400 hover:underline">Web3.com Ventures</a>.
-              Open source on <a href="https://github.com/jscianna/memry" className="text-cyan-400 hover:underline">GitHub</a>.
+              Open source on <a href="https://github.com/jscianna/engrm" className="text-cyan-400 hover:underline">GitHub</a>.
             </p>
           </footer>
         </main>

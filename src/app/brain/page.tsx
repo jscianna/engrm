@@ -571,7 +571,7 @@ export default function BrainPage() {
       <header className="fixed top-0 left-0 right-0 z-50 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/" className="text-xl font-bold">MEMRY</Link>
+            <Link href="/" className="text-xl font-bold">Engrm</Link>
             <span className="text-zinc-500">|</span>
             <span className="text-cyan-400 font-mono text-sm">THE BRAIN</span>
             <span className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium ${

@@ -301,10 +301,10 @@ export default function Home() {
                   just like human memory.
                 </p>
                 <div className="text-sm font-mono text-zinc-500">
-                  Constraints → 180 day halflife<br />
+                  Identity → <span className="text-cyan-400">Never deleted</span><br />
+                  Constraints → 180 days<br />
                   Facts → 90 days<br />
-                  Events → 14 days<br />
-                  <span className="text-amber-400">Access resets the clock</span>
+                  <span className="text-amber-400">Recall strengthens; neglect fades</span>
                 </div>
               </CardContent>
             </Card>
@@ -353,7 +353,7 @@ export default function Home() {
               </div>
               <p className="text-zinc-400 text-sm mb-4">For Claude Desktop & Cursor</p>
               <pre className="bg-zinc-950 rounded-lg p-4 text-sm font-mono text-zinc-300 overflow-x-auto">
-{`npm install -g @engrm/mcp
+{`npm install -g engrm-mcp
 
 // claude_desktop_config.json
 "engrm": {
@@ -366,18 +366,16 @@ export default function Home() {
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
               <div className="flex items-center gap-3 mb-4">
                 <Terminal className="w-6 h-6 text-cyan-400" />
-                <h3 className="font-semibold text-lg">Python SDK</h3>
+                <h3 className="font-semibold text-lg">Python CLI</h3>
               </div>
               <p className="text-zinc-400 text-sm mb-4">Full ZK with local embeddings</p>
               <pre className="bg-zinc-950 rounded-lg p-4 text-sm font-mono text-zinc-300 overflow-x-auto">
-{`pip install engrm-sdk
+{`# engrm.py store/search/context
+python engrm.py store \\
+  "User prefers dark mode"
 
-client = MemryClient(
-  api_key="mem_xxx",
-  vault_password="***"
-)
-
-client.store("User prefers dark mode")`}
+python engrm.py search \\
+  "What are user preferences?"`}
               </pre>
             </div>
 
