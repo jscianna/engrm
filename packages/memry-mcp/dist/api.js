@@ -16,11 +16,33 @@ function getConfig() {
  *
  * For OpenClaw: set MEMRY_NAMESPACE=${chat_id} or MEMRY_NAMESPACE=${conversation_label}
  */
-export function getNamespace() {
+export function getRawNamespace() {
     return process.env.MEMRY_NAMESPACE
         || process.env.MEMRY_CHAT_ID
         || process.env.MEMRY_SESSION_ID
         || undefined;
+}
+/**
+ * Hash namespace with vault password for zero-knowledge.
+ * Server sees opaque ID, can't know the actual chat/project name.
+ */
+export function hashNamespace(namespace, vaultPassword) {
+    const crypto = require('crypto');
+    const combined = `${namespace}:${vaultPassword}`;
+    const hash = crypto.createHash('sha256').update(combined).digest('hex');
+    return `ns_${hash.slice(0, 16)}`; // e.g., "ns_a3f2b8c1d4e5f6a7"
+}
+/**
+ * Get hashed namespace for ZK operations
+ */
+export function getNamespace() {
+    const raw = getRawNamespace();
+    if (!raw)
+        return undefined;
+    const vaultPassword = process.env.MEMRY_VAULT_PASSWORD;
+    if (!vaultPassword)
+        return raw; // Fallback to raw if no password (shouldn't happen)
+    return hashNamespace(raw, vaultPassword);
 }
 async function request(method, endpoint, data) {
     const { apiKey, apiUrl } = getConfig();

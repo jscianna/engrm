@@ -27,6 +27,15 @@ export interface ZkSearchResult {
  *
  * For OpenClaw: set MEMRY_NAMESPACE=${chat_id} or MEMRY_NAMESPACE=${conversation_label}
  */
+export declare function getRawNamespace(): string | undefined;
+/**
+ * Hash namespace with vault password for zero-knowledge.
+ * Server sees opaque ID, can't know the actual chat/project name.
+ */
+export declare function hashNamespace(namespace: string, vaultPassword: string): string;
+/**
+ * Get hashed namespace for ZK operations
+ */
 export declare function getNamespace(): string | undefined;
 /**
  * Store memory with pre-computed vector and encrypted content

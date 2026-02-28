@@ -49,10 +49,20 @@ MEMRY_NAMESPACE="deals-project"         # By project name
 MEMRY_NAMESPACE="main"
 ```
 
+**Zero-Knowledge Namespaces:**
+Namespace names are hashed with your vault password before sending to the server:
+```
+"telegram-123" + password → "ns_a3f2b8c1d4e5f6a7"
+```
+The server sees opaque IDs, not your actual chat names. This prevents metadata leakage about which chats/projects you have.
+
 **Behavior:**
 - All `store`, `search`, `context`, `list` commands use the auto-namespace
+- Namespaces are hashed automatically (ZK)
 - Use `--global` to search across ALL namespaces
 - Use `--namespace NAME` to override for one command
+- Cross-namespace memories don't auto-link (privacy by design)
+- Use `--global` search to find memories across all chats when needed
 
 ## Commands
 

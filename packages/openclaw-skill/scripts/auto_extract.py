@@ -17,6 +17,7 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
 import sys
 import os
@@ -70,6 +71,18 @@ def get_config():
                     namespace = value
     
     return api_key, api_url.rstrip("/"), vault_password, namespace
+
+
+def hash_namespace(namespace: str, vault_password: str) -> str:
+    """
+    Hash namespace with vault password for zero-knowledge.
+    Server sees opaque ID, can't know the actual chat/project name.
+    """
+    if not namespace:
+        return None
+    combined = f"{namespace}:{vault_password}"
+    hash_bytes = hashlib.sha256(combined.encode('utf-8')).hexdigest()
+    return f"ns_{hash_bytes[:16]}"
 
 
 # =============================================================================
@@ -205,8 +218,9 @@ def process_single_text(
         output["reason"] = "Missing API key or vault password"
         return output
     
-    # Use provided namespace or fall back to auto-namespace
-    namespace = namespace or auto_namespace
+    # Use provided namespace or fall back to auto-namespace, then hash for ZK
+    raw_namespace = namespace or auto_namespace
+    namespace = hash_namespace(raw_namespace, vault_password) if raw_namespace else None
     
     # Encrypt and embed locally
     title = text[:100]

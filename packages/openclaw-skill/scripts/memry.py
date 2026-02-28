@@ -16,6 +16,7 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
 import os
 import struct
@@ -78,6 +79,21 @@ def get_namespace():
     """Get current namespace from config."""
     _, _, _, namespace = get_config()
     return namespace
+
+
+def hash_namespace(namespace: str, vault_password: str) -> str:
+    """
+    Hash namespace with vault password for zero-knowledge.
+    Server sees opaque ID, can't know the actual chat/project name.
+    
+    Uses first 16 chars of SHA256(namespace + password) for readability.
+    Deterministic: same input always produces same hash.
+    """
+    if not namespace:
+        return None
+    combined = f"{namespace}:{vault_password}"
+    hash_bytes = hashlib.sha256(combined.encode('utf-8')).hexdigest()
+    return f"ns_{hash_bytes[:16]}"  # e.g., "ns_a3f2b8c1d4e5f6a7"
 
 
 # =============================================================================
@@ -230,7 +246,10 @@ def api_request(method: str, endpoint: str, data: dict = None):
 def cmd_store(args):
     """Store a memory with zero-knowledge encryption."""
     _, _, vault_password, auto_namespace = get_config()
-    namespace = getattr(args, 'namespace', None) or auto_namespace
+    raw_namespace = getattr(args, 'namespace', None) or auto_namespace
+    
+    # Hash namespace for zero-knowledge (server can't see actual chat name)
+    namespace = hash_namespace(raw_namespace, vault_password) if raw_namespace else None
     
     print("[ZK] Encrypting locally...", file=sys.stderr)
     
@@ -282,9 +301,11 @@ def cmd_search(args):
         namespace = None
         print(f"[ZK] Searching ALL namespaces...", file=sys.stderr)
     else:
-        namespace = getattr(args, 'namespace', None) or auto_namespace
-        if namespace:
-            print(f"[ZK] Searching namespace: {namespace}", file=sys.stderr)
+        raw_namespace = getattr(args, 'namespace', None) or auto_namespace
+        # Hash namespace for zero-knowledge
+        namespace = hash_namespace(raw_namespace, vault_password) if raw_namespace else None
+        if raw_namespace:
+            print(f"[ZK] Searching namespace: {raw_namespace} (hashed)", file=sys.stderr)
     
     print(f"[ZK] Embedding query locally...", file=sys.stderr)
     
@@ -339,7 +360,9 @@ def cmd_context(args):
     if getattr(args, 'all_namespaces', False):
         namespace = None
     else:
-        namespace = getattr(args, 'namespace', None) or auto_namespace
+        raw_namespace = getattr(args, 'namespace', None) or auto_namespace
+        # Hash namespace for zero-knowledge
+        namespace = hash_namespace(raw_namespace, vault_password) if raw_namespace else None
     
     print(f"[ZK] Embedding query locally...", file=sys.stderr)
     vector = embed_local(args.query)
@@ -378,7 +401,10 @@ def cmd_context(args):
 def cmd_list(args):
     """List recent memories."""
     _, _, vault_password, auto_namespace = get_config()
-    namespace = getattr(args, 'namespace', None) or auto_namespace
+    raw_namespace = getattr(args, 'namespace', None) or auto_namespace
+    
+    # Hash namespace for zero-knowledge
+    namespace = hash_namespace(raw_namespace, vault_password) if raw_namespace else None
     
     # Build endpoint with namespace
     endpoint = f"/api/v1/memories?limit={args.limit}"
