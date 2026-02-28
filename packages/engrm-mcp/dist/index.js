@@ -1,5 +1,5 @@
 /**
- * MEMRY MCP Server - Zero-Knowledge Memory for AI Agents
+ * Engrm MCP Server - Zero-Knowledge Memory for AI Agents
  *
  * Privacy guarantees:
  * - Embeddings generated locally (queries never leave device)
@@ -15,7 +15,7 @@ import { storeZkMemory, searchByVector, listMemories, deleteMemory } from "./api
 const TOOLS = [
     {
         name: "memry_store",
-        description: "Store a memory for later recall. Use for important facts, preferences, decisions, or anything worth remembering. Memories are auto-isolated by chat/namespace.",
+        description: "Store a memory for later recall. Use for important facts, preferences, decisions, or anything worth remembering. Memories are auto-isolated by chat/namespace. Identity memories ('I am', 'I live in') are stored globally and never auto-deleted. Regular memories decay over time if not accessed - frequently used memories stay, forgotten ones are eventually archived/deleted.",
         inputSchema: {
             type: "object",
             properties: {
@@ -46,7 +46,7 @@ const TOOLS = [
     },
     {
         name: "memry_search",
-        description: "Search memories semantically. Use to recall relevant information before responding. Searches within current chat/namespace by default.",
+        description: "Search memories semantically. Use to recall relevant information before responding. Searches current chat + global identity by default. Memories that are frequently searched stay active; unused memories gradually archive. The system self-maintains - no manual cleanup needed.",
         inputSchema: {
             type: "object",
             properties: {
@@ -127,7 +127,7 @@ const TOOLS = [
 async function handleStore(params) {
     const vaultPassword = getVaultPassword();
     if (!vaultPassword) {
-        return "Error: MEMRY_VAULT_PASSWORD not set. Cannot encrypt memories.";
+        return "Error: ENGRM_VAULT_PASSWORD not set. Cannot encrypt memories.";
     }
     const title = params.title || params.content.slice(0, 100);
     // Encrypt locally - server never sees plaintext
@@ -150,7 +150,7 @@ async function handleStore(params) {
 async function handleSearch(params) {
     const vaultPassword = getVaultPassword();
     if (!vaultPassword) {
-        return "Error: MEMRY_VAULT_PASSWORD not set. Cannot decrypt results.";
+        return "Error: ENGRM_VAULT_PASSWORD not set. Cannot decrypt results.";
     }
     // Generate embedding locally - search query never leaves device
     const vector = await embedLocal(params.query);
@@ -191,7 +191,7 @@ async function handleContext(params) {
 async function handleList(params) {
     const vaultPassword = getVaultPassword();
     if (!vaultPassword) {
-        return "Error: MEMRY_VAULT_PASSWORD not set. Cannot decrypt memories.";
+        return "Error: ENGRM_VAULT_PASSWORD not set. Cannot decrypt memories.";
     }
     const { memories } = await listMemories({
         limit: params.limit || 10,

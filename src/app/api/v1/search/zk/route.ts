@@ -12,6 +12,7 @@ import { getAgentMemoriesByIds } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject, normalizeLimit, resolveNamespaceIdOrError } from "@/lib/api-v1";
+import { maybeAutoMaintenance } from "@/lib/memory-lifecycle";
 
 export const runtime = "nodejs";
 
@@ -79,6 +80,9 @@ export async function POST(request: Request) {
     if (activatedIds.length >= 2) {
       strengthenCoRetrievedMemories(identity.userId, activatedIds, 0.02).catch(() => {});
     }
+
+    // Maybe trigger auto-maintenance (0.5% probability, async)
+    maybeAutoMaintenance(identity.userId);
 
     return Response.json({ results });
   } catch (error) {

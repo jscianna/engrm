@@ -57,6 +57,13 @@ export const LIFECYCLE_CONFIG = {
     strengthFloor: 1.0,           // Never decay below 1.0
     neverDelete: true,
   },
+
+  // Auto-maintenance settings (MoA-recommended)
+  autoMaintenance: {
+    triggerProbability: 0.005,    // 0.5% of API calls
+    cooldownMs: 60 * 60 * 1000,   // 1 hour per user
+    batchSize: 100,               // Process 100 memories at a time
+  },
 } as const;
 
 // =============================================================================
@@ -338,6 +345,47 @@ export async function restoreFromArchive(userId: string, memoryId: string): Prom
   });
   
   return (result.rowsAffected ?? 0) > 0;
+}
+
+// =============================================================================
+// AUTO-MAINTENANCE (triggered probabilistically by API calls)
+// =============================================================================
+
+// In-memory cooldown cache (per-user last maintenance time)
+const maintenanceCooldowns = new Map<string, number>();
+
+/**
+ * Maybe trigger auto-maintenance (0.5% probability, 1hr cooldown)
+ * Call this from search/context endpoints. Runs async, never blocks.
+ */
+export function maybeAutoMaintenance(userId: string): void {
+  // Probabilistic check (0.5%)
+  if (Math.random() >= LIFECYCLE_CONFIG.autoMaintenance.triggerProbability) {
+    return;
+  }
+
+  // Cooldown check (1 hour)
+  const lastRun = maintenanceCooldowns.get(userId) ?? 0;
+  const now = Date.now();
+  if (now - lastRun < LIFECYCLE_CONFIG.autoMaintenance.cooldownMs) {
+    return;
+  }
+
+  // Mark as running (prevents concurrent triggers)
+  maintenanceCooldowns.set(userId, now);
+
+  // Run async - don't block the API response
+  runLifecycleMaintenance(userId)
+    .then((stats) => {
+      if (stats.archived > 0 || stats.deleted > 0) {
+        console.log(`[Lifecycle] Auto-maintenance for ${userId}: archived=${stats.archived}, deleted=${stats.deleted}`);
+      }
+    })
+    .catch((err) => {
+      console.error(`[Lifecycle] Auto-maintenance failed for ${userId}:`, err);
+      // Reset cooldown on failure so it can retry sooner
+      maintenanceCooldowns.delete(userId);
+    });
 }
 
 /**

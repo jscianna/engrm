@@ -1,5 +1,5 @@
 /**
- * MEMRY API client for zero-knowledge operations
+ * Engrm API client for zero-knowledge operations
  * Only sends: vectors (not text) + encrypted blobs
  */
 export interface MemryConfig {
@@ -23,9 +23,9 @@ export interface ZkSearchResult {
 }
 /**
  * Get auto-namespace from environment
- * Priority: MEMRY_NAMESPACE > MEMRY_CHAT_ID > MEMRY_SESSION_ID > undefined
+ * Priority: ENGRM_NAMESPACE > ENGRM_CHAT_ID > ENGRM_SESSION_ID > undefined
  *
- * For OpenClaw: set MEMRY_NAMESPACE=${chat_id} or MEMRY_NAMESPACE=${conversation_label}
+ * For OpenClaw: set ENGRM_NAMESPACE=${chat_id} or ENGRM_NAMESPACE=${conversation_label}
  */
 export declare function getRawNamespace(): string | undefined;
 /**

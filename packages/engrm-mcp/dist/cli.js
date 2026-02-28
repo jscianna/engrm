@@ -7,9 +7,9 @@
  *   memry-mcp --help             # Show help
  *
  * Environment variables:
- *   MEMRY_API_KEY           # Your MEMRY API key (required)
- *   MEMRY_API_URL           # API URL (default: https://memry-sand.vercel.app)
- *   MEMRY_VAULT_PASSWORD    # Vault password for encryption (required)
+ *   ENGRM_API_KEY           # Your MEMRY API key (required)
+ *   ENGRM_API_URL           # API URL (default: https://memry-sand.vercel.app)
+ *   ENGRM_VAULT_PASSWORD    # Vault password for encryption (required)
  */
 import { runServer } from "./index.js";
 const args = process.argv.slice(2);
@@ -21,11 +21,11 @@ Usage:
   memry-mcp              Start MCP server (for Claude Desktop, Cursor, etc.)
 
 Environment variables (required):
-  MEMRY_API_KEY          Your MEMRY API key
-  MEMRY_VAULT_PASSWORD   Vault password for client-side encryption
+  ENGRM_API_KEY          Your MEMRY API key
+  ENGRM_VAULT_PASSWORD   Vault password for client-side encryption
 
 Environment variables (optional):
-  MEMRY_API_URL          API URL (default: https://memry-sand.vercel.app)
+  ENGRM_API_URL          API URL (default: https://memry-sand.vercel.app)
 
 Privacy guarantees:
   - Embeddings generated locally (queries never leave your device)
@@ -38,8 +38,8 @@ Claude Desktop configuration (~/.config/claude/claude_desktop_config.json):
       "memry": {
         "command": "memry-mcp",
         "env": {
-          "MEMRY_API_KEY": "mem_xxx",
-          "MEMRY_VAULT_PASSWORD": "your-vault-password"
+          "ENGRM_API_KEY": "mem_xxx",
+          "ENGRM_VAULT_PASSWORD": "your-vault-password"
         }
       }
     }
@@ -48,12 +48,12 @@ Claude Desktop configuration (~/.config/claude/claude_desktop_config.json):
     process.exit(0);
 }
 // Validate environment
-if (!process.env.MEMRY_API_KEY) {
-    console.error("Error: MEMRY_API_KEY environment variable is required");
+if (!process.env.ENGRM_API_KEY) {
+    console.error("Error: ENGRM_API_KEY environment variable is required");
     process.exit(1);
 }
-if (!process.env.MEMRY_VAULT_PASSWORD) {
-    console.error("Error: MEMRY_VAULT_PASSWORD environment variable is required");
+if (!process.env.ENGRM_VAULT_PASSWORD) {
+    console.error("Error: ENGRM_VAULT_PASSWORD environment variable is required");
     console.error("This is used for client-side encryption. Server never sees it.");
     process.exit(1);
 }

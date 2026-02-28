@@ -22,7 +22,7 @@ import { storeZkMemory, searchByVector, listMemories, deleteMemory } from "./api
 const TOOLS: Tool[] = [
   {
     name: "memry_store",
-    description: "Store a memory for later recall. Use for important facts, preferences, decisions, or anything worth remembering. Memories are auto-isolated by chat/namespace.",
+    description: "Store a memory for later recall. Use for important facts, preferences, decisions, or anything worth remembering. Memories are auto-isolated by chat/namespace. Identity memories ('I am', 'I live in') are stored globally and never auto-deleted. Regular memories decay over time if not accessed - frequently used memories stay, forgotten ones are eventually archived/deleted.",
     inputSchema: {
       type: "object",
       properties: {
@@ -53,7 +53,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: "memry_search",
-    description: "Search memories semantically. Use to recall relevant information before responding. Searches within current chat/namespace by default.",
+    description: "Search memories semantically. Use to recall relevant information before responding. Searches current chat + global identity by default. Memories that are frequently searched stay active; unused memories gradually archive. The system self-maintains - no manual cleanup needed.",
     inputSchema: {
       type: "object",
       properties: {

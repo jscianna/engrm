@@ -56,11 +56,11 @@ export function decryptLocal(encrypted, vaultPassword) {
  * Check if we have a vault password configured
  */
 export function hasVaultPassword() {
-    return !!process.env.MEMRY_VAULT_PASSWORD;
+    return !!process.env.ENGRM_VAULT_PASSWORD;
 }
 /**
  * Get vault password from environment
  */
 export function getVaultPassword() {
-    return process.env.MEMRY_VAULT_PASSWORD || null;
+    return process.env.ENGRM_VAULT_PASSWORD || null;
 }

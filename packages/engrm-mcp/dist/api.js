@@ -1,25 +1,25 @@
 /**
- * MEMRY API client for zero-knowledge operations
+ * Engrm API client for zero-knowledge operations
  * Only sends: vectors (not text) + encrypted blobs
  */
 function getConfig() {
-    const apiKey = process.env.MEMRY_API_KEY;
-    const apiUrl = process.env.MEMRY_API_URL || "https://memry-sand.vercel.app";
+    const apiKey = process.env.ENGRM_API_KEY;
+    const apiUrl = process.env.ENGRM_API_URL || "https://engrm.xyz";
     if (!apiKey) {
-        throw new Error("MEMRY_API_KEY not set");
+        throw new Error("ENGRM_API_KEY not set");
     }
     return { apiKey, apiUrl: apiUrl.replace(/\/$/, "") };
 }
 /**
  * Get auto-namespace from environment
- * Priority: MEMRY_NAMESPACE > MEMRY_CHAT_ID > MEMRY_SESSION_ID > undefined
+ * Priority: ENGRM_NAMESPACE > ENGRM_CHAT_ID > ENGRM_SESSION_ID > undefined
  *
- * For OpenClaw: set MEMRY_NAMESPACE=${chat_id} or MEMRY_NAMESPACE=${conversation_label}
+ * For OpenClaw: set ENGRM_NAMESPACE=${chat_id} or ENGRM_NAMESPACE=${conversation_label}
  */
 export function getRawNamespace() {
-    return process.env.MEMRY_NAMESPACE
-        || process.env.MEMRY_CHAT_ID
-        || process.env.MEMRY_SESSION_ID
+    return process.env.ENGRM_NAMESPACE
+        || process.env.ENGRM_CHAT_ID
+        || process.env.ENGRM_SESSION_ID
         || undefined;
 }
 /**
@@ -39,7 +39,7 @@ export function getNamespace() {
     const raw = getRawNamespace();
     if (!raw)
         return undefined;
-    const vaultPassword = process.env.MEMRY_VAULT_PASSWORD;
+    const vaultPassword = process.env.ENGRM_VAULT_PASSWORD;
     if (!vaultPassword)
         return raw; // Fallback to raw if no password (shouldn't happen)
     return hashNamespace(raw, vaultPassword);

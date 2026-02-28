@@ -1,5 +1,5 @@
 /**
- * MEMRY MCP Server - Zero-Knowledge Memory for AI Agents
+ * Engrm MCP Server - Zero-Knowledge Memory for AI Agents
  *
  * Privacy guarantees:
  * - Embeddings generated locally (queries never leave device)
