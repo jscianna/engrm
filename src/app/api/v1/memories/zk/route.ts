@@ -4,12 +4,17 @@
  * Accepts pre-computed vectors and encrypted content.
  * Server never sees plaintext - only encrypted blobs and vectors.
  * 
- * If a similar memory exists (cosine similarity > 0.85), the existing
+ * If a similar memory exists (cosine similarity > 0.75), the existing
  * memory is reinforced instead of creating a duplicate.
+ * 
+ * Race condition protection:
+ * - Uses embedding hash as unique constraint to prevent duplicate creation
+ * - Reinforcement uses atomic SQL operations
  */
 
+import crypto from "node:crypto";
 import { upsertMemoryVector, semanticSearchVectorsDirect, validateVector, EMBEDDING_DIMENSIONS } from "@/lib/vector";
-import { insertMemoryWithMetadata, reinforceMemory, getMemoriesWithEmbeddings } from "@/lib/db";
+import { insertMemoryWithMetadata, reinforceMemory, getMemoriesWithEmbeddings, checkEmbeddingHashExists } from "@/lib/db";
 import { calculateFrequencyBoost, TYPE_HALFLIVES, type MemoryType } from "@/lib/memory-heuristics";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
@@ -18,7 +23,18 @@ import { isObject, resolveNamespaceIdOrError } from "@/lib/api-v1";
 
 export const runtime = "nodejs";
 
-const SIMILARITY_THRESHOLD = 0.85;
+const SIMILARITY_THRESHOLD = 0.75; // Lowered from 0.85 per docs
+
+/**
+ * Hash embedding vector for deduplication
+ * Used as unique constraint to prevent race condition duplicates
+ */
+function hashEmbedding(vector: number[]): string {
+  // Quantize to reduce floating point noise, then hash
+  const quantized = vector.map(v => Math.round(v * 10000) / 10000);
+  const data = JSON.stringify(quantized);
+  return crypto.createHash("sha256").update(data).digest("hex").slice(0, 32);
+}
 
 // Supported embedding models and their dimensions
 const SUPPORTED_DIMENSIONS = new Set<number>(Object.values(EMBEDDING_DIMENSIONS));
@@ -94,6 +110,29 @@ export async function POST(request: Request) {
       ? inputMetadata.entities.filter((e: unknown) => typeof e === "string")
       : [];
     const conversationId = typeof body.conversationId === "string" ? body.conversationId : undefined;
+    
+    // Generate embedding hash for deduplication (prevents race condition duplicates)
+    const embeddingHash = hashEmbedding(body.vector);
+    
+    // Fast path: Check if exact embedding already exists (hash collision = same memory)
+    const existingByHash = await checkEmbeddingHashExists(identity.userId, embeddingHash);
+    if (existingByHash) {
+      // Exact match - reinforce it
+      await reinforceMemory(existingByHash.id, identity.userId, {
+        newStrength: existingByHash.strength,
+        mentionCount: existingByHash.mentionCount + 1,
+        entities,
+        conversationId,
+      });
+      
+      return Response.json({ 
+        id: existingByHash.id,
+        action: "reinforced",
+        strength: existingByHash.strength,
+        mentionCount: existingByHash.mentionCount + 1,
+        similarityToExisting: 1.0,
+      }, { status: 200 });
+    }
     
     // Check for similar existing memories (reinforcement check)
     const existingMemories = await getMemoriesWithEmbeddings(

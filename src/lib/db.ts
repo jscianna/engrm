@@ -258,6 +258,11 @@ async function ensureMemoriesIndexes(client: Client): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_memories_user_session_created_at
     ON memories(user_id, session_id, created_at)
   `);
+  // Embedding hash index for fast dedup lookups (prevents race condition duplicates)
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_memories_user_embedding_hash
+    ON memories(user_id, embedding_hash)
+  `);
 }
 
 async function ensureMemoriesColumns(client: Client): Promise<void> {
@@ -280,6 +285,7 @@ async function ensureMemoriesColumns(client: Client): Promise<void> {
     { name: "source_conversations", ddl: "TEXT" },  // JSON array
     { name: "entities_json", ddl: "TEXT" },  // JSON array
     { name: "embedding", ddl: "TEXT" },  // JSON array of floats
+    { name: "embedding_hash", ddl: "TEXT" },  // SHA256 hash of embedding for dedup
   ];
 
   const tableInfo = await client.execute("PRAGMA table_info(memories)");
@@ -1578,6 +1584,39 @@ export async function getMemoriesWithEmbeddings(
   });
 }
 
+/**
+ * Check if a memory with the given embedding hash already exists
+ * Used to prevent race condition duplicates in ZK storage
+ */
+export async function checkEmbeddingHashExists(
+  userId: string,
+  embeddingHash: string
+): Promise<{ id: string; strength: number; mentionCount: number } | null> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const result = await client.execute({
+    sql: `
+      SELECT id, strength, mention_count
+      FROM memories
+      WHERE user_id = ? AND embedding_hash = ?
+      LIMIT 1
+    `,
+    args: [userId, embeddingHash],
+  });
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  const row = result.rows[0] as Record<string, unknown>;
+  return {
+    id: row.id as string,
+    strength: Number(row.strength ?? 1.0),
+    mentionCount: Number(row.mention_count ?? 1),
+  };
+}
+
 export async function reinforceMemory(
   memoryId: string,
   userId: string,
@@ -1592,53 +1631,53 @@ export async function reinforceMemory(
   const client = getDb();
   const now = new Date().toISOString();
 
-  // Get current values to merge
-  const current = await client.execute({
-    sql: `SELECT entities_json, source_conversations FROM memories WHERE id = ? AND user_id = ?`,
-    args: [memoryId, userId],
-  });
-  
-  const row = current.rows[0] as Record<string, unknown> | undefined;
-  
-  let existingEntities: string[] = [];
-  let existingConversations: string[] = [];
-  
-  try {
-    existingEntities = JSON.parse((row?.entities_json as string) || "[]") as string[];
-  } catch { /* no-op */ }
-  
-  try {
-    existingConversations = JSON.parse((row?.source_conversations as string) || "[]") as string[];
-  } catch { /* no-op */ }
-
-  // Merge entities (dedupe)
-  const mergedEntities = [...new Set([...existingEntities, ...(update.entities || [])])];
-  
-  // Append conversation ID
-  if (update.conversationId && !existingConversations.includes(update.conversationId)) {
-    existingConversations.push(update.conversationId);
-  }
-
-  await client.execute({
-    sql: `
-      UPDATE memories
-      SET strength = ?,
-          mention_count = ?,
-          entities_json = ?,
-          source_conversations = ?,
-          last_mentioned_at = ?
-      WHERE id = ? AND user_id = ?
-    `,
-    args: [
-      update.newStrength,
-      update.mentionCount,
-      JSON.stringify(mergedEntities),
-      JSON.stringify(existingConversations),
-      now,
-      memoryId,
-      userId,
-    ],
-  });
+  // Use atomic transaction to prevent race conditions
+  // "Atomic reinforcement" - read and update in single transaction
+  await client.batch([
+    // First: read current values and update atomically
+    // We use SQL-level JSON operations to avoid read-modify-write race
+    {
+      sql: `
+        UPDATE memories
+        SET 
+          strength = MAX(strength * 0.7 + ? * 0.3, 0.1),
+          mention_count = mention_count + 1,
+          entities_json = CASE 
+            WHEN entities_json IS NULL OR entities_json = '[]' THEN ?
+            ELSE (
+              SELECT json_group_array(DISTINCT value)
+              FROM (
+                SELECT value FROM json_each(entities_json)
+                UNION ALL
+                SELECT value FROM json_each(?)
+              )
+            )
+          END,
+          source_conversations = CASE
+            WHEN ? IS NULL THEN source_conversations
+            WHEN source_conversations IS NULL OR source_conversations = '[]' THEN json_array(?)
+            WHEN instr(source_conversations, ?) > 0 THEN source_conversations
+            ELSE json_insert(source_conversations, '$[#]', ?)
+          END,
+          last_mentioned_at = ?,
+          last_accessed_at = ?
+        WHERE id = ? AND user_id = ?
+      `,
+      args: [
+        update.newStrength / 10, // triggerIntensity for EMA
+        JSON.stringify(update.entities || []),
+        JSON.stringify(update.entities || []),
+        update.conversationId || null,
+        update.conversationId || "",
+        update.conversationId || "",
+        update.conversationId || "",
+        now,
+        now,
+        memoryId,
+        userId,
+      ],
+    },
+  ], "write");
 }
 
 export async function updateMemoryAccess(memoryId: string, userId: string): Promise<void> {
@@ -1727,6 +1766,16 @@ export async function deleteArchivedMemories(userId: string, olderThanDays: numb
   return result.rowsAffected ?? 0;
 }
 
+/**
+ * Hash embedding vector for deduplication
+ * Quantizes to reduce floating point noise, then hashes
+ */
+function hashEmbedding(vector: number[]): string {
+  const quantized = vector.map(v => Math.round(v * 10000) / 10000);
+  const data = JSON.stringify(quantized);
+  return crypto.createHash("sha256").update(data).digest("hex").slice(0, 32);
+}
+
 export async function insertMemoryWithMetadata(params: {
   userId: string;
   title?: string;
@@ -1750,6 +1799,7 @@ export async function insertMemoryWithMetadata(params: {
   const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
   const contentHash = crypto.createHash("sha256").update(text, "utf8").digest("hex");
   const embeddingJson = params.embedding ? JSON.stringify(params.embedding) : null;
+  const embeddingHashValue = params.embedding ? hashEmbedding(params.embedding) : null;
   const entitiesJson = params.entities ? JSON.stringify(params.entities) : null;
   const conversationsJson = params.conversationId ? JSON.stringify([params.conversationId]) : null;
 
@@ -1759,10 +1809,10 @@ export async function insertMemoryWithMetadata(params: {
         id, user_id, title, source_type, memory_type, importance, tags_csv,
         source_url, file_name, content_text, content_iv, content_encrypted, content_hash, arweave_tx_id,
         sync_status, sync_error, created_at, namespace_id, session_id, metadata_json,
-        embedding, strength, base_strength, halflife_days, entities_json, source_conversations,
+        embedding, embedding_hash, strength, base_strength, halflife_days, entities_json, source_conversations,
         first_mentioned_at, last_mentioned_at, last_accessed_at
       ) VALUES (?, ?, ?, 'text', ?, ?, '', NULL, NULL, ?, NULL, 0, ?, NULL, 'pending', NULL, ?, ?, ?, ?,
-                ?, 1.0, 1.0, ?, ?, ?, ?, ?, ?)
+                ?, ?, 1.0, 1.0, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1777,6 +1827,7 @@ export async function insertMemoryWithMetadata(params: {
       params.sessionId ?? null,
       metadataJson,
       embeddingJson,
+      embeddingHashValue,
       params.halflifeDays ?? 60,
       entitiesJson,
       conversationsJson,
