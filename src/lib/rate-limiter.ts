@@ -4,6 +4,8 @@
  * Self-cleaning with probabilistic TTL cleanup
  */
 
+import crypto from "node:crypto";
+import type { Transaction } from "@libsql/client";
 import { getDb } from "./turso";
 import { MemryError } from "./errors";
 
@@ -21,7 +23,7 @@ const CLEANUP_PROBABILITY = 0.01; // 1% of requests trigger cleanup
 
 let initialized = false;
 
-async function ensureInitialized(): Promise<void> {
+export async function ensureRateLimiterInitialized(): Promise<void> {
   if (initialized) return;
 
   const client = getDb();
@@ -77,7 +79,7 @@ export async function checkRateLimit(
   apiKeyId: string,
   endpoint: string
 ): Promise<void> {
-  await ensureInitialized();
+  await ensureRateLimiterInitialized();
   const client = getDb();
   const now = new Date();
   const nowIso = now.toISOString();
@@ -198,7 +200,7 @@ export async function checkStorageQuota(userId: string, additionalBytes: number)
  * Increment memory count after successful creation
  */
 export async function recordMemoryCreated(userId: string, sizeBytes: number): Promise<void> {
-  await ensureInitialized();
+  await ensureRateLimiterInitialized();
   const client = getDb();
   const now = new Date().toISOString();
 
@@ -212,7 +214,7 @@ export async function recordMemoryCreated(userId: string, sizeBytes: number): Pr
  * Decrement storage after memory deletion
  */
 export async function recordMemoryDeleted(userId: string, sizeBytes: number): Promise<void> {
-  await ensureInitialized();
+  await ensureRateLimiterInitialized();
   const client = getDb();
   const now = new Date().toISOString();
 
@@ -244,7 +246,7 @@ async function getOrCreateStats(userId: string): Promise<{
   memoriesThisMonth: number;
   storageBytes: number;
 }> {
-  await ensureInitialized();
+  await ensureRateLimiterInitialized();
   const client = getDb();
   const now = new Date();
   const nowIso = now.toISOString();
@@ -292,7 +294,7 @@ function getTomorrowMidnightUTC(): string {
  * Called probabilistically on each request - self-healing, no cron needed
  */
 export async function cleanupOldUsageRecords(olderThanDays: number = USAGE_RECORD_TTL_DAYS): Promise<number> {
-  await ensureInitialized();
+  await ensureRateLimiterInitialized();
   const client = getDb();
   const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString();
 
@@ -302,4 +304,97 @@ export async function cleanupOldUsageRecords(olderThanDays: number = USAGE_RECOR
   });
 
   return result.rowsAffected ?? 0;
+}
+
+export async function reserveMemoryQuotaInTransaction(
+  tx: Transaction,
+  userId: string,
+  sizeBytes: number,
+): Promise<void> {
+  const nowIso = new Date().toISOString();
+  const today = nowIso.slice(0, 10);
+  const thisMonth = nowIso.slice(0, 7);
+
+  await tx.execute({
+    sql: `
+      INSERT INTO usage_stats (
+        user_id,
+        memories_this_month,
+        storage_bytes,
+        api_calls_today,
+        api_calls_this_month,
+        last_reset_day,
+        last_reset_month,
+        updated_at
+      )
+      VALUES (?, 0, 0, 0, 0, ?, ?, ?)
+      ON CONFLICT(user_id) DO NOTHING
+    `,
+    args: [userId, today, thisMonth, nowIso],
+  });
+
+  const updateResult = await tx.execute({
+    sql: `
+      UPDATE usage_stats
+      SET
+        memories_this_month = CASE
+          WHEN last_reset_month != ? THEN 1
+          ELSE memories_this_month + 1
+        END,
+        storage_bytes = storage_bytes + ?,
+        last_reset_day = ?,
+        last_reset_month = ?,
+        updated_at = ?
+      WHERE user_id = ?
+        AND storage_bytes + ? <= ?
+        AND (
+          last_reset_month != ?
+          OR memories_this_month < ?
+        )
+    `,
+    args: [
+      thisMonth,
+      sizeBytes,
+      today,
+      thisMonth,
+      nowIso,
+      userId,
+      sizeBytes,
+      LIMITS.STORAGE_BYTES,
+      thisMonth,
+      LIMITS.MEMORIES_PER_MONTH,
+    ],
+  });
+
+  if ((updateResult.rowsAffected ?? 0) > 0) {
+    return;
+  }
+
+  const statsResult = await tx.execute({
+    sql: `
+      SELECT memories_this_month, storage_bytes, last_reset_month
+      FROM usage_stats
+      WHERE user_id = ?
+      LIMIT 1
+    `,
+    args: [userId],
+  });
+
+  const row = statsResult.rows[0] as Record<string, unknown> | undefined;
+  const storedMonth = typeof row?.last_reset_month === "string" ? row.last_reset_month : null;
+  const effectiveMemories = storedMonth === thisMonth ? Number(row?.memories_this_month ?? 0) : 0;
+  const effectiveStorage = Number(row?.storage_bytes ?? 0);
+
+  if (effectiveStorage + sizeBytes > LIMITS.STORAGE_BYTES) {
+    throw new MemryError("QUOTA_STORAGE", {
+      limit: LIMITS.STORAGE_BYTES,
+      current: effectiveStorage,
+      requested: sizeBytes,
+    });
+  }
+
+  throw new MemryError("QUOTA_MEMORIES", {
+    limit: LIMITS.MEMORIES_PER_MONTH,
+    current: effectiveMemories,
+  });
 }

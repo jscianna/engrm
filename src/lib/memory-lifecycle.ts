@@ -10,6 +10,7 @@
  */
 
 import { getDb } from "./turso";
+import { deleteMemoryVector } from "./qdrant";
 
 // =============================================================================
 // CONFIGURATION (MoA-recommended thresholds)
@@ -278,18 +279,14 @@ export async function runLifecycleMaintenance(userId: string): Promise<{
   // Delete memories (and their vectors)
   if (toDelete.length > 0) {
     const placeholders = toDelete.map(() => "?").join(",");
-    
-    // Delete vectors first
-    await client.execute({
-      sql: `DELETE FROM memory_vectors WHERE memory_id IN (${placeholders})`,
-      args: toDelete,
-    });
-    
+
     // Then delete memories
     await client.execute({
       sql: `DELETE FROM memories WHERE id IN (${placeholders})`,
       args: toDelete,
     });
+
+    await Promise.allSettled(toDelete.map(async (id) => deleteMemoryVector(id)));
     
     stats.deleted = toDelete.length;
   }

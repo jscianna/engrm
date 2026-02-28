@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { createClient, type Client } from "@libsql/client";
+import type { Client } from "@libsql/client";
 import type {
   MemoryDashboardStats,
   MemoryEdgeRecord,
@@ -12,27 +12,14 @@ import type {
   MemorySourceType,
   MemorySyncStatus,
 } from "@/lib/types";
+import { getDb } from "@/lib/turso";
+import { deleteMemoryVector } from "@/lib/qdrant";
+import {
+  ensureRateLimiterInitialized,
+  reserveMemoryQuotaInTransaction,
+} from "@/lib/rate-limiter";
 
 const ENCRYPTION_ALGORITHM = "aes-256-gcm";
-
-let db: Client | null = null;
-
-function getDb(): Client {
-  if (!db) {
-    const url = process.env.TURSO_DATABASE_URL;
-    const authToken = process.env.TURSO_AUTH_TOKEN;
-    
-    if (!url) {
-      throw new Error("TURSO_DATABASE_URL is required");
-    }
-    
-    db = createClient({
-      url,
-      authToken,
-    });
-  }
-  return db;
-}
 
 function getMasterKey(): Buffer {
   const raw = process.env.ENCRYPTION_KEY;
@@ -260,10 +247,25 @@ async function ensureMemoriesIndexes(client: Client): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_memories_user_session_created_at
     ON memories(user_id, session_id, created_at)
   `);
-  // Embedding hash index for fast dedup lookups (prevents race condition duplicates)
   await client.execute(`
-    CREATE INDEX IF NOT EXISTS idx_memories_user_embedding_hash
+    DROP INDEX IF EXISTS idx_memories_user_embedding_hash
+  `);
+  await client.execute(`
+    DELETE FROM memories
+    WHERE rowid IN (
+      SELECT duplicate.rowid
+      FROM memories duplicate
+      JOIN memories canonical
+        ON canonical.user_id = duplicate.user_id
+       AND canonical.embedding_hash = duplicate.embedding_hash
+       AND canonical.rowid < duplicate.rowid
+      WHERE duplicate.embedding_hash IS NOT NULL
+    )
+  `);
+  await client.execute(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_memories_user_embedding_hash
     ON memories(user_id, embedding_hash)
+    WHERE embedding_hash IS NOT NULL
   `);
 }
 
@@ -1206,6 +1208,69 @@ export async function setApiKeyExpiration(
   return (result.rowsAffected ?? 0) > 0;
 }
 
+export async function isApiKeyValid(keyId: string): Promise<{
+  valid: boolean;
+  reason?: "revoked" | "expired";
+}> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const result = await client.execute({
+    sql: `SELECT revoked_at, expires_at FROM api_keys WHERE id = ? LIMIT 1`,
+    args: [keyId],
+  });
+
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  if (!row) {
+    return { valid: false, reason: "revoked" };
+  }
+
+  if (row.revoked_at) {
+    return { valid: false, reason: "revoked" };
+  }
+
+  if (row.expires_at && new Date(row.expires_at as string) < new Date()) {
+    return { valid: false, reason: "expired" };
+  }
+
+  return { valid: true };
+}
+
+export async function getApiKeyStats(keyId: string): Promise<{
+  createdAt: string;
+  lastUsed: string | null;
+  revokedAt: string | null;
+  expiresAt: string | null;
+  requestCount: number;
+} | null> {
+  await ensureInitialized();
+  await ensureRateLimiterInitialized();
+  const client = getDb();
+
+  const keyResult = await client.execute({
+    sql: `SELECT created_at, last_used, revoked_at, expires_at FROM api_keys WHERE id = ? LIMIT 1`,
+    args: [keyId],
+  });
+
+  const row = keyResult.rows[0] as Record<string, unknown> | undefined;
+  if (!row) {
+    return null;
+  }
+
+  const countResult = await client.execute({
+    sql: `SELECT COUNT(*) as count FROM api_usage WHERE api_key_id = ?`,
+    args: [keyId],
+  });
+
+  return {
+    createdAt: row.created_at as string,
+    lastUsed: (row.last_used as string) ?? null,
+    revokedAt: (row.revoked_at as string) ?? null,
+    expiresAt: (row.expires_at as string) ?? null,
+    requestCount: Number((countResult.rows[0] as Record<string, unknown> | undefined)?.count ?? 0),
+  };
+}
+
 export async function createNamespace(userId: string, name: string): Promise<NamespaceRecord> {
   await ensureInitialized();
   const client = getDb();
@@ -1414,6 +1479,7 @@ export async function insertAgentMemory(params: {
   sessionId?: string | null;
 }): Promise<AgentMemoryRecord> {
   await ensureInitialized();
+  await ensureRateLimiterInitialized();
   const client = getDb();
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -1421,17 +1487,28 @@ export async function insertAgentMemory(params: {
   const title = (params.title?.trim() || text.slice(0, 80) || "Untitled Memory").trim();
   const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
   const contentHash = crypto.createHash("sha256").update(text, "utf8").digest("hex");
+  const sizeBytes = Buffer.byteLength(text, "utf8");
+  const tx = await client.transaction("write");
 
-  await client.execute({
-    sql: `
-      INSERT INTO memories (
-        id, user_id, title, source_type, memory_type, importance, tags_csv,
-        source_url, file_name, content_text, content_iv, content_encrypted, content_hash, arweave_tx_id,
-        sync_status, sync_error, created_at, namespace_id, session_id, metadata_json
-      ) VALUES (?, ?, ?, 'text', 'episodic', 5, '', NULL, NULL, ?, NULL, 0, ?, NULL, 'pending', NULL, ?, ?, ?, ?)
-    `,
-    args: [id, params.userId, title, text, contentHash, now, params.namespaceId ?? null, params.sessionId ?? null, metadataJson],
-  });
+  try {
+    await reserveMemoryQuotaInTransaction(tx, params.userId, sizeBytes);
+    await tx.execute({
+      sql: `
+        INSERT INTO memories (
+          id, user_id, title, source_type, memory_type, importance, tags_csv,
+          source_url, file_name, content_text, content_iv, content_encrypted, content_hash, arweave_tx_id,
+          sync_status, sync_error, created_at, namespace_id, session_id, metadata_json
+        ) VALUES (?, ?, ?, 'text', 'episodic', 5, '', NULL, NULL, ?, NULL, 0, ?, NULL, 'pending', NULL, ?, ?, ?, ?)
+      `,
+      args: [id, params.userId, title, text, contentHash, now, params.namespaceId ?? null, params.sessionId ?? null, metadataJson],
+    });
+    await tx.commit();
+  } catch (error) {
+    await tx.rollback().catch(() => {});
+    throw error;
+  } finally {
+    tx.close();
+  }
 
   return {
     id,
@@ -1563,10 +1640,7 @@ export async function deleteAgentMemoryById(userId: string, id: string): Promise
   // Cascade: delete vector (best-effort, don't fail if vector missing)
   if (deleted) {
     try {
-      await client.execute({
-        sql: `DELETE FROM memory_vectors WHERE memory_id = ?`,
-        args: [id],
-      });
+      await deleteMemoryVector(id);
     } catch (e) {
       console.error(`Failed to delete vector for memory ${id}:`, e);
       // Don't fail the operation - main memory is deleted
@@ -1709,8 +1783,8 @@ export async function reinforceMemory(
       sql: `
         UPDATE memories
         SET 
-          strength = MAX(strength * 0.7 + ? * 0.3, 0.1),
-          mention_count = mention_count + 1,
+          strength = MAX(?, 0.1),
+          mention_count = MAX(mention_count, ?),
           entities_json = CASE 
             WHEN entities_json IS NULL OR entities_json = '[]' THEN ?
             ELSE (
@@ -1733,7 +1807,8 @@ export async function reinforceMemory(
         WHERE id = ? AND user_id = ?
       `,
       args: [
-        update.newStrength / 10, // triggerIntensity for EMA
+        update.newStrength,
+        update.mentionCount,
         JSON.stringify(update.entities || []),
         JSON.stringify(update.entities || []),
         update.conversationId || null,
@@ -1823,6 +1898,19 @@ export async function deleteArchivedMemories(userId: string, olderThanDays: numb
   await ensureInitialized();
   const client = getDb();
   const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString();
+  const staleResult = await client.execute({
+    sql: `
+      SELECT id
+      FROM memories
+      WHERE user_id = ? AND archived_at IS NOT NULL AND archived_at < ?
+    `,
+    args: [userId, cutoff],
+  });
+  const ids = staleResult.rows.map((row) => row.id as string);
+
+  if (ids.length === 0) {
+    return 0;
+  }
 
   const result = await client.execute({
     sql: `
@@ -1831,6 +1919,8 @@ export async function deleteArchivedMemories(userId: string, olderThanDays: numb
     `,
     args: [userId, cutoff],
   });
+
+  await Promise.allSettled(ids.map(async (id) => deleteMemoryVector(id)));
 
   return result.rowsAffected ?? 0;
 }
@@ -1915,5 +2005,108 @@ export async function insertMemoryWithMetadata(params: {
     namespaceId: params.namespaceId ?? null,
     sessionId: params.sessionId ?? null,
     createdAt: now,
+  };
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Error && /unique constraint failed/i.test(error.message);
+}
+
+export async function insertMemoryWithMetadataAndQuota(params: {
+  userId: string;
+  title?: string;
+  text: string;
+  embedding?: number[];
+  memoryType?: string;
+  importance?: number;
+  halflifeDays?: number;
+  entities?: string[];
+  conversationId?: string;
+  namespaceId?: string | null;
+  sessionId?: string | null;
+  metadata?: Record<string, unknown> | null;
+}): Promise<{ memory: AgentMemoryRecord; created: boolean }> {
+  await ensureInitialized();
+  await ensureRateLimiterInitialized();
+
+  const client = getDb();
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const text = params.text.trim();
+  const title = (params.title?.trim() || text.slice(0, 80) || "Untitled Memory").trim();
+  const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
+  const contentHash = crypto.createHash("sha256").update(text, "utf8").digest("hex");
+  const embeddingJson = params.embedding ? JSON.stringify(params.embedding) : null;
+  const embeddingHashValue = params.embedding ? hashEmbedding(params.embedding) : null;
+  const entitiesJson = params.entities ? JSON.stringify(params.entities) : null;
+  const conversationsJson = params.conversationId ? JSON.stringify([params.conversationId]) : null;
+  const sizeBytes = Buffer.byteLength(text, "utf8");
+  const tx = await client.transaction("write");
+
+  try {
+    await reserveMemoryQuotaInTransaction(tx, params.userId, sizeBytes);
+    await tx.execute({
+      sql: `
+        INSERT INTO memories (
+          id, user_id, title, source_type, memory_type, importance, tags_csv,
+          source_url, file_name, content_text, content_iv, content_encrypted, content_hash, arweave_tx_id,
+          sync_status, sync_error, created_at, namespace_id, session_id, metadata_json,
+          embedding, embedding_hash, strength, base_strength, halflife_days, entities_json, source_conversations,
+          first_mentioned_at, last_mentioned_at, last_accessed_at
+        ) VALUES (?, ?, ?, 'text', ?, ?, '', NULL, NULL, ?, NULL, 0, ?, NULL, 'pending', NULL, ?, ?, ?, ?,
+                  ?, ?, 1.0, 1.0, ?, ?, ?, ?, ?, ?)
+      `,
+      args: [
+        id,
+        params.userId,
+        title,
+        params.memoryType ?? "episodic",
+        params.importance ?? 5,
+        text,
+        contentHash,
+        now,
+        params.namespaceId ?? null,
+        params.sessionId ?? null,
+        metadataJson,
+        embeddingJson,
+        embeddingHashValue,
+        params.halflifeDays ?? 60,
+        entitiesJson,
+        conversationsJson,
+        now,
+        now,
+        now,
+      ],
+    });
+    await tx.commit();
+  } catch (error) {
+    await tx.rollback().catch(() => {});
+    if (embeddingHashValue && isUniqueConstraintError(error)) {
+      const existing = await checkEmbeddingHashExists(params.userId, embeddingHashValue);
+      if (existing) {
+        const memory = await getAgentMemoryById(params.userId, existing.id);
+        if (!memory) {
+          throw error;
+        }
+        return { memory, created: false };
+      }
+    }
+    throw error;
+  } finally {
+    tx.close();
+  }
+
+  return {
+    memory: {
+      id,
+      userId: params.userId,
+      title,
+      text,
+      metadata: params.metadata ?? null,
+      namespaceId: params.namespaceId ?? null,
+      sessionId: params.sessionId ?? null,
+      createdAt: now,
+    },
+    created: true,
   };
 }

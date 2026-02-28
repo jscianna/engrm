@@ -3,6 +3,8 @@
  * Only sends: vectors (not text) + encrypted blobs
  */
 
+import { pbkdf2Sync } from "node:crypto";
+
 export interface MemryConfig {
   apiKey: string;
   apiUrl: string;
@@ -54,10 +56,14 @@ export function getRawNamespace(): string | undefined {
  * Server sees opaque ID, can't know the actual chat/project name.
  */
 export function hashNamespace(namespace: string, vaultPassword: string): string {
-  const crypto = require('crypto');
-  const combined = `${namespace}:${vaultPassword}`;
-  const hash = crypto.createHash('sha256').update(combined).digest('hex');
-  return `ns_${hash.slice(0, 16)}`; // e.g., "ns_a3f2b8c1d4e5f6a7"
+  const key = pbkdf2Sync(
+    vaultPassword,
+    namespace,
+    100_000,
+    16,
+    "sha256",
+  );
+  return `ns_${key.toString("hex")}`;
 }
 
 /**

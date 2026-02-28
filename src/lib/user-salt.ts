@@ -2,12 +2,12 @@
  * Server-Side Salt Management
  * 
  * Each user gets a cryptographically random 32-byte salt stored server-side.
- * Combined with their vault password for namespace hashing.
+ * Used for server-side secrets such as HMAC derivation.
  * 
  * Security benefits:
- * - Even if two users have the same vault password, their namespace hashes differ
- * - Attacker needs both DB access AND vault password to reverse hashes
- * - Salt is generated once and never changes (deterministic hashing)
+ * - Secrets are isolated per user
+ * - Attacker needs database access to recover server-side salts
+ * - Salt is generated once and never changes
  */
 
 import crypto from "node:crypto";
@@ -80,38 +80,6 @@ export async function getUserSalt(userId: string): Promise<string> {
   });
 
   return salt;
-}
-
-/**
- * Hash a namespace using server salt + vault password
- * 
- * Process:
- * 1. Get server-side salt for user
- * 2. Combine: PBKDF2(vault_password, server_salt + namespace)
- * 3. Return deterministic hash
- */
-export async function hashNamespaceWithServerSalt(
-  userId: string,
-  namespace: string,
-  vaultPassword: string
-): Promise<string> {
-  if (!namespace) return "";
-
-  const serverSalt = await getUserSalt(userId);
-  
-  // Combine server salt with namespace for the PBKDF2 salt
-  const combinedSalt = `${serverSalt}:${namespace}`;
-  
-  // PBKDF2 with 100k iterations
-  const key = crypto.pbkdf2Sync(
-    vaultPassword,
-    combinedSalt,
-    100_000,
-    16, // 16 bytes = 32 hex chars
-    "sha256"
-  );
-
-  return `ns_${key.toString("hex")}`;
 }
 
 /**

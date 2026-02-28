@@ -80,13 +80,17 @@ export async function GET(request: Request) {
       },
       namespaceHashing: {
         enabled: true,
-        algorithm: "PBKDF2 with server-side salt",
+        algorithm: "PBKDF2-SHA256",
         iterations: 100_000,
+        location: "client_only",
       },
       embeddingPrivacy: {
         enabled: false,
         notes: "Embeddings reveal semantic similarity. Differential privacy not implemented.",
         recommendation: "Document limitation transparently",
+      },
+      requestSigning: {
+        status: "not_enforced",
       },
     },
 

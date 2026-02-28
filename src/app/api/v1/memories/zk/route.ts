@@ -13,13 +13,17 @@
  */
 
 import crypto from "node:crypto";
-import { upsertMemoryVector, semanticSearchVectorsDirect, EMBEDDING_DIMENSIONS } from "@/lib/qdrant";
+import { upsertMemoryVector, EMBEDDING_DIMENSIONS } from "@/lib/qdrant";
 import { validateVector } from "@/lib/vector";
-import { insertMemoryWithMetadata, reinforceMemory, getMemoriesWithEmbeddings, checkEmbeddingHashExists } from "@/lib/db";
+import {
+  insertMemoryWithMetadataAndQuota,
+  reinforceMemory,
+  getMemoriesWithEmbeddings,
+  checkEmbeddingHashExists,
+} from "@/lib/db";
 import { calculateFrequencyBoost, TYPE_HALFLIVES, type MemoryType } from "@/lib/memory-heuristics";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
-import { checkMemoryQuota, recordMemoryCreated } from "@/lib/rate-limiter";
 import { isObject, resolveNamespaceIdOrError } from "@/lib/api-v1";
 import { logAuditEvent, extractRequestInfo } from "@/lib/audit-log";
 
@@ -185,15 +189,12 @@ export async function POST(request: Request) {
       }, { status: 200 });
     }
     
-    // Check quota before creating new memory
-    await checkMemoryQuota(identity.userId);
-
     const metadata = {
       ...inputMetadata,
       zk: true,
     };
 
-    const memory = await insertMemoryWithMetadata({
+    const { memory, created } = await insertMemoryWithMetadataAndQuota({
       userId: identity.userId,
       title: encryptedTitle,
       text: body.encryptedContent,
@@ -208,9 +209,28 @@ export async function POST(request: Request) {
       metadata,
     });
 
-    // Track usage
-    const sizeBytes = Buffer.byteLength(body.encryptedContent, "utf8");
-    await recordMemoryCreated(identity.userId, sizeBytes);
+    if (!created) {
+      const existing = await checkEmbeddingHashExists(identity.userId, embeddingHash);
+      if (!existing) {
+        throw new MemryError("DATABASE_ERROR");
+      }
+
+      const nextMentionCount = existing.mentionCount + 1;
+      await reinforceMemory(memory.id, identity.userId, {
+        newStrength: existing.strength,
+        mentionCount: nextMentionCount,
+        entities,
+        conversationId,
+      });
+
+      return Response.json({
+        id: memory.id,
+        action: "reinforced",
+        strength: existing.strength,
+        mentionCount: nextMentionCount,
+        similarityToExisting: 1.0,
+      }, { status: 200 });
+    }
 
     await upsertMemoryVector({
       memoryId: memory.id,

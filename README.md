@@ -152,7 +152,6 @@ curl https://engrm.xyz/api/v1/memories \
 | `POST` | `/api/v1/memories/zk` | Store encrypted memory |
 | `POST` | `/api/v1/search` | Semantic search |
 | `POST` | `/api/v1/context` | Get LLM-ready context |
-| `POST` | `/api/v1/namespace-hash` | Hash namespace with server salt |
 
 ### Example: Store a Memory
 
@@ -215,7 +214,7 @@ Configure in `claude_desktop_config.json`:
 |-------|-----------|-------|
 | Content | AES-256-GCM | Client-side, key never leaves browser |
 | Key Derivation | PBKDF2 | 100,000 iterations |
-| Namespace Hash | PBKDF2 + Server Salt | Per-user random salt stored server-side |
+| Namespace Hash | PBKDF2-SHA256 | Client-side only: `PBKDF2(vault_password, namespace, 100,000)` |
 | Transport | TLS 1.3 | All API traffic encrypted |
 | At Rest | Provider Default | Turso (AES-256), Qdrant (encrypted storage) |
 

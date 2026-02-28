@@ -526,7 +526,7 @@ Hash:  PBKDF2(vault_password, namespace, 100k iterations)
 Stored: "ns_a3f2b8c1e4d7f9a2..."
 
 // Server sees only the hash, never "telegram-chat-12345"
-// PBKDF2 makes brute-force attacks computationally expensive`}</CodeBlock>
+// Namespace hashing happens client-side only`}</CodeBlock>
 
             <h3 className="text-xl font-semibold mb-4 mt-8">Encryption Flow</h3>
             <CodeBlock language="text">{`1. Agent extracts memory from conversation

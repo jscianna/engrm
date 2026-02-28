@@ -1,9 +1,8 @@
 import { embedText } from "@/lib/embeddings";
-import { upsertMemoryVector } from "@/lib/vector";
+import { upsertMemoryVector } from "@/lib/qdrant";
 import { getSessionById, insertAgentMemory, listSessionMemories } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
-import { checkMemoryQuota, recordMemoryCreated } from "@/lib/rate-limiter";
 import { isObject } from "@/lib/api-v1";
 
 export const runtime = "nodejs";
@@ -45,10 +44,6 @@ export async function POST(
     if (!isObject(body) || typeof body.text !== "string" || !body.text.trim()) {
       throw new MemryError("VALIDATION_ERROR", { field: "text", reason: "required" });
     }
-
-    // Check quota
-    await checkMemoryQuota(identity.userId);
-
     const metadata = isObject(body.metadata) ? body.metadata : null;
     const memory = await insertAgentMemory({
       userId: identity.userId,
@@ -58,10 +53,6 @@ export async function POST(
       namespaceId: session.namespaceId,
       sessionId,
     });
-
-    // Track usage
-    const sizeBytes = Buffer.byteLength(body.text, "utf8");
-    await recordMemoryCreated(identity.userId, sizeBytes);
 
     const vector = await embedText(memory.text.slice(0, 6000));
     await upsertMemoryVector({

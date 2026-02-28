@@ -6,7 +6,8 @@
  * Returns encrypted content that client decrypts locally.
  */
 
-import { semanticSearchVectorsDirect } from "@/lib/vector";
+import { semanticSearchVectorsDirect } from "@/lib/qdrant";
+import { semanticSearchVectorsDirect as semanticSearchVectorsDirectTurso } from "@/lib/vector";
 import { strengthenCoRetrievedMemories } from "@/lib/memories";
 import { getAgentMemoriesByIds } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
@@ -41,11 +42,21 @@ export async function POST(request: Request) {
 
     const topK = normalizeLimit(body.topK, 5, 50);
 
-    const hits = await semanticSearchVectorsDirect({
-      userId: identity.userId,
-      vector: body.vector,
-      topK,
-    });
+    let hits: Array<{ id: string; score: number }>;
+    try {
+      hits = await semanticSearchVectorsDirect({
+        userId: identity.userId,
+        vector: body.vector,
+        topK,
+      });
+    } catch (error) {
+      console.warn("[ZK Search] Qdrant unavailable, falling back to Turso:", error);
+      hits = await semanticSearchVectorsDirectTurso({
+        userId: identity.userId,
+        vector: body.vector,
+        topK,
+      });
+    }
 
     if (hits.length === 0) {
       return Response.json({ results: [] });
