@@ -1,10 +1,10 @@
-# MEMRY + OpenClaw Integration
+# Engrm + OpenClaw Integration
 
-OpenClaw agents wake up fresh each session. MEMRY gives them permanent memory that survives restarts, context compaction, and model switches.
+OpenClaw agents wake up fresh each session. Engrm gives them permanent memory that survives restarts, context compaction, and model switches.
 
-## Why Agents Need MEMRY
+## Why Agents Need Engrm
 
-| Problem | MEMRY Solution |
+| Problem | Engrm Solution |
 |---------|----------------|
 | Agent forgets user preferences | Store preferences permanently |
 | Context window fills up | Offload to searchable memory |
@@ -16,13 +16,13 @@ OpenClaw agents wake up fresh each session. MEMRY gives them permanent memory th
 
 ```bash
 # Set your API key
-export MEMRY_API_KEY="mem_xxx"
+export Engrm_API_KEY="mem_xxx"
 ```
 
 ```python
-from memry import MemryClient
+from engrm import MemryClient
 
-client = MemryClient(api_key=os.environ["MEMRY_API_KEY"])
+client = MemryClient(api_key=os.environ["Engrm_API_KEY"])
 
 # Store a memory
 client.store("User prefers morning meeting times")
@@ -39,7 +39,7 @@ context = client.get_context("scheduling a meeting", max_tokens=2000)
 ```python
 # When user states a preference
 async def save_preference(user_id: str, preference: str):
-    await memry.store(
+    await engrm.store(
         content=f"User preference: {preference}",
         namespace=f"user_{user_id}",
         metadata={"type": "preference"}
@@ -47,7 +47,7 @@ async def save_preference(user_id: str, preference: str):
 
 # Before responding to preference-related questions
 async def get_preferences(user_id: str, topic: str):
-    return await memry.search(
+    return await engrm.search(
         query=topic,
         namespace=f"user_{user_id}",
         top_k=5
@@ -63,19 +63,19 @@ async def get_preferences(user_id: str, topic: str):
 
 ```python
 # Start a session for this conversation
-session = await memry.create_session(
+session = await engrm.create_session(
     namespace="conversations",
     metadata={"channel": "slack", "started": now()}
 )
 
 # After each exchange
-await memry.store(
+await engrm.store(
     content=f"User asked about project deadlines. I provided Q2 timeline.",
     session_id=session.id
 )
 
 # On new session, recall context
-context = await memry.get_context(
+context = await engrm.get_context(
     query="recent discussion topics",
     max_tokens=2000
 )
@@ -85,14 +85,14 @@ context = await memry.get_context(
 
 ```python
 # When user corrects the agent
-await memry.store(
+await engrm.store(
     content=f"CORRECTION: {original_statement} was wrong. Correct info: {correction}",
     namespace="learnings",
     metadata={"type": "correction", "topic": topic}
 )
 
 # Before responding, check for relevant corrections
-corrections = await memry.search(
+corrections = await engrm.search(
     query=current_topic,
     namespace="learnings",
     top_k=3
@@ -103,14 +103,14 @@ corrections = await memry.search(
 
 ```python
 # When user assigns a task
-await memry.store(
+await engrm.store(
     content=f"Task: {task_description}. Due: {due_date}. Priority: {priority}",
     namespace="tasks",
     metadata={"status": "pending", "assigned": now()}
 )
 
 # Check pending tasks
-pending = await memry.search(
+pending = await engrm.search(
     query="pending tasks",
     namespace="tasks"
 )
@@ -120,14 +120,14 @@ pending = await memry.search(
 
 ```python
 # When learning new information
-await memry.store(
+await engrm.store(
     content=f"Fact: {information}. Source: {source}. Context: {context}",
     namespace="knowledge",
     metadata={"category": category, "confidence": "high"}
 )
 
 # Query knowledge base
-relevant = await memry.search(
+relevant = await engrm.search(
     query="information about topic X",
     namespace="knowledge",
     top_k=10
@@ -143,13 +143,13 @@ writing_agent_ns = "agent_writing"
 coding_agent_ns = "agent_coding"
 
 # Research agent stores findings
-await memry.store(
+await engrm.store(
     content="Found 3 relevant papers on topic",
     namespace=research_agent_ns
 )
 
 # Writing agent can access research namespace if needed
-research = await memry.search(
+research = await engrm.search(
     query="relevant papers",
     namespace=research_agent_ns
 )
@@ -161,7 +161,7 @@ The `/context` endpoint is designed for LLM prompts:
 
 ```python
 # Get optimized context for your current task
-context = await memry.get_context(
+context = await engrm.get_context(
     query="user's project requirements",
     max_tokens=4000,  # Fits in most context windows
     namespace="projects"
@@ -183,7 +183,7 @@ The context endpoint:
 
 ## Security Model
 
-MEMRY uses zero-knowledge encryption:
+Engrm uses zero-knowledge encryption:
 - Your vault password never leaves your device
 - Server stores only encrypted blobs
 - Even API access can't read plaintext without the vault key
@@ -207,9 +207,9 @@ This is critical for agents handling:
 
 ## The Pitch
 
-> **Without MEMRY:** Agent forgets everything between sessions. Context window overflows. No way to recall past conversations.
+> **Without Engrm:** Agent forgets everything between sessions. Context window overflows. No way to recall past conversations.
 >
-> **With MEMRY:** Infinite searchable memory. Semantic recall. Permanent storage. Zero-knowledge encryption. One API call.
+> **With Engrm:** Infinite searchable memory. Semantic recall. Permanent storage. Zero-knowledge encryption. One API call.
 
 ```python
 # That's it. Your agent now has permanent memory.

@@ -48,7 +48,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
           <Sparkles className="h-12 w-12 text-cyan-400" />
         </div>
       </div>
-      <h2 className="mb-3 text-2xl font-semibold text-zinc-100">Welcome to MEMRY</h2>
+      <h2 className="mb-3 text-2xl font-semibold text-zinc-100">Welcome to Engrm</h2>
       <p className="mb-6 text-zinc-400 max-w-md mx-auto">
         Zero-knowledge memory for your AI agents. Your data is encrypted client-side —
         we never see your memories.
@@ -232,7 +232,7 @@ function ApiKeyStep({
         </div>
         <h2 className="mb-2 text-xl font-semibold text-zinc-100">Your API Key</h2>
         <p className="text-sm text-zinc-400">
-          Use this key to authenticate your agents with MEMRY.
+          Use this key to authenticate your agents with Engrm.
         </p>
       </div>
 
@@ -385,7 +385,7 @@ export function OnboardingWizard({ userId, onComplete }: OnboardingWizardProps) 
 
       // Store key in session
       const keyB64 = await exportKeyToBase64(derivedKey);
-      sessionStorage.setItem(`memry_vault_key_b64:${userId}`, keyB64);
+      sessionStorage.setItem(`engrm_vault_key_b64:${userId}`, keyB64);
       
       setVaultKey(derivedKey);
       setStep("api-key");

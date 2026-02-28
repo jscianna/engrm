@@ -1,7 +1,7 @@
 # Memory Graph Specification
 
 ## Goal
-Add persistent graph relationships between memories, with typed edges, temporal reasoning, and visualization. This makes MEMRY competitive with Supermemory's graph features while maintaining our zero-knowledge and permanence advantages.
+Add persistent graph relationships between memories, with typed edges, temporal reasoning, and visualization. This makes Engrm competitive with Supermemory's graph features while maintaining our zero-knowledge and permanence advantages.
 
 ## Database Schema
 

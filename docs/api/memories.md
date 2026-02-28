@@ -5,8 +5,8 @@
 `POST /api/v1/memories`
 
 ```bash
-curl -X POST "$MEMRY_URL/api/v1/memories" \
-  -H "Authorization: Bearer $MEMRY_API_KEY" \
+curl -X POST "$Engrm_URL/api/v1/memories" \
+  -H "Authorization: Bearer $Engrm_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Customer requested SOC2 docs.",

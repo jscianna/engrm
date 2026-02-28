@@ -2,7 +2,7 @@
 
 ## Overview
 
-Automatic memory formation for AI agents. The agent extracts, scores, and encrypts memories client-side before sending to MEMRY. Zero LLM cost on MEMRY's side. True zero-knowledge preserved.
+Automatic memory formation for AI agents. The agent extracts, scores, and encrypts memories client-side before sending to Engrm. Zero LLM cost on Engrm's side. True zero-knowledge preserved.
 
 ---
 
@@ -25,7 +25,7 @@ Automatic memory formation for AI agents. The agent extracts, scores, and encryp
                                           │
                                           ▼
 ┌──────────────────────────────────────────────────────────────┐
-│                       MEMRY (ZK)                             │
+│                       Engrm (ZK)                             │
 │  Receives: encrypted blob + embedding vector                 │
 │  Never sees: plaintext content                               │
 │  Does: similarity linking, reinforcement, decay, retrieval   │
@@ -423,9 +423,9 @@ Returns memory health stats:
 | Component | Sees Plaintext? | Notes |
 |-----------|-----------------|-------|
 | User's Agent | ✅ Yes | Has full context, does extraction |
-| MEMRY Servers | ❌ No | Only encrypted blobs + vectors |
+| Engrm Servers | ❌ No | Only encrypted blobs + vectors |
 | Embedding Model | ✅ Yes | Runs client-side (FastEmbed ONNX) |
 | Heuristics Engine | ✅ Yes | Runs client-side |
 | Decay Cron | ❌ No | Only operates on metadata |
 
-**Key insight:** All intelligence runs client-side. MEMRY is a dumb encrypted store with similarity search and decay mechanics.
+**Key insight:** All intelligence runs client-side. Engrm is a dumb encrypted store with similarity search and decay mechanics.

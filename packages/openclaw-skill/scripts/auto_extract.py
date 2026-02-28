@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MEMRY Auto-Extraction
+Engrm Auto-Extraction
 
 Automatically extracts and stores memories from conversation context.
 Integrates with OpenClaw via stdin/stdout.
@@ -41,18 +41,18 @@ from heuristics import (
 
 def get_config():
     """Load config from environment or secrets file."""
-    api_key = os.environ.get("MEMRY_API_KEY")
-    api_url = os.environ.get("MEMRY_API_URL", "https://memry-sand.vercel.app")
-    vault_password = os.environ.get("MEMRY_VAULT_PASSWORD")
+    api_key = os.environ.get("ENGRM_API_KEY")
+    api_url = os.environ.get("ENGRM_API_URL", "https://engrm.xyz")
+    vault_password = os.environ.get("ENGRM_VAULT_PASSWORD")
     
-    # Auto-namespace: MEMRY_NAMESPACE > MEMRY_CHAT_ID > MEMRY_SESSION_ID
+    # Auto-namespace: ENGRM_NAMESPACE > ENGRM_CHAT_ID > ENGRM_SESSION_ID
     namespace = (
-        os.environ.get("MEMRY_NAMESPACE") or
-        os.environ.get("MEMRY_CHAT_ID") or
-        os.environ.get("MEMRY_SESSION_ID")
+        os.environ.get("ENGRM_NAMESPACE") or
+        os.environ.get("ENGRM_CHAT_ID") or
+        os.environ.get("ENGRM_SESSION_ID")
     )
     
-    secrets_path = Path.home() / ".openclaw" / "secrets" / "memry.env"
+    secrets_path = Path.home() / ".openclaw" / "secrets" / "engrm.env"
     if secrets_path.exists():
         for line in secrets_path.read_text().splitlines():
             line = line.strip()
@@ -61,13 +61,13 @@ def get_config():
             if "=" in line:
                 key, value = line.split("=", 1)
                 value = value.strip().strip('"\'')
-                if key == "MEMRY_API_KEY" and not api_key:
+                if key == "ENGRM_API_KEY" and not api_key:
                     api_key = value
-                elif key == "MEMRY_API_URL":
+                elif key == "ENGRM_API_URL":
                     api_url = value
-                elif key == "MEMRY_VAULT_PASSWORD" and not vault_password:
+                elif key == "ENGRM_VAULT_PASSWORD" and not vault_password:
                     vault_password = value
-                elif key == "MEMRY_NAMESPACE" and not namespace:
+                elif key == "ENGRM_NAMESPACE" and not namespace:
                     namespace = value
     
     return api_key, api_url.rstrip("/"), vault_password, namespace
@@ -310,7 +310,7 @@ def process_conversation(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="MEMRY Auto-Extraction - Extract memories from conversations",
+        description="Engrm Auto-Extraction - Extract memories from conversations",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

@@ -1,4 +1,4 @@
-# MEMRY Architecture
+# Engrm Architecture
 
 ## High-Level Flow
 
@@ -28,7 +28,7 @@
                                       │
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                             MEMRY SERVER                                     │
+│                             Engrm SERVER                                     │
 │                        (Zero-Knowledge Store)                                │
 │                                                                             │
 │  ┌──────────────────────────────────────────────────────────────────────┐  │
@@ -258,7 +258,7 @@
 │         │  { embedding: [...], ciphertext: "..." }                         │
 │         ▼                                                                   │
 │    ┌─────────────────────────────────────────────┐                         │
-│    │              MEMRY SERVER                   │                         │
+│    │              Engrm SERVER                   │                         │
 │    │                                             │                         │
 │    │  1. Check similarity (vector search)        │                         │
 │    │  2. If similar > 0.85: REINFORCE           │                         │
@@ -291,7 +291,7 @@
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           ZERO-KNOWLEDGE MODEL                              │
 │                                                                             │
-│   YOUR DEVICE                           MEMRY SERVER                        │
+│   YOUR DEVICE                           Engrm SERVER                        │
 │   ──────────                            ────────────                        │
 │                                                                             │
 │   ┌──────────────┐                      ┌──────────────┐                   │

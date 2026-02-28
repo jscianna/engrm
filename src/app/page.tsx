@@ -34,7 +34,7 @@ export default function Home() {
       <header className="relative z-50 px-6 py-4 md:px-10">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <Link href="/" className="text-xl font-bold tracking-tight">
-            MEMRY
+            Engrm
           </Link>
           <nav className="flex items-center gap-6">
             <Link href="/docs" className="text-sm text-zinc-400 hover:text-white transition-colors">
@@ -44,7 +44,7 @@ export default function Home() {
               Brain
             </Link>
             <a 
-              href="https://github.com/jscianna/memry" 
+              href="https://github.com/jscianna/engrm" 
               target="_blank" 
               rel="noopener noreferrer"
               className="text-sm text-zinc-400 hover:text-white transition-colors"
@@ -88,7 +88,7 @@ export default function Home() {
             </h1>
             <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
               Every conversation starts fresh. Your AI forgets your name, your preferences, 
-              everything you've ever told it. MEMRY fixes that.
+              everything you've ever told it. Engrm fixes that.
             </p>
             <div className="flex flex-wrap gap-4 justify-center pt-4">
               {hasClerk ? (
@@ -130,11 +130,11 @@ export default function Home() {
       <section className="relative px-6 py-16 md:px-10">
         <div className="mx-auto max-w-5xl">
           <div className="grid md:grid-cols-2 gap-8">
-            {/* Without MEMRY */}
+            {/* Without Engrm */}
             <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-6">
               <div className="flex items-center gap-2 mb-6">
                 <div className="w-3 h-3 rounded-full bg-red-500" />
-                <span className="text-red-400 font-medium">Without MEMRY</span>
+                <span className="text-red-400 font-medium">Without Engrm</span>
               </div>
               <div className="space-y-4">
                 <div className="rounded-lg bg-zinc-900/80 p-4">
@@ -155,11 +155,11 @@ export default function Home() {
               <p className="text-zinc-500 text-sm mt-6 text-center">Every session starts from zero.</p>
             </div>
 
-            {/* With MEMRY */}
+            {/* With Engrm */}
             <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/5 p-6">
               <div className="flex items-center gap-2 mb-6">
                 <div className="w-3 h-3 rounded-full bg-cyan-400" />
-                <span className="text-cyan-400 font-medium">With MEMRY</span>
+                <span className="text-cyan-400 font-medium">With Engrm</span>
               </div>
               <div className="space-y-4">
                 <div className="rounded-lg bg-zinc-900/80 p-4">
@@ -190,7 +190,7 @@ export default function Home() {
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold sm:text-4xl mb-4">How It Works</h2>
             <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
-              Every conversation, MEMRY retrieves relevant context and injects it into your AI's prompt. 
+              Every conversation, Engrm retrieves relevant context and injects it into your AI's prompt. 
               Your agent responds like it actually knows you.
             </p>
           </div>
@@ -234,7 +234,7 @@ export default function Home() {
                 <p className="text-zinc-500">System:</p>
                 <p className="text-zinc-300 mb-4">You are a helpful assistant.</p>
                 
-                <p className="text-cyan-400 mb-2">## Memories (auto-injected by MEMRY):</p>
+                <p className="text-cyan-400 mb-2">## Memories (auto-injected by Engrm):</p>
                 <ul className="text-zinc-400 space-y-1 mb-4">
                   <li>• User timezone: SGT (GMT+8) <span className="text-zinc-600">— fact, strength: 1.4</span></li>
                   <li>• Prefers morning meetings <span className="text-zinc-600">— preference, strength: 1.2</span></li>
@@ -259,7 +259,7 @@ export default function Home() {
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold sm:text-4xl mb-4">Not Just Storage. Intelligence.</h2>
             <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
-              MEMRY doesn't just store memories — it learns what matters, forgets what doesn't, 
+              Engrm doesn't just store memories — it learns what matters, forgets what doesn't, 
               and builds connections between related ideas.
             </p>
           </div>
@@ -353,11 +353,11 @@ export default function Home() {
               </div>
               <p className="text-zinc-400 text-sm mb-4">For Claude Desktop & Cursor</p>
               <pre className="bg-zinc-950 rounded-lg p-4 text-sm font-mono text-zinc-300 overflow-x-auto">
-{`npm install -g @memry/mcp
+{`npm install -g @engrm/mcp
 
 // claude_desktop_config.json
-"memry": {
-  "command": "memry-mcp"
+"engrm": {
+  "command": "engrm-mcp"
 }`}
               </pre>
             </div>
@@ -370,7 +370,7 @@ export default function Home() {
               </div>
               <p className="text-zinc-400 text-sm mb-4">Full ZK with local embeddings</p>
               <pre className="bg-zinc-950 rounded-lg p-4 text-sm font-mono text-zinc-300 overflow-x-auto">
-{`pip install memry-sdk
+{`pip install engrm-sdk
 
 client = MemryClient(
   api_key="mem_xxx",
@@ -442,11 +442,11 @@ POST /api/v1/context
       <footer className="relative px-6 py-12 md:px-10 border-t border-zinc-800">
         <div className="mx-auto max-w-6xl flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-6">
-            <Link href="/" className="text-xl font-bold">MEMRY</Link>
+            <Link href="/" className="text-xl font-bold">Engrm</Link>
             <span className="text-zinc-600">•</span>
             <Link href="/docs" className="text-sm text-zinc-400 hover:text-white">Docs</Link>
             <Link href="/brain" className="text-sm text-zinc-400 hover:text-white">Brain</Link>
-            <a href="https://github.com/jscianna/memry" className="text-sm text-zinc-400 hover:text-white">GitHub</a>
+            <a href="https://github.com/jscianna/engrm" className="text-sm text-zinc-400 hover:text-white">GitHub</a>
           </div>
           <p className="text-sm text-zinc-500">
             Built by <a href="https://web3.com" className="text-cyan-400 hover:underline">Web3.com Ventures</a>

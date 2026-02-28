@@ -21,7 +21,7 @@ Then it prunes items to fit the token budget.
 
 ## Token budgeting
 
-`maxTokens` controls context size. MEMRY uses a conservative token estimate to stay under budget.
+`maxTokens` controls context size. Engrm uses a conservative token estimate to stay under budget.
 
 ## Relevance vs recency
 

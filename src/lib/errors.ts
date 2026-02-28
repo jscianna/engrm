@@ -1,5 +1,5 @@
 /**
- * Consistent error handling for MEMRY API
+ * Consistent error handling for Engrm API
  * All errors have codes, HTTP status, and user-friendly messages
  */
 
@@ -157,7 +157,7 @@ export function errorResponse(error: unknown): Response {
   }
 
   // Log unexpected errors
-  console.error("[MEMRY] Unexpected error:", error);
+  console.error("[Engrm] Unexpected error:", error);
 
   const fallback = new MemryError("INTERNAL_ERROR");
   return Response.json(fallback.toJSON(), { status: fallback.status });

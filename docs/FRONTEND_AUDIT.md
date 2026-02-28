@@ -1,4 +1,4 @@
-# MEMRY Frontend Audit (Vercel React Best Practices)
+# Engrm Frontend Audit (Vercel React Best Practices)
 
 ## Scope
 Audited and upgraded app-router frontend/runtime patterns in `src/app`, `src/components`, and `src/lib` against requested priority order.

@@ -1,9 +1,9 @@
 ---
-name: memry
-description: Zero-knowledge memory for AI agents via MEMRY. Embeddings and encryption happen locally - server cannot read your data. Features auto-extraction with heuristic scoring. Use when: (1) storing important information, (2) searching past memories, (3) user says "remember this", (4) extracting memories from conversations.
+name: engrm
+description: Zero-knowledge memory for AI agents via Engrm. Embeddings and encryption happen locally - server cannot read your data. Features auto-extraction with heuristic scoring. Use when: (1) storing important information, (2) searching past memories, (3) user says "remember this", (4) extracting memories from conversations.
 ---
 
-# MEMRY - Zero-Knowledge Memory
+# Engrm - Zero-Knowledge Memory
 
 Store and recall memories with true zero-knowledge privacy:
 - **Embeddings generated locally** (FastEmbed ONNX)
@@ -14,15 +14,15 @@ Store and recall memories with true zero-knowledge privacy:
 
 ## Setup
 
-1. **Get API Key**: https://memry-sand.vercel.app/dashboard/settings → "API Keys"
+1. **Get API Key**: https://engrm.xyz/dashboard/settings → "API Keys"
 2. **Set Vault Password**: Choose a strong password for client-side encryption
-3. **Configure** `~/.openclaw/secrets/memry.env`:
+3. **Configure** `~/.openclaw/secrets/engrm.env`:
 
 ```bash
-MEMRY_API_KEY=mem_xxx
-MEMRY_API_URL=https://memry-sand.vercel.app
-MEMRY_VAULT_PASSWORD=your-strong-password
-MEMRY_NAMESPACE=main  # Optional: auto-namespace for this session
+ENGRM_API_KEY=mem_xxx
+ENGRM_API_URL=https://engrm.xyz
+ENGRM_VAULT_PASSWORD=your-strong-password
+ENGRM_NAMESPACE=main  # Optional: auto-namespace for this session
 ```
 
 4. **Install dependencies** (first time only):
@@ -35,18 +35,18 @@ pip3 install fastembed pycryptodome
 Memories are automatically isolated per chat/project using namespaces.
 
 **Environment variables** (priority order):
-1. `MEMRY_NAMESPACE` - explicit namespace
-2. `MEMRY_CHAT_ID` - chat ID (e.g., Telegram group ID)
-3. `MEMRY_SESSION_ID` - session identifier
+1. `ENGRM_NAMESPACE` - explicit namespace
+2. `ENGRM_CHAT_ID` - chat ID (e.g., Telegram group ID)
+3. `ENGRM_SESSION_ID` - session identifier
 
 **For OpenClaw**, set dynamically per session:
 ```bash
 # In your chat, memories are isolated:
-MEMRY_NAMESPACE="telegram-1234567890"  # From chat_id
-MEMRY_NAMESPACE="deals-project"         # By project name
+ENGRM_NAMESPACE="telegram-1234567890"  # From chat_id
+ENGRM_NAMESPACE="deals-project"         # By project name
 
 # Main session uses a different namespace:
-MEMRY_NAMESPACE="main"
+ENGRM_NAMESPACE="main"
 ```
 
 **Zero-Knowledge Namespaces:**
@@ -58,13 +58,13 @@ The server sees opaque IDs, not your actual chat names.
 
 ## Brain Model (Layered Memory)
 
-MEMRY works like a brain with compartments that are still connected:
+Engrm works like a brain with compartments that are still connected:
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │                    YOUR BRAIN                        │
 │   ┌─────────┐  ┌─────────┐  ┌─────────┐            │
-│   │  MEMRY  │──│  Deals  │──│  Main   │ ← Chats    │
+│   │  Engrm  │──│  Deals  │──│  Main   │ ← Chats    │
 │   │  chat   │  │  chat   │  │ session │            │
 │   └────┬────┘  └────┬────┘  └────┬────┘            │
 │        └────────────┼────────────┘                  │
@@ -92,22 +92,22 @@ These patterns are auto-stored globally:
 **Commands:**
 ```bash
 # Auto-detected as identity → stored in chat + global
-python3 scripts/memry.py store "I'm John and I live in Singapore"
+python3 scripts/engrm.py store "I'm John and I live in Singapore"
 
 # Project-specific → stays in current chat only
-python3 scripts/memry.py store "The deadline for this deal is March 15"
+python3 scripts/engrm.py store "The deadline for this deal is March 15"
 
 # Force global storage
-python3 scripts/memry.py store "My favorite stack is Next.js" --global-store
+python3 scripts/engrm.py store "My favorite stack is Next.js" --global-store
 
 # Store ONLY global (not in current chat)
-python3 scripts/memry.py store "My timezone is GMT+8" --global-only
+python3 scripts/engrm.py store "My timezone is GMT+8" --global-only
 
 # Search always checks chat + global
-python3 scripts/memry.py search "where do I live"  # Finds global identity
+python3 scripts/engrm.py search "where do I live"  # Finds global identity
 
 # Search ALL chats (cross-reference)
-python3 scripts/memry.py search "React setup" --global
+python3 scripts/engrm.py search "React setup" --global
 ```
 
 **Icons in results:**
@@ -212,31 +212,31 @@ Track changes to preferences over time (stored in metadata):
 
 ```bash
 # Store a memory (encrypted locally, uses auto-namespace)
-python3 scripts/memry.py store "User prefers morning meetings"
+python3 scripts/engrm.py store "User prefers morning meetings"
 
 # Store with metadata
-python3 scripts/memry.py store "Project deadline is March 15" --importance 8 --tags "project,deadline"
+python3 scripts/engrm.py store "Project deadline is March 15" --importance 8 --tags "project,deadline"
 
 # Store in a specific namespace (override auto)
-python3 scripts/memry.py store "Deal terms agreed" --namespace "deals"
+python3 scripts/engrm.py store "Deal terms agreed" --namespace "deals"
 
 # Search memories (query embedded locally, uses auto-namespace)
-python3 scripts/memry.py search "meeting preferences"
+python3 scripts/engrm.py search "meeting preferences"
 
 # Search across ALL namespaces
-python3 scripts/memry.py search "meeting preferences" --global
+python3 scripts/engrm.py search "meeting preferences" --global
 
 # Get context for current task
-python3 scripts/memry.py context "scheduling a meeting"
+python3 scripts/engrm.py context "scheduling a meeting"
 
 # Get context from all namespaces
-python3 scripts/memry.py context "scheduling a meeting" --global
+python3 scripts/engrm.py context "scheduling a meeting" --global
 
 # List recent memories in current namespace
-python3 scripts/memry.py list --limit 10
+python3 scripts/engrm.py list --limit 10
 
 # List memories in a specific namespace
-python3 scripts/memry.py list --namespace "deals"
+python3 scripts/engrm.py list --namespace "deals"
 ```
 
 ### Auto-Extraction (NEW)
@@ -345,7 +345,7 @@ Repeated mentions strengthen memories instead of creating duplicates:
 
 **"Cannot decrypt - different vault"**
 - Memory was stored with different password
-- Use same `MEMRY_VAULT_PASSWORD` consistently
+- Use same `ENGRM_VAULT_PASSWORD` consistently
 
 **Slow first run**
 - Model downloads on first use (~80MB)
@@ -365,8 +365,8 @@ pip3 install fastembed pycryptodome
 
 ```
 scripts/
-├── memry.py         # Main ZK CLI (store, search, context, list)
+├── engrm.py         # Main ZK CLI (store, search, context, list)
 ├── auto_extract.py  # Auto-extraction with heuristics
 ├── heuristics.py    # Heuristics engine (importable)
-└── memry_plaintext.py # Non-ZK fallback (not recommended)
+└── engrm_plaintext.py # Non-ZK fallback (not recommended)
 ```

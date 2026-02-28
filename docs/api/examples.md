@@ -22,7 +22,7 @@ def store_turn(text: str):
 const tools = [{
   type: "function",
   function: {
-    name: "search_memry",
+    name: "search_engrm",
     description: "Search long-term memory",
     parameters: {
       type: "object",
@@ -58,4 +58,4 @@ Use a custom tool that calls:
 
 ## Python SDK usage
 
-See `docs/sdk/python/memry.py`.
+See `docs/sdk/python/engrm.py`.

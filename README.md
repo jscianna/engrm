@@ -1,4 +1,4 @@
-# MEMRY
+# Engrm
 
 Permanent memory SaaS with zero-knowledge encryption, built on Arweave.
 

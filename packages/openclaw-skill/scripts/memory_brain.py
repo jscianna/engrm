@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MEMRY Brain Functions
+Engrm Brain Functions
 
 Advanced memory features:
 - Decay: Memories fade if not accessed
@@ -29,16 +29,16 @@ from base64 import b64encode, b64decode
 
 def get_config():
     """Load config from environment or secrets file."""
-    api_key = os.environ.get("MEMRY_API_KEY")
-    api_url = os.environ.get("MEMRY_API_URL", "https://memry-sand.vercel.app")
-    vault_password = os.environ.get("MEMRY_VAULT_PASSWORD")
+    api_key = os.environ.get("ENGRM_API_KEY")
+    api_url = os.environ.get("ENGRM_API_URL", "https://engrm.xyz")
+    vault_password = os.environ.get("ENGRM_VAULT_PASSWORD")
     namespace = (
-        os.environ.get("MEMRY_NAMESPACE") or
-        os.environ.get("MEMRY_CHAT_ID") or
-        os.environ.get("MEMRY_SESSION_ID")
+        os.environ.get("ENGRM_NAMESPACE") or
+        os.environ.get("ENGRM_CHAT_ID") or
+        os.environ.get("ENGRM_SESSION_ID")
     )
     
-    secrets_path = Path.home() / ".openclaw" / "secrets" / "memry.env"
+    secrets_path = Path.home() / ".openclaw" / "secrets" / "engrm.env"
     if secrets_path.exists():
         for line in secrets_path.read_text().splitlines():
             line = line.strip()
@@ -47,13 +47,13 @@ def get_config():
             if "=" in line:
                 key, value = line.split("=", 1)
                 value = value.strip().strip('"\'')
-                if key == "MEMRY_API_KEY" and not api_key:
+                if key == "ENGRM_API_KEY" and not api_key:
                     api_key = value
-                elif key == "MEMRY_API_URL":
+                elif key == "ENGRM_API_URL":
                     api_url = value
-                elif key == "MEMRY_VAULT_PASSWORD" and not vault_password:
+                elif key == "ENGRM_VAULT_PASSWORD" and not vault_password:
                     vault_password = value
-                elif key == "MEMRY_NAMESPACE" and not namespace:
+                elif key == "ENGRM_NAMESPACE" and not namespace:
                     namespace = value
     
     return api_key, api_url.rstrip("/"), vault_password, namespace
@@ -631,7 +631,7 @@ def smart_store(
             )
     
     # Check if identity memory
-    from memry import is_identity_memory  # Import from main module
+    from engrm import is_identity_memory  # Import from main module
     is_identity = is_identity_memory(content)
     
     # Prepare metadata
@@ -687,7 +687,7 @@ def smart_store(
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description="MEMRY Brain Functions")
+    parser = argparse.ArgumentParser(description="Engrm Brain Functions")
     subparsers = parser.add_subparsers(dest="command", required=True)
     
     # dream cycle

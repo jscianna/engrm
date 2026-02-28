@@ -1,6 +1,6 @@
-# MEMRY Agent API v1
+# Engrm Agent API v1
 
-MEMRY's Agent API provides memory storage, retrieval, semantic search, context assembly, namespaces, and sessions for agent workflows.
+Engrm's Agent API provides memory storage, retrieval, semantic search, context assembly, namespaces, and sessions for agent workflows.
 
 Base path: `/api/v1`
 

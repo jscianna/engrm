@@ -1,5 +1,5 @@
 /**
- * Rate limiting for MEMRY API
+ * Rate limiting for Engrm API
  * Uses sliding window counters stored in Turso
  */
 
