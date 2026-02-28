@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Search } from "lucide-react";
+import { Calendar, ChevronDown, Filter, Loader2, Search, Tag, X } from "lucide-react";
 import { toast } from "sonner";
 import { MemoryCard } from "@/components/memory-card";
 import { Button } from "@/components/ui/button";
@@ -9,11 +9,38 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { MemorySearchResult } from "@/lib/types";
 
+const MEMORY_TYPES = [
+  { value: "", label: "All Types" },
+  { value: "identity", label: "Identity" },
+  { value: "preference", label: "Preference" },
+  { value: "fact", label: "Fact" },
+  { value: "event", label: "Event" },
+  { value: "how_to", label: "How-To" },
+  { value: "constraint", label: "Constraint" },
+  { value: "relationship", label: "Relationship" },
+];
+
+const DATE_RANGES = [
+  { value: "", label: "Any Time" },
+  { value: "1d", label: "Last 24 hours" },
+  { value: "7d", label: "Last 7 days" },
+  { value: "30d", label: "Last 30 days" },
+  { value: "90d", label: "Last 90 days" },
+  { value: "365d", label: "Last year" },
+];
+
 export default function SearchPage() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MemorySearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Advanced filters
+  const [showFilters, setShowFilters] = useState(false);
+  const [typeFilter, setTypeFilter] = useState("");
+  const [dateRange, setDateRange] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
+  const [minImportance, setMinImportance] = useState(0);
 
   async function onSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -24,7 +51,14 @@ export default function SearchPage() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/memories/search?q=${encodeURIComponent(query)}`);
+      // Build query params with filters
+      const params = new URLSearchParams({ q: query });
+      if (typeFilter) params.set("type", typeFilter);
+      if (dateRange) params.set("since", dateRange);
+      if (tagFilter) params.set("tag", tagFilter);
+      if (minImportance > 0) params.set("minImportance", String(minImportance));
+      
+      const response = await fetch(`/api/memories/search?${params}`);
       const payload = await response.json();
       if (!response.ok) {
         throw new Error(payload.error || "Search failed");
@@ -41,6 +75,15 @@ export default function SearchPage() {
       setLoading(false);
     }
   }
+  
+  function clearFilters() {
+    setTypeFilter("");
+    setDateRange("");
+    setTagFilter("");
+    setMinImportance(0);
+  }
+  
+  const hasFilters = typeFilter || dateRange || tagFilter || minImportance > 0;
 
   return (
     <div className="space-y-6">
@@ -48,21 +91,110 @@ export default function SearchPage() {
         <CardHeader>
           <CardTitle className="text-zinc-100">Semantic Search</CardTitle>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={onSearch} className="flex flex-col gap-3 md:flex-row">
+        <CardContent className="space-y-4">
+          <form onSubmit={onSearch} className="flex flex-col gap-3 sm:flex-row">
             <Input
               required
               placeholder="Find memories by meaning..."
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              className="border-zinc-700 bg-zinc-900 text-zinc-100"
+              className="flex-1 border-zinc-700 bg-zinc-900 text-zinc-100"
             />
-            <Button type="submit" disabled={loading} className="bg-cyan-400 text-zinc-950 hover:bg-cyan-300">
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
-              Search
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowFilters(!showFilters)}
+                className={`border-zinc-700 ${hasFilters ? "border-cyan-500 text-cyan-400" : ""}`}
+              >
+                <Filter className="mr-2 h-4 w-4" />
+                Filters
+                {hasFilters && <span className="ml-1 rounded-full bg-cyan-500 px-1.5 text-xs text-black">!</span>}
+              </Button>
+              <Button type="submit" disabled={loading} className="bg-cyan-400 text-zinc-950 hover:bg-cyan-300">
+                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                Search
+              </Button>
+            </div>
           </form>
-          {error && <p className="mt-3 text-sm text-rose-300">{error}</p>}
+          
+          {/* Advanced Filters Panel */}
+          {showFilters && (
+            <div className="rounded-lg border border-zinc-700 bg-zinc-950 p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-zinc-300">Advanced Filters</span>
+                {hasFilters && (
+                  <Button variant="ghost" size="sm" onClick={clearFilters} className="text-zinc-400 hover:text-zinc-200">
+                    <X className="mr-1 h-3 w-3" /> Clear all
+                  </Button>
+                )}
+              </div>
+              
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {/* Type Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-400 flex items-center gap-1">
+                    <ChevronDown className="h-3 w-3" /> Memory Type
+                  </label>
+                  <select
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value)}
+                    className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
+                  >
+                    {MEMORY_TYPES.map((type) => (
+                      <option key={type.value} value={type.value}>{type.label}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                {/* Date Range */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-400 flex items-center gap-1">
+                    <Calendar className="h-3 w-3" /> Date Range
+                  </label>
+                  <select
+                    value={dateRange}
+                    onChange={(e) => setDateRange(e.target.value)}
+                    className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
+                  >
+                    {DATE_RANGES.map((range) => (
+                      <option key={range.value} value={range.value}>{range.label}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                {/* Tag Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-400 flex items-center gap-1">
+                    <Tag className="h-3 w-3" /> Tag
+                  </label>
+                  <Input
+                    placeholder="Filter by tag..."
+                    value={tagFilter}
+                    onChange={(e) => setTagFilter(e.target.value)}
+                    className="border-zinc-700 bg-zinc-900 text-zinc-100"
+                  />
+                </div>
+                
+                {/* Importance Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-400">
+                    Min Importance: {minImportance}
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="10"
+                    value={minImportance}
+                    onChange={(e) => setMinImportance(Number(e.target.value))}
+                    className="w-full accent-cyan-400"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {error && <p className="text-sm text-rose-300">{error}</p>}
         </CardContent>
       </Card>
 

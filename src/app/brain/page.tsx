@@ -385,7 +385,58 @@ function Brain3D({
 
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
-      zoomRef.current = Math.max(0.5, Math.min(4, zoomRef.current - e.deltaY * 0.001));
+      zoomRef.current = Math.max(0.5, Math.min(8, zoomRef.current - e.deltaY * 0.001));
+    };
+
+    // Touch support for mobile
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        isDraggingRef.current = true;
+        const touch = e.touches[0];
+        dragStartPos = { x: touch.clientX, y: touch.clientY };
+        hasDragged = false;
+        lastMouseRef.current = { x: touch.clientX, y: touch.clientY };
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isDraggingRef.current || e.touches.length !== 1) return;
+      
+      const touch = e.touches[0];
+      const dx = touch.clientX - lastMouseRef.current.x;
+      const dy = touch.clientY - lastMouseRef.current.y;
+      
+      const totalDx = touch.clientX - dragStartPos.x;
+      const totalDy = touch.clientY - dragStartPos.y;
+      if (Math.abs(totalDx) > 5 || Math.abs(totalDy) > 5) {
+        hasDragged = true;
+      }
+      
+      rotationRef.current.y += dx * 0.005;
+      rotationRef.current.x += dy * 0.005;
+      
+      lastMouseRef.current = { x: touch.clientX, y: touch.clientY };
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      isDraggingRef.current = false;
+      
+      if (!hasDragged && e.changedTouches.length === 1) {
+        const touch = e.changedTouches[0];
+        const rect = canvas.getBoundingClientRect();
+        const touchX = (touch.clientX - rect.left) * window.devicePixelRatio;
+        const touchY = (touch.clientY - rect.top) * window.devicePixelRatio;
+        
+        for (const { node, x, y, radius } of projectedNodesRef.current) {
+          const dx = touchX - x;
+          const dy = touchY - y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < radius + 20) { // Larger tap target for touch
+            onNodeClick(node);
+            break;
+          }
+        }
+      }
     };
 
     canvas.addEventListener("mousedown", handleMouseDown);
@@ -393,6 +444,9 @@ function Brain3D({
     canvas.addEventListener("mouseup", handleMouseUp);
     canvas.addEventListener("mouseleave", handleMouseUp);
     canvas.addEventListener("wheel", handleWheel, { passive: false });
+    canvas.addEventListener("touchstart", handleTouchStart, { passive: true });
+    canvas.addEventListener("touchmove", handleTouchMove, { passive: true });
+    canvas.addEventListener("touchend", handleTouchEnd, { passive: true });
 
     return () => {
       canvas.removeEventListener("mousedown", handleMouseDown);
@@ -400,6 +454,9 @@ function Brain3D({
       canvas.removeEventListener("mouseup", handleMouseUp);
       canvas.removeEventListener("mouseleave", handleMouseUp);
       canvas.removeEventListener("wheel", handleWheel);
+      canvas.removeEventListener("touchstart", handleTouchStart);
+      canvas.removeEventListener("touchmove", handleTouchMove);
+      canvas.removeEventListener("touchend", handleTouchEnd);
     };
   }, [onNodeClick]);
 

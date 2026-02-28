@@ -289,6 +289,7 @@ async function ensureMemoriesColumns(client: Client): Promise<void> {
     { name: "embedding", ddl: "TEXT" },  // JSON array of floats
     { name: "embedding_hash", ddl: "TEXT" },  // SHA256 hash of embedding for dedup
     { name: "content_mac", ddl: "TEXT" },  // HMAC-SHA256 for content integrity
+    { name: "tags_json", ddl: "TEXT" },  // JSON array of user tags
   ];
 
   const tableInfo = await client.execute("PRAGMA table_info(memories)");
