@@ -2,17 +2,19 @@ import { embedText } from "@/lib/embeddings";
 import { strengthenCoRetrievedMemories } from "@/lib/memories";
 import { semanticSearchVectors } from "@/lib/vector";
 import { getAgentMemoriesByIds, listAgentMemories } from "@/lib/db";
-import { ApiAuthError, validateApiKey } from "@/lib/api-auth";
-import { estimateTokens, isObject, jsonError, normalizeLimit, resolveNamespaceIdOrError } from "@/lib/api-v1";
+import { validateApiKey } from "@/lib/api-auth";
+import { MemryError, errorResponse } from "@/lib/errors";
+import { estimateTokens, isObject, normalizeLimit, resolveNamespaceIdOrError } from "@/lib/api-v1";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
-    const identity = await validateApiKey(request);
+    const identity = await validateApiKey(request, "context.build");
     const body = (await request.json().catch(() => null)) as unknown;
+    
     if (!isObject(body) || typeof body.query !== "string") {
-      return jsonError("'query' is required", "VALIDATION_ERROR", 400);
+      throw new MemryError("VALIDATION_ERROR", { field: "query", reason: "required" });
     }
 
     const namespace = typeof body.namespace === "string" ? body.namespace : undefined;
@@ -105,10 +107,6 @@ export async function POST(request: Request) {
       memories: selected,
     });
   } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return jsonError(error.message, error.code, error.status);
-    }
-    const message = error instanceof Error ? error.message : "Failed to build context";
-    return jsonError(message, "CONTEXT_BUILD_FAILED", 400);
+    return errorResponse(error);
   }
 }

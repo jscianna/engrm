@@ -11,8 +11,10 @@
 import { upsertMemoryVector, semanticSearchVectorsDirect } from "@/lib/vector";
 import { insertMemoryWithMetadata, reinforceMemory, getMemoriesWithEmbeddings } from "@/lib/db";
 import { calculateFrequencyBoost, TYPE_HALFLIVES, type MemoryType } from "@/lib/memory-heuristics";
-import { ApiAuthError, validateApiKey } from "@/lib/api-auth";
-import { isObject, jsonError, resolveNamespaceIdOrError } from "@/lib/api-v1";
+import { validateApiKey } from "@/lib/api-auth";
+import { MemryError, errorResponse } from "@/lib/errors";
+import { checkMemoryQuota, recordMemoryCreated } from "@/lib/rate-limiter";
+import { isObject, resolveNamespaceIdOrError } from "@/lib/api-v1";
 
 export const runtime = "nodejs";
 
@@ -37,25 +39,23 @@ function cosineSimilarity(a: number[], b: number[]): number {
 
 export async function POST(request: Request) {
   try {
-    const identity = await validateApiKey(request);
+    const identity = await validateApiKey(request, "memories.create.zk");
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body)) {
-      return jsonError("Invalid request body", "VALIDATION_ERROR", 400);
+      throw new MemryError("VALIDATION_ERROR", { reason: "Invalid request body" });
     }
 
-    // Validate required fields
     if (typeof body.encryptedContent !== "string" || !body.encryptedContent) {
-      return jsonError("'encryptedContent' is required", "VALIDATION_ERROR", 400);
+      throw new MemryError("VALIDATION_ERROR", { field: "encryptedContent", reason: "required" });
     }
 
     if (!Array.isArray(body.vector) || body.vector.length === 0) {
-      return jsonError("'vector' must be a non-empty array of numbers", "VALIDATION_ERROR", 400);
+      throw new MemryError("VALIDATION_ERROR", { field: "vector", reason: "must be a non-empty array of numbers" });
     }
 
-    // Validate vector contains only numbers
     if (!body.vector.every((v: unknown) => typeof v === "number" && !isNaN(v))) {
-      return jsonError("'vector' must contain only valid numbers", "VALIDATION_ERROR", 400);
+      throw new MemryError("VALIDATION_ERROR", { field: "vector", reason: "must contain only valid numbers" });
     }
 
     const namespace = typeof body.namespace === "string" ? body.namespace : undefined;
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     const existingMemories = await getMemoriesWithEmbeddings(
       identity.userId,
       resolved.namespaceId,
-      100 // Check last 100 memories
+      100
     );
     
     let bestMatch: { id: string; similarity: number; mentionCount: number; strength: number } | null = null;
@@ -130,7 +130,9 @@ export async function POST(request: Request) {
       }, { status: 200 });
     }
     
-    // Create new memory
+    // Check quota before creating new memory
+    await checkMemoryQuota(identity.userId);
+
     const metadata = {
       ...inputMetadata,
       zk: true,
@@ -151,7 +153,10 @@ export async function POST(request: Request) {
       metadata,
     });
 
-    // Also store in vector index for fast similarity search
+    // Track usage
+    const sizeBytes = Buffer.byteLength(body.encryptedContent, "utf8");
+    await recordMemoryCreated(identity.userId, sizeBytes);
+
     await upsertMemoryVector({
       memoryId: memory.id,
       userId: memory.userId,
@@ -170,10 +175,6 @@ export async function POST(request: Request) {
       createdAt: memory.createdAt,
     }, { status: 201 });
   } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return jsonError(error.message, error.code, error.status);
-    }
-    const message = error instanceof Error ? error.message : "Failed to store memory";
-    return jsonError(message, "MEMORY_CREATE_FAILED", 400);
+    return errorResponse(error);
   }
 }

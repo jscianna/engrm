@@ -1,12 +1,13 @@
 import { createSession, listSessions } from "@/lib/db";
-import { ApiAuthError, validateApiKey } from "@/lib/api-auth";
-import { isObject, jsonError, resolveNamespaceIdOrError } from "@/lib/api-v1";
+import { validateApiKey } from "@/lib/api-auth";
+import { MemryError, errorResponse } from "@/lib/errors";
+import { isObject, resolveNamespaceIdOrError } from "@/lib/api-v1";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   try {
-    const identity = await validateApiKey(request);
+    const identity = await validateApiKey(request, "sessions.list");
     const url = new URL(request.url);
     const namespace = url.searchParams.get("namespace") ?? undefined;
 
@@ -22,20 +23,17 @@ export async function GET(request: Request) {
 
     return Response.json({ sessions });
   } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return jsonError(error.message, error.code, error.status);
-    }
-    const message = error instanceof Error ? error.message : "Failed to list sessions";
-    return jsonError(message, "SESSION_LIST_FAILED", 400);
+    return errorResponse(error);
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const identity = await validateApiKey(request);
+    const identity = await validateApiKey(request, "sessions.create");
     const body = (await request.json().catch(() => ({}))) as unknown;
+    
     if (!isObject(body)) {
-      return jsonError("Invalid JSON body", "VALIDATION_ERROR", 400);
+      throw new MemryError("VALIDATION_ERROR", { reason: "Invalid JSON body" });
     }
 
     const namespace = typeof body.namespace === "string" ? body.namespace : undefined;
@@ -53,10 +51,6 @@ export async function POST(request: Request) {
 
     return Response.json({ session }, { status: 201 });
   } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return jsonError(error.message, error.code, error.status);
-    }
-    const message = error instanceof Error ? error.message : "Failed to create session";
-    return jsonError(message, "SESSION_CREATE_FAILED", 400);
+    return errorResponse(error);
   }
 }

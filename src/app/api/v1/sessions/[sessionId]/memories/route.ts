@@ -1,8 +1,10 @@
 import { embedText } from "@/lib/embeddings";
 import { upsertMemoryVector } from "@/lib/vector";
 import { getSessionById, insertAgentMemory, listSessionMemories } from "@/lib/db";
-import { ApiAuthError, validateApiKey } from "@/lib/api-auth";
-import { isObject, jsonError } from "@/lib/api-v1";
+import { validateApiKey } from "@/lib/api-auth";
+import { MemryError, errorResponse } from "@/lib/errors";
+import { checkMemoryQuota, recordMemoryCreated } from "@/lib/rate-limiter";
+import { isObject } from "@/lib/api-v1";
 
 export const runtime = "nodejs";
 
@@ -11,21 +13,18 @@ export async function GET(
   context: { params: Promise<{ sessionId: string }> },
 ) {
   try {
-    const identity = await validateApiKey(request);
+    const identity = await validateApiKey(request, "sessions.memories.list");
     const { sessionId } = await context.params;
     const session = await getSessionById(identity.userId, sessionId);
+    
     if (!session) {
-      return jsonError("Session not found", "SESSION_NOT_FOUND", 404);
+      throw new MemryError("SESSION_NOT_FOUND");
     }
 
     const memories = await listSessionMemories(identity.userId, sessionId);
     return Response.json({ session, memories });
   } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return jsonError(error.message, error.code, error.status);
-    }
-    const message = error instanceof Error ? error.message : "Failed to list session memories";
-    return jsonError(message, "SESSION_MEMORIES_LIST_FAILED", 400);
+    return errorResponse(error);
   }
 }
 
@@ -34,17 +33,21 @@ export async function POST(
   context: { params: Promise<{ sessionId: string }> },
 ) {
   try {
-    const identity = await validateApiKey(request);
+    const identity = await validateApiKey(request, "sessions.memories.create");
     const { sessionId } = await context.params;
     const session = await getSessionById(identity.userId, sessionId);
+    
     if (!session) {
-      return jsonError("Session not found", "SESSION_NOT_FOUND", 404);
+      throw new MemryError("SESSION_NOT_FOUND");
     }
 
     const body = (await request.json().catch(() => null)) as unknown;
     if (!isObject(body) || typeof body.text !== "string" || !body.text.trim()) {
-      return jsonError("'text' is required", "VALIDATION_ERROR", 400);
+      throw new MemryError("VALIDATION_ERROR", { field: "text", reason: "required" });
     }
+
+    // Check quota
+    await checkMemoryQuota(identity.userId);
 
     const metadata = isObject(body.metadata) ? body.metadata : null;
     const memory = await insertAgentMemory({
@@ -55,6 +58,10 @@ export async function POST(
       namespaceId: session.namespaceId,
       sessionId,
     });
+
+    // Track usage
+    const sizeBytes = Buffer.byteLength(body.text, "utf8");
+    await recordMemoryCreated(identity.userId, sizeBytes);
 
     const vector = await embedText(memory.text.slice(0, 6000));
     await upsertMemoryVector({
@@ -69,10 +76,6 @@ export async function POST(
 
     return Response.json({ memory }, { status: 201 });
   } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return jsonError(error.message, error.code, error.status);
-    }
-    const message = error instanceof Error ? error.message : "Failed to add memory to session";
-    return jsonError(message, "SESSION_MEMORY_CREATE_FAILED", 400);
+    return errorResponse(error);
   }
 }
