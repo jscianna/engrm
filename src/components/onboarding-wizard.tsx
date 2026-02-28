@@ -269,25 +269,44 @@ function ApiKeyStep({
 
 function CompleteStep() {
   return (
-    <div className="text-center">
+    <div className="text-center animate-in fade-in-0 zoom-in-95 duration-500">
       <div className="mb-6 flex justify-center">
-        <div className="rounded-full bg-emerald-500/20 p-4">
-          <Check className="h-12 w-12 text-emerald-400" />
+        <div className="relative">
+          <div className="absolute inset-0 animate-ping rounded-full bg-emerald-500/20" />
+          <div className="relative rounded-full bg-emerald-500/20 p-4">
+            <Check className="h-12 w-12 text-emerald-400" />
+          </div>
         </div>
       </div>
-      <h2 className="mb-3 text-2xl font-semibold text-zinc-100">You're All Set!</h2>
+      <h2 className="mb-3 text-2xl font-semibold text-zinc-100">You're All Set! 🎉</h2>
       <p className="mb-6 text-zinc-400">
         Your vault is ready. Start storing memories from your agents.
       </p>
 
-      <div className="mb-8 rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 text-left">
-        <p className="mb-2 text-sm font-medium text-zinc-300">Quick Start</p>
-        <pre className="overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-400">
-{`curl -X POST https://memry.ai/api/v1/memories \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
-  -H "Content-Type: application/json" \\
+      <div className="mb-8 space-y-4">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 text-left">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-medium text-zinc-300">Store a memory</p>
+            <span className="text-xs text-cyan-400 bg-cyan-400/10 px-2 py-0.5 rounded">POST</span>
+          </div>
+          <pre className="overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-400 font-mono">
+{`curl https://memry.ai/api/v1/memories \\
+  -H "Authorization: Bearer YOUR_KEY" \\
   -d '{"text": "User prefers dark mode"}'`}
-        </pre>
+          </pre>
+        </div>
+
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 text-left">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-medium text-zinc-300">Search memories</p>
+            <span className="text-xs text-violet-400 bg-violet-400/10 px-2 py-0.5 rounded">POST</span>
+          </div>
+          <pre className="overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-400 font-mono">
+{`curl https://memry.ai/api/v1/search \\
+  -H "Authorization: Bearer YOUR_KEY" \\
+  -d '{"query": "user preferences"}'`}
+          </pre>
+        </div>
       </div>
 
       <div className="flex gap-3 justify-center">

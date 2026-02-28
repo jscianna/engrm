@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Activity, Database, HardDrive, Zap } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { Activity, Database, HardDrive, RefreshCw, Zap } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 type UsageData = {
   usage: {
@@ -85,23 +86,28 @@ function UsageStat({
 export function UsageCard() {
   const [data, setData] = useState<UsageData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function fetchUsage() {
-      try {
-        const response = await fetch("/api/settings/usage");
-        if (!response.ok) throw new Error("Failed to load usage");
-        const result = await response.json();
-        setData(result);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load usage");
-      } finally {
-        setLoading(false);
-      }
+  const fetchUsage = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    try {
+      const response = await fetch("/api/settings/usage");
+      if (!response.ok) throw new Error("Failed to load usage");
+      const result = await response.json();
+      setData(result);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load usage");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-    fetchUsage();
   }, []);
+
+  useEffect(() => {
+    fetchUsage();
+  }, [fetchUsage]);
 
   if (loading) {
     return (
@@ -141,13 +147,22 @@ export function UsageCard() {
 
   return (
     <Card className="border-zinc-800 bg-zinc-900/60">
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="flex items-center gap-2 text-lg text-zinc-100">
           <Activity className="h-5 w-5 text-cyan-400" />
           Usage This Month
         </CardTitle>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => fetchUsage(true)}
+          disabled={refreshing}
+          className="h-8 w-8 p-0 text-zinc-400 hover:text-zinc-200"
+        >
+          <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+        </Button>
       </CardHeader>
-      <CardContent className="space-y-5">
+      <CardContent className="space-y-5 pt-4">
         <UsageStat
           icon={Zap}
           label="API Calls Today"
