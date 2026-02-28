@@ -114,6 +114,98 @@ python3 scripts/memry.py search "React setup" --global
 - 🧠 = Global/identity memory
 - 💬 = Chat-specific memory
 
+## Advanced Brain Features
+
+### Proactive Recall
+Auto-surface relevant memories without explicit search:
+
+```bash
+# Get relevant context for current topic
+python3 scripts/memory_brain.py recall "discussing the React project"
+
+# Output:
+# [Relevant memories:]
+# 🧠 (2 days ago) Preferences: I prefer Next.js for React projects...
+# 💬 (1 week ago) Project setup: The React deadline is March 15...
+```
+
+### Working Memory (Short-term)
+Temporary context that expires (default 1 hour):
+
+```bash
+# Add to working memory
+python3 scripts/memory_brain.py working add "Currently debugging auth issue"
+
+# List working memory
+python3 scripts/memory_brain.py working list
+
+# Clear working memory
+python3 scripts/memory_brain.py working clear
+```
+
+### Dream Cycle (Decay + Consolidation)
+Run periodically to:
+- Fade unused memories
+- Merge similar memories into stronger ones
+- Archive very old memories
+
+```bash
+# Dry run (see what would happen)
+python3 scripts/memory_brain.py dream
+
+# Apply changes
+python3 scripts/memory_brain.py dream --apply
+```
+
+### Smart Store
+Store with all brain features:
+
+```bash
+python3 scripts/memory_brain.py smart-store "I think I prefer dark mode"
+
+# Output:
+# {
+#   "stored": true,
+#   "memory_id": "abc123",
+#   "confidence": {"score": 0.6, "level": "medium"},
+#   "contradictions": [],
+#   "is_global": false
+# }
+```
+
+### Confidence Levels
+Memories are tagged with certainty:
+
+| Level | Score | Triggers |
+|-------|-------|----------|
+| Certain | 0.95 | "I definitely", "I always", "my name is" |
+| High | 0.8 | "I usually", "I prefer", "I want" |
+| Medium | 0.6 | "I think", "probably", "I believe" |
+| Low | 0.4 | "maybe", "perhaps", "might" |
+| Uncertain | 0.2 | "I don't know", "unclear" |
+
+### Contradiction Detection
+Before storing, checks for conflicting memories:
+
+```bash
+# If you stored "I like React" then try to store "I hate React":
+# Warning: Found 1 potential contradiction(s) with existing memories
+```
+
+### Temporal Awareness
+Search results include when memories were created:
+
+```
+🧠 (3 days ago) I live in Singapore
+💬 (2 hours ago) Meeting scheduled for tomorrow
+```
+
+### Memory Versioning
+Track changes to preferences over time (stored in metadata):
+- Old value preserved
+- Timestamp of change
+- Reason for update
+
 ## Commands
 
 ### Manual Storage & Search
