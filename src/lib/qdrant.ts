@@ -374,12 +374,12 @@ export async function migrateFromTurso(userId?: string): Promise<{
 
   const stats = { migrated: 0, failed: 0, skipped: 0 };
 
-  // Fetch all vectors from Turso
+  // Fetch all vectors from Turso (vector_dimension may not exist in older schemas)
   const result = await client.execute({
     sql: userId
-      ? `SELECT memory_id, user_id, title, source_type, memory_type, importance, vector_json, vector_dimension
+      ? `SELECT memory_id, user_id, title, source_type, memory_type, importance, vector_json
          FROM memory_vectors WHERE user_id = ?`
-      : `SELECT memory_id, user_id, title, source_type, memory_type, importance, vector_json, vector_dimension
+      : `SELECT memory_id, user_id, title, source_type, memory_type, importance, vector_json
          FROM memory_vectors`,
     args: userId ? [userId] : [],
   });
@@ -398,7 +398,7 @@ export async function migrateFromTurso(userId?: string): Promise<{
     try {
       const vectorJson = row.vector_json as string;
       const vector = JSON.parse(vectorJson) as number[];
-      const dimension = Number(row.vector_dimension ?? vector.length);
+      const dimension = vector.length; // Infer from actual vector
       const vectorName = getVectorName(dimension);
 
       points.push({
