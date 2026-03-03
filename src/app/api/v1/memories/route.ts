@@ -123,10 +123,14 @@ export async function POST(request: Request) {
     // Generate embedding and store in Qdrant for semantic search
     try {
       const embedding = await embedText(contentText);
-      await upsertMemoryVector(memory.id, identity.userId, embedding, {
+      await upsertMemoryVector({
+        memoryId: memory.id,
+        userId: identity.userId,
         title: titleForStorage,
+        sourceType: memory.sourceType,
         memoryType: memory.memoryType,
-        namespaceId: resolved.namespaceId ?? null,
+        importance: memory.importance,
+        vector: embedding,
       });
     } catch {
       // Embedding is best-effort, memory is still stored
