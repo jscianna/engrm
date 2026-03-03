@@ -14,9 +14,13 @@ export type ErrorCode =
   | "VAULT_LOCKED"
   | "VAULT_NOT_FOUND"
   | "MEMORY_NOT_FOUND"
+  | "CHATBOT_NOT_FOUND"
+  | "SOURCE_NOT_FOUND"
+  | "CONVERSATION_NOT_FOUND"
   | "NAMESPACE_NOT_FOUND"
   | "SESSION_NOT_FOUND"
   | "VALIDATION_ERROR"
+  | "ENCRYPTION_REQUIRED"
   | "ENCRYPTION_ERROR"
   | "ARWEAVE_ERROR"
   | "DATABASE_ERROR"
@@ -73,6 +77,21 @@ const ERROR_DETAILS: Record<ErrorCode, { status: number; message: string; userMe
     message: "Memory not found",
     userMessage: "This memory doesn't exist or you don't have access.",
   },
+  CHATBOT_NOT_FOUND: {
+    status: 404,
+    message: "Chatbot not found",
+    userMessage: "This chatbot doesn't exist or you don't have access.",
+  },
+  SOURCE_NOT_FOUND: {
+    status: 404,
+    message: "Source not found",
+    userMessage: "This source doesn't exist or you don't have access.",
+  },
+  CONVERSATION_NOT_FOUND: {
+    status: 404,
+    message: "Conversation not found",
+    userMessage: "This conversation doesn't exist or you don't have access.",
+  },
   NAMESPACE_NOT_FOUND: {
     status: 404,
     message: "Namespace not found",
@@ -87,6 +106,11 @@ const ERROR_DETAILS: Record<ErrorCode, { status: number; message: string; userMe
     status: 400,
     message: "Validation error",
     userMessage: "Invalid request. Check your input and try again.",
+  },
+  ENCRYPTION_REQUIRED: {
+    status: 400,
+    message: "Encryption required",
+    userMessage: "All memories must be encrypted. Provide ciphertext and iv fields. See docs for client-side encryption.",
   },
   ENCRYPTION_ERROR: {
     status: 500,

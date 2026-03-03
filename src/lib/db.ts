@@ -281,12 +281,14 @@ async function ensureMemoriesColumns(client: Client): Promise<void> {
     { name: "base_strength", ddl: "REAL DEFAULT 1.0" },
     { name: "mention_count", ddl: "INTEGER DEFAULT 1" },
     { name: "access_count", ddl: "INTEGER DEFAULT 0" },
+    { name: "feedback_score", ddl: "INTEGER DEFAULT 0" },
     { name: "halflife_days", ddl: "INTEGER DEFAULT 60" },
     { name: "last_accessed_at", ddl: "TEXT" },
     { name: "last_mentioned_at", ddl: "TEXT" },
     { name: "first_mentioned_at", ddl: "TEXT" },
     { name: "archived_at", ddl: "TEXT" },
     { name: "source_conversations", ddl: "TEXT" },  // JSON array
+    { name: "entities", ddl: "TEXT" },  // JSON array for API-facing entity extraction
     { name: "entities_json", ddl: "TEXT" },  // JSON array
     { name: "embedding", ddl: "TEXT" },  // JSON array of floats
     { name: "embedding_hash", ddl: "TEXT" },  // SHA256 hash of embedding for dedup
@@ -372,13 +374,22 @@ export type AgentMemoryRecord = {
   userId: string;
   title: string;
   text: string;
+  sourceType: MemorySourceType;
+  memoryType: MemoryKind;
+  sourceUrl: string | null;
+  fileName: string | null;
   metadata: Record<string, unknown> | null;
   namespaceId: string | null;
   sessionId: string | null;
+  entities: string[];
+  feedbackScore: number;
+  accessCount: number;
+  isEncrypted?: boolean;
   createdAt: string;
 };
 
 function mapRow(row: Record<string, unknown>): MemoryRecord {
+  const entities = parseJsonStringArray((row.entities as string | null) ?? row.entities_json);
   return {
     id: row.id as string,
     userId: row.user_id as string,
@@ -396,6 +407,9 @@ function mapRow(row: Record<string, unknown>): MemoryRecord {
     arweaveTxId: row.arweave_tx_id as string | null,
     syncStatus: (row.sync_status as MemorySyncStatus) ?? "pending",
     syncError: row.sync_error as string | null,
+    entities,
+    feedbackScore: Number(row.feedback_score ?? 0),
+    accessCount: Number(row.access_count ?? 0),
     createdAt: row.created_at as string,
   };
 }
@@ -1000,6 +1014,23 @@ function parseJsonObject(input: unknown): Record<string, unknown> | null {
   return null;
 }
 
+function parseJsonStringArray(input: unknown): string[] {
+  if (typeof input !== "string" || !input) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(input) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+    }
+  } catch {
+    // no-op
+  }
+
+  return [];
+}
+
 export type CreateMemoryEdgeInput = {
   userId: string;
   sourceId: string;
@@ -1033,9 +1064,16 @@ function mapAgentMemoryRow(row: Record<string, unknown>): AgentMemoryRecord {
     userId: row.user_id as string,
     title: row.title as string,
     text: row.content_text as string,
+    sourceType: (row.source_type as MemorySourceType) ?? "text",
+    memoryType: (row.memory_type as MemoryKind) ?? "episodic",
+    sourceUrl: (row.source_url as string | null) ?? null,
+    fileName: (row.file_name as string | null) ?? null,
     metadata: parseJsonObject(row.metadata_json),
     namespaceId: (row.namespace_id as string | null) ?? null,
     sessionId: (row.session_id as string | null) ?? null,
+    entities: parseJsonStringArray((row.entities as string | null) ?? row.entities_json),
+    feedbackScore: Number(row.feedback_score ?? 0),
+    accessCount: Number(row.access_count ?? 0),
     createdAt: row.created_at as string,
   };
 }
@@ -1048,14 +1086,15 @@ export async function createApiKey(userId: string, agentName?: string): Promise<
   const token = crypto.randomBytes(24).toString("hex");
   const apiKey = `mem_${token}`;
   const keyHash = hashApiKey(apiKey);
+  const keySuffix = apiKey.slice(-3); // Store last 3 chars for identification
   const now = new Date().toISOString();
 
   await client.execute({
     sql: `
-      INSERT INTO api_keys (id, user_id, key_hash, agent_id, agent_name, created_at, last_used)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO api_keys (id, user_id, key_hash, key_suffix, agent_id, agent_name, created_at, last_used)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `,
-    args: [id, userId, keyHash, agentId, agentName ?? null, now, now],
+    args: [id, userId, keyHash, keySuffix, agentId, agentName ?? null, now, now],
   });
 
   return { apiKey, agentId };
@@ -1115,6 +1154,7 @@ export async function listApiKeys(userId: string): Promise<Array<{
   agentId: string;
   agentName: string;
   keyPrefix: string;
+  keySuffix: string;
   createdAt: string;
   lastUsed: string;
   revokedAt: string | null;
@@ -1126,7 +1166,7 @@ export async function listApiKeys(userId: string): Promise<Array<{
 
   const result = await client.execute({
     sql: `
-      SELECT id, agent_id, agent_name, created_at, last_used, revoked_at, expires_at
+      SELECT id, agent_id, agent_name, key_suffix, created_at, last_used, revoked_at, expires_at
       FROM api_keys
       WHERE user_id = ?
       ORDER BY created_at DESC
@@ -1147,6 +1187,7 @@ export async function listApiKeys(userId: string): Promise<Array<{
       agentId: row.agent_id as string,
       agentName: (row.agent_name as string) || "Unnamed Agent",
       keyPrefix: "mem_",
+      keySuffix: (row.key_suffix as string) || "???",
       createdAt: row.created_at as string,
       lastUsed: row.last_used as string,
       revokedAt,
@@ -1474,9 +1515,15 @@ export async function insertAgentMemory(params: {
   userId: string;
   title?: string;
   text: string;
+  sourceType?: MemorySourceType;
+  memoryType?: MemoryKind;
+  sourceUrl?: string | null;
+  fileName?: string | null;
+  entities?: string[];
   metadata?: Record<string, unknown> | null;
   namespaceId?: string | null;
   sessionId?: string | null;
+  isEncrypted?: boolean;
 }): Promise<AgentMemoryRecord> {
   await ensureInitialized();
   await ensureRateLimiterInitialized();
@@ -1486,6 +1533,10 @@ export async function insertAgentMemory(params: {
   const text = params.text.trim();
   const title = (params.title?.trim() || text.slice(0, 80) || "Untitled Memory").trim();
   const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
+  const sourceType = params.sourceType ?? "text";
+  const memoryType = params.memoryType ?? "episodic";
+  const entities = params.entities ?? [];
+  const entitiesJson = JSON.stringify(entities);
   const contentHash = crypto.createHash("sha256").update(text, "utf8").digest("hex");
   const sizeBytes = Buffer.byteLength(text, "utf8");
   const tx = await client.transaction("write");
@@ -1497,10 +1548,27 @@ export async function insertAgentMemory(params: {
         INSERT INTO memories (
           id, user_id, title, source_type, memory_type, importance, tags_csv,
           source_url, file_name, content_text, content_iv, content_encrypted, content_hash, arweave_tx_id,
-          sync_status, sync_error, created_at, namespace_id, session_id, metadata_json
-        ) VALUES (?, ?, ?, 'text', 'episodic', 5, '', NULL, NULL, ?, NULL, 0, ?, NULL, 'pending', NULL, ?, ?, ?, ?)
+          sync_status, sync_error, created_at, namespace_id, session_id, metadata_json, entities, entities_json
+        ) VALUES (?, ?, ?, ?, ?, 5, '', ?, ?, ?, NULL, ?, ?, NULL, 'pending', NULL, ?, ?, ?, ?, ?, ?)
       `,
-      args: [id, params.userId, title, text, contentHash, now, params.namespaceId ?? null, params.sessionId ?? null, metadataJson],
+      args: [
+        id,
+        params.userId,
+        title,
+        sourceType,
+        memoryType,
+        params.sourceUrl ?? null,
+        params.fileName ?? null,
+        text,
+        params.isEncrypted ? 1 : 0,
+        contentHash,
+        now,
+        params.namespaceId ?? null,
+        params.sessionId ?? null,
+        metadataJson,
+        entitiesJson,
+        entitiesJson,
+      ],
     });
     await tx.commit();
   } catch (error) {
@@ -1515,9 +1583,17 @@ export async function insertAgentMemory(params: {
     userId: params.userId,
     title,
     text,
+    sourceType,
+    memoryType,
+    sourceUrl: params.sourceUrl ?? null,
+    fileName: params.fileName ?? null,
     metadata: params.metadata ?? null,
     namespaceId: params.namespaceId ?? null,
     sessionId: params.sessionId ?? null,
+    entities,
+    feedbackScore: 0,
+    accessCount: 0,
+    isEncrypted: params.isEncrypted ?? false,
     createdAt: now,
   };
 }
@@ -1525,12 +1601,16 @@ export async function insertAgentMemory(params: {
 export async function listAgentMemories(params: {
   userId: string;
   namespaceId?: string | null;
+  sessionId?: string | null;
   limit?: number;
   since?: string;
+  memoryTypes?: MemoryKind[];
+  excludeMemoryTypes?: MemoryKind[];
 }): Promise<AgentMemoryRecord[]> {
   await ensureInitialized();
   const client = getDb();
   const hasNamespaceFilter = typeof params.namespaceId !== "undefined";
+  const hasSessionFilter = typeof params.sessionId !== "undefined";
   const hasSince = typeof params.since === "string" && params.since.length > 0;
   const limit = Math.max(1, Math.min(params.limit ?? 50, 200));
   const args: Array<string | number | null> = [params.userId];
@@ -1540,15 +1620,65 @@ export async function listAgentMemories(params: {
     where += " AND namespace_id = ?";
     args.push(params.namespaceId ?? null);
   }
+  if (hasSessionFilter) {
+    where += " AND session_id = ?";
+    args.push(params.sessionId ?? null);
+  }
   if (hasSince) {
     where += " AND created_at >= ?";
     args.push(params.since as string);
+  }
+  if (params.memoryTypes?.length) {
+    where += ` AND memory_type IN (${params.memoryTypes.map(() => "?").join(",")})`;
+    args.push(...params.memoryTypes);
+  }
+  if (params.excludeMemoryTypes?.length) {
+    where += ` AND memory_type NOT IN (${params.excludeMemoryTypes.map(() => "?").join(",")})`;
+    args.push(...params.excludeMemoryTypes);
   }
   args.push(limit);
 
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, content_text, metadata_json, namespace_id, session_id, created_at
+      SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, metadata_json,
+             namespace_id, session_id, entities, entities_json, feedback_score, access_count, created_at
+      FROM memories
+      ${where}
+      ORDER BY created_at DESC
+      LIMIT ?
+    `,
+    args,
+  });
+
+  return result.rows.map((row) => mapAgentMemoryRow(row as Record<string, unknown>));
+}
+
+export async function listConsolidatedMemories(params: {
+  userId: string;
+  namespaceId?: string | null;
+  limit?: number;
+}): Promise<AgentMemoryRecord[]> {
+  await ensureInitialized();
+  const client = getDb();
+  const hasNamespaceFilter = typeof params.namespaceId !== "undefined";
+  const limit = Math.max(1, Math.min(params.limit ?? 200, 500));
+  const args: Array<string | number | null> = [params.userId];
+  let where = `
+    WHERE user_id = ?
+      AND archived_at IS NULL
+      AND (memory_type = 'reflected' OR instr(',' || tags_csv || ',', ',consolidated,') > 0)
+  `;
+
+  if (hasNamespaceFilter) {
+    where += " AND namespace_id = ?";
+    args.push(params.namespaceId ?? null);
+  }
+  args.push(limit);
+
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, metadata_json,
+             namespace_id, session_id, entities, entities_json, feedback_score, access_count, created_at
       FROM memories
       ${where}
       ORDER BY created_at DESC
@@ -1565,9 +1695,10 @@ export async function listSessionMemories(userId: string, sessionId: string): Pr
   const client = getDb();
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, content_text, metadata_json, namespace_id, session_id, created_at
+      SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, metadata_json,
+             namespace_id, session_id, entities, entities_json, feedback_score, access_count, created_at
       FROM memories
-      WHERE user_id = ? AND session_id = ?
+      WHERE user_id = ? AND session_id = ? AND archived_at IS NULL
       ORDER BY created_at ASC
     `,
     args: [userId, sessionId],
@@ -1580,7 +1711,8 @@ export async function getAgentMemoryById(userId: string, id: string): Promise<Ag
   const client = getDb();
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, content_text, metadata_json, namespace_id, session_id, created_at
+      SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, metadata_json,
+             namespace_id, session_id, entities, entities_json, feedback_score, access_count, created_at
       FROM memories
       WHERE user_id = ? AND id = ?
       LIMIT 1
@@ -1595,6 +1727,9 @@ export async function getAgentMemoriesByIds(params: {
   userId: string;
   ids: string[];
   namespaceId?: string | null;
+  since?: string;
+  memoryTypes?: MemoryKind[];
+  excludeMemoryTypes?: MemoryKind[];
 }): Promise<AgentMemoryRecord[]> {
   await ensureInitialized();
   if (params.ids.length === 0) {
@@ -1604,17 +1739,31 @@ export async function getAgentMemoriesByIds(params: {
   const client = getDb();
   const placeholders = params.ids.map(() => "?").join(",");
   const hasNamespaceFilter = typeof params.namespaceId !== "undefined";
+  const hasSince = typeof params.since === "string" && params.since.length > 0;
   const args: Array<string | number | null> = [params.userId, ...params.ids];
   if (hasNamespaceFilter) {
     args.push(params.namespaceId ?? null);
   }
+  if (hasSince) {
+    args.push(params.since ?? null);
+  }
+  if (params.memoryTypes?.length) {
+    args.push(...params.memoryTypes);
+  }
+  if (params.excludeMemoryTypes?.length) {
+    args.push(...params.excludeMemoryTypes);
+  }
 
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, content_text, metadata_json, namespace_id, session_id, created_at
+      SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, metadata_json,
+             namespace_id, session_id, entities, entities_json, feedback_score, access_count, created_at
       FROM memories
-      WHERE user_id = ? AND id IN (${placeholders})
+      WHERE user_id = ? AND id IN (${placeholders}) AND archived_at IS NULL
       ${hasNamespaceFilter ? "AND namespace_id = ?" : ""}
+      ${hasSince ? "AND created_at >= ?" : ""}
+      ${params.memoryTypes?.length ? `AND memory_type IN (${params.memoryTypes.map(() => "?").join(",")})` : ""}
+      ${params.excludeMemoryTypes?.length ? `AND memory_type NOT IN (${params.excludeMemoryTypes.map(() => "?").join(",")})` : ""}
     `,
     args,
   });
@@ -1648,6 +1797,108 @@ export async function deleteAgentMemoryById(userId: string, id: string): Promise
   }
 
   return deleted;
+}
+
+export async function archiveAgentMemoriesByIds(userId: string, ids: string[]): Promise<number> {
+  await ensureInitialized();
+  if (ids.length === 0) {
+    return 0;
+  }
+
+  const client = getDb();
+  const now = new Date().toISOString();
+  const placeholders = ids.map(() => "?").join(",");
+  const result = await client.execute({
+    sql: `
+      UPDATE memories
+      SET archived_at = ?
+      WHERE user_id = ? AND id IN (${placeholders}) AND archived_at IS NULL
+    `,
+    args: [now, userId, ...ids],
+  });
+
+  return result.rowsAffected ?? 0;
+}
+
+export async function deleteAgentMemoriesByIds(userId: string, ids: string[]): Promise<number> {
+  await ensureInitialized();
+  if (ids.length === 0) {
+    return 0;
+  }
+
+  const client = getDb();
+  const placeholders = ids.map(() => "?").join(",");
+  const result = await client.execute({
+    sql: `
+      DELETE FROM memories
+      WHERE user_id = ? AND id IN (${placeholders})
+    `,
+    args: [userId, ...ids],
+  });
+
+  return result.rowsAffected ?? 0;
+}
+
+export type MemoryCompactionCandidate = AgentMemoryRecord & {
+  embedding: number[];
+  strength: number;
+  mentionCount: number;
+  archivedAt: string | null;
+};
+
+export async function listMemoryCompactionCandidates(params: {
+  userId: string;
+  namespaceId?: string | null;
+  excludeMemoryTypes?: MemoryKind[];
+  limit?: number;
+}): Promise<MemoryCompactionCandidate[]> {
+  await ensureInitialized();
+  const client = getDb();
+  const hasNamespaceFilter = typeof params.namespaceId !== "undefined";
+  const limit = Math.max(1, Math.min(params.limit ?? 1000, 5000));
+  const args: Array<string | number | null> = [params.userId];
+  let where = "WHERE user_id = ? AND archived_at IS NULL";
+
+  if (hasNamespaceFilter) {
+    where += " AND namespace_id = ?";
+    args.push(params.namespaceId ?? null);
+  }
+  if (params.excludeMemoryTypes?.length) {
+    where += ` AND memory_type NOT IN (${params.excludeMemoryTypes.map(() => "?").join(",")})`;
+    args.push(...params.excludeMemoryTypes);
+  }
+  args.push(limit);
+
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, metadata_json,
+             namespace_id, session_id, entities, entities_json, feedback_score, access_count, created_at,
+             embedding, strength, mention_count, archived_at
+      FROM memories
+      ${where}
+      ORDER BY created_at DESC
+      LIMIT ?
+    `,
+    args,
+  });
+
+  return result.rows.map((row) => {
+    const record = row as Record<string, unknown>;
+    let embedding: number[] = [];
+    try {
+      embedding = JSON.parse((record.embedding as string) || "[]") as number[];
+    } catch {
+      // no-op
+    }
+
+    return {
+      ...mapAgentMemoryRow(record),
+      embedding,
+      strength: Number(record.strength ?? 1),
+      mentionCount: Number(record.mention_count ?? 1),
+      archivedAt: (record.archived_at as string | null) ?? null,
+    };
+  });
 }
 
 // =============================================================================
@@ -1785,6 +2036,17 @@ export async function reinforceMemory(
         SET 
           strength = MAX(?, 0.1),
           mention_count = MAX(mention_count, ?),
+          entities = CASE
+            WHEN entities IS NULL OR entities = '[]' THEN ?
+            ELSE (
+              SELECT json_group_array(DISTINCT value)
+              FROM (
+                SELECT value FROM json_each(entities)
+                UNION ALL
+                SELECT value FROM json_each(?)
+              )
+            )
+          END,
           entities_json = CASE 
             WHEN entities_json IS NULL OR entities_json = '[]' THEN ?
             ELSE (
@@ -1809,6 +2071,8 @@ export async function reinforceMemory(
       args: [
         update.newStrength,
         update.mentionCount,
+        JSON.stringify(update.entities || []),
+        JSON.stringify(update.entities || []),
         JSON.stringify(update.entities || []),
         JSON.stringify(update.entities || []),
         update.conversationId || null,
@@ -1840,11 +2104,112 @@ export async function updateMemoryAccess(memoryId: string, userId: string): Prom
   });
 }
 
+export async function updateAgentMemory(
+  userId: string,
+  memoryId: string,
+  updates: { title?: string; text?: string }
+): Promise<boolean> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const setClauses: string[] = [];
+  const args: (string | number)[] = [];
+
+  if (updates.title !== undefined) {
+    setClauses.push("title = ?");
+    args.push(updates.title);
+  }
+  if (updates.text !== undefined) {
+    setClauses.push("content_text = ?");
+    args.push(updates.text);
+    // Update content hash when text changes
+    const crypto = await import("crypto");
+    const contentHash = crypto.createHash("sha256").update(updates.text).digest("hex");
+    setClauses.push("content_hash = ?");
+    args.push(contentHash);
+  }
+
+  if (setClauses.length === 0) {
+    return false;
+  }
+
+  args.push(memoryId, userId);
+
+  const result = await client.execute({
+    sql: `
+      UPDATE memories
+      SET ${setClauses.join(", ")}
+      WHERE id = ? AND user_id = ? AND archived_at IS NULL
+    `,
+    args,
+  });
+
+  return (result.rowsAffected ?? 0) > 0;
+}
+
+export async function recordMemorySearchHits(userId: string, memoryIds: string[]): Promise<void> {
+  await ensureInitialized();
+  if (memoryIds.length === 0) {
+    return;
+  }
+
+  const client = getDb();
+  const now = new Date().toISOString();
+  const placeholders = memoryIds.map(() => "?").join(",");
+
+  await client.execute({
+    sql: `
+      UPDATE memories
+      SET access_count = access_count + 1,
+          last_accessed_at = ?
+      WHERE user_id = ? AND id IN (${placeholders})
+    `,
+    args: [now, userId, ...memoryIds],
+  });
+}
+
+export async function applyMemoryFeedback(params: {
+  userId: string;
+  memoryId: string;
+  rating: "positive" | "negative";
+}): Promise<AgentMemoryRecord | null> {
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+  const delta = params.rating === "positive" ? 1 : -1;
+
+  await client.execute({
+    sql: `
+      UPDATE memories
+      SET feedback_score = feedback_score + ?,
+          strength = CASE
+            WHEN ? > 0 THEN MIN(COALESCE(strength, 1.0) + 0.15, 4.0)
+            ELSE MAX(COALESCE(strength, 1.0) - 0.2, 0.1)
+          END,
+          base_strength = CASE
+            WHEN ? > 0 THEN MIN(COALESCE(base_strength, 1.0) + 0.05, 3.0)
+            ELSE MAX(COALESCE(base_strength, 1.0) - 0.05, 0.1)
+          END,
+          halflife_days = CASE
+            WHEN ? > 0 THEN MIN(COALESCE(halflife_days, 60) + 7, 365)
+            ELSE MAX(COALESCE(halflife_days, 60) - 7, 7)
+          END,
+          last_accessed_at = ?
+      WHERE id = ? AND user_id = ?
+    `,
+    args: [delta, delta, delta, delta, now, params.memoryId, params.userId],
+  });
+
+  return getAgentMemoryById(params.userId, params.memoryId);
+}
+
 export async function getMemoriesForDecay(userId: string): Promise<Array<{
   id: string;
   strength: number;
   baseStrength: number;
   halflifeDays: number;
+  accessCount: number;
+  feedbackScore: number;
   lastAccessedAt: string | null;
   archivedAt: string | null;
 }>> {
@@ -1853,7 +2218,7 @@ export async function getMemoriesForDecay(userId: string): Promise<Array<{
 
   const result = await client.execute({
     sql: `
-      SELECT id, strength, base_strength, halflife_days, last_accessed_at, archived_at
+      SELECT id, strength, base_strength, halflife_days, access_count, feedback_score, last_accessed_at, archived_at
       FROM memories
       WHERE user_id = ?
     `,
@@ -1867,6 +2232,8 @@ export async function getMemoriesForDecay(userId: string): Promise<Array<{
       strength: Number(record.strength ?? 1.0),
       baseStrength: Number(record.base_strength ?? 1.0),
       halflifeDays: Number(record.halflife_days ?? 60),
+      accessCount: Number(record.access_count ?? 0),
+      feedbackScore: Number(record.feedback_score ?? 0),
       lastAccessedAt: (record.last_accessed_at as string | null) ?? null,
       archivedAt: (record.archived_at as string | null) ?? null,
     };
@@ -1959,7 +2326,8 @@ export async function insertMemoryWithMetadata(params: {
   const contentHash = crypto.createHash("sha256").update(text, "utf8").digest("hex");
   const embeddingJson = params.embedding ? JSON.stringify(params.embedding) : null;
   const embeddingHashValue = params.embedding ? hashEmbedding(params.embedding) : null;
-  const entitiesJson = params.entities ? JSON.stringify(params.entities) : null;
+  const entities = params.entities ?? [];
+  const entitiesJson = JSON.stringify(entities);
   const conversationsJson = params.conversationId ? JSON.stringify([params.conversationId]) : null;
 
   await client.execute({
@@ -1968,10 +2336,10 @@ export async function insertMemoryWithMetadata(params: {
         id, user_id, title, source_type, memory_type, importance, tags_csv,
         source_url, file_name, content_text, content_iv, content_encrypted, content_hash, arweave_tx_id,
         sync_status, sync_error, created_at, namespace_id, session_id, metadata_json,
-        embedding, embedding_hash, strength, base_strength, halflife_days, entities_json, source_conversations,
+        embedding, embedding_hash, strength, base_strength, halflife_days, entities, entities_json, source_conversations,
         first_mentioned_at, last_mentioned_at, last_accessed_at
       ) VALUES (?, ?, ?, 'text', ?, ?, '', NULL, NULL, ?, NULL, 0, ?, NULL, 'pending', NULL, ?, ?, ?, ?,
-                ?, ?, 1.0, 1.0, ?, ?, ?, ?, ?, ?)
+                ?, ?, 1.0, 1.0, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -1989,6 +2357,7 @@ export async function insertMemoryWithMetadata(params: {
       embeddingHashValue,
       params.halflifeDays ?? 60,
       entitiesJson,
+      entitiesJson,
       conversationsJson,
       now,  // first_mentioned_at
       now,  // last_mentioned_at
@@ -2001,9 +2370,16 @@ export async function insertMemoryWithMetadata(params: {
     userId: params.userId,
     title,
     text,
+    sourceType: "text",
+    memoryType: (params.memoryType as MemoryKind) ?? "episodic",
+    sourceUrl: null,
+    fileName: null,
     metadata: params.metadata ?? null,
     namespaceId: params.namespaceId ?? null,
     sessionId: params.sessionId ?? null,
+    entities,
+    feedbackScore: 0,
+    accessCount: 0,
     createdAt: now,
   };
 }
@@ -2038,7 +2414,8 @@ export async function insertMemoryWithMetadataAndQuota(params: {
   const contentHash = crypto.createHash("sha256").update(text, "utf8").digest("hex");
   const embeddingJson = params.embedding ? JSON.stringify(params.embedding) : null;
   const embeddingHashValue = params.embedding ? hashEmbedding(params.embedding) : null;
-  const entitiesJson = params.entities ? JSON.stringify(params.entities) : null;
+  const entities = params.entities ?? [];
+  const entitiesJson = JSON.stringify(entities);
   const conversationsJson = params.conversationId ? JSON.stringify([params.conversationId]) : null;
   const sizeBytes = Buffer.byteLength(text, "utf8");
   const tx = await client.transaction("write");
@@ -2051,10 +2428,10 @@ export async function insertMemoryWithMetadataAndQuota(params: {
           id, user_id, title, source_type, memory_type, importance, tags_csv,
           source_url, file_name, content_text, content_iv, content_encrypted, content_hash, arweave_tx_id,
           sync_status, sync_error, created_at, namespace_id, session_id, metadata_json,
-          embedding, embedding_hash, strength, base_strength, halflife_days, entities_json, source_conversations,
+          embedding, embedding_hash, strength, base_strength, halflife_days, entities, entities_json, source_conversations,
           first_mentioned_at, last_mentioned_at, last_accessed_at
         ) VALUES (?, ?, ?, 'text', ?, ?, '', NULL, NULL, ?, NULL, 0, ?, NULL, 'pending', NULL, ?, ?, ?, ?,
-                  ?, ?, 1.0, 1.0, ?, ?, ?, ?, ?, ?)
+                  ?, ?, 1.0, 1.0, ?, ?, ?, ?, ?, ?, ?)
       `,
       args: [
         id,
@@ -2071,6 +2448,7 @@ export async function insertMemoryWithMetadataAndQuota(params: {
         embeddingJson,
         embeddingHashValue,
         params.halflifeDays ?? 60,
+        entitiesJson,
         entitiesJson,
         conversationsJson,
         now,
@@ -2102,9 +2480,16 @@ export async function insertMemoryWithMetadataAndQuota(params: {
       userId: params.userId,
       title,
       text,
+      sourceType: "text",
+      memoryType: (params.memoryType as MemoryKind) ?? "episodic",
+      sourceUrl: null,
+      fileName: null,
       metadata: params.metadata ?? null,
       namespaceId: params.namespaceId ?? null,
       sessionId: params.sessionId ?? null,
+      entities,
+      feedbackScore: 0,
+      accessCount: 0,
       createdAt: now,
     },
     created: true,

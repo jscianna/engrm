@@ -7,6 +7,9 @@ export const memoryTypeLabels: Record<MemoryKind, string> = {
   semantic: "Fact",
   procedural: "How-to",
   "self-model": "Preference",
+  reflected: "Reflected",
+  session_summary: "Session Summary",
+  compacted: "Compacted",
   // New types from auto-memory spec v2
   constraint: "Constraint",
   identity: "Identity",

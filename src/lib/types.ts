@@ -1,9 +1,12 @@
-export type MemorySourceType = "text" | "url" | "file";
+export type MemorySourceType = "text" | "url" | "file" | "pdf";
 export type MemoryKind = 
   | "episodic" 
   | "semantic" 
   | "procedural" 
   | "self-model"
+  | "reflected"
+  | "session_summary"
+  | "compacted"
   // New types from auto-memory spec v2
   | "constraint"
   | "identity"
@@ -49,6 +52,9 @@ export type MemoryRecord = {
   arweaveTxId: string | null;
   syncStatus: MemorySyncStatus;
   syncError: string | null;
+  entities?: string[];
+  feedbackScore?: number;
+  accessCount?: number;
   createdAt: string;
   relationshipCount?: number;
   supersededByCount?: number;

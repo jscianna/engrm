@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { listApiKeys, createApiKey } from "@/lib/db";
+import { listApiKeys, createApiKey, getUserVaultSalt } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -11,8 +11,11 @@ export async function GET() {
   }
 
   try {
-    const keys = await listApiKeys(userId);
-    return NextResponse.json({ keys });
+    const [keys, vaultSalt] = await Promise.all([
+      listApiKeys(userId),
+      getUserVaultSalt(userId),
+    ]);
+    return NextResponse.json({ keys, vaultConfigured: !!vaultSalt });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to list API keys";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -26,6 +29,15 @@ export async function POST(request: Request) {
   }
 
   try {
+    // Require vault setup before creating API keys
+    const vaultSalt = await getUserVaultSalt(userId);
+    if (!vaultSalt) {
+      return NextResponse.json(
+        { error: "Please set up your encryption vault in Settings before creating API keys" },
+        { status: 400 }
+      );
+    }
+
     const body = await request.json().catch(() => ({}));
     const agentName = typeof body.agentName === "string" ? body.agentName : undefined;
 

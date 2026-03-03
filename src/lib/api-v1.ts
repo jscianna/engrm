@@ -2,6 +2,7 @@ import {
   getNamespaceByName,
   type NamespaceRecord,
 } from "@/lib/db";
+import { MemryError } from "@/lib/errors";
 
 export function jsonError(error: string, code: string, status: number): Response {
   return Response.json({ error, code }, { status });
@@ -17,6 +18,24 @@ export function normalizeLimit(raw: unknown, fallback: number, max = 200): numbe
     return fallback;
   }
   return Math.max(1, Math.min(Math.floor(parsed), max));
+}
+
+export function normalizeIsoTimestamp(raw: unknown, field: string): string | undefined {
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const parsed = Date.parse(trimmed);
+  if (Number.isNaN(parsed)) {
+    throw new MemryError("VALIDATION_ERROR", { field, reason: "invalid timestamp" });
+  }
+
+  return new Date(parsed).toISOString();
 }
 
 export function estimateTokens(text: string): number {

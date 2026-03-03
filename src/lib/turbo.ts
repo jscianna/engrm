@@ -1,5 +1,5 @@
 import { TurboFactory, type ArweaveJWK, type TokenType } from "@ardrive/turbo-sdk";
-import type { MemoryKind } from "@/lib/types";
+import type { MemoryKind, MemorySourceType } from "@/lib/types";
 
 export const turboToken = (process.env.TURBO_TOKEN as TokenType | undefined) ?? "arweave";
 
@@ -49,7 +49,7 @@ export async function uploadTextToArweave({
 }: {
   title: string;
   content: string;
-  sourceType: "text" | "url" | "file";
+  sourceType: MemorySourceType;
   memoryType: MemoryKind;
   importance: number;
   tags: string[];

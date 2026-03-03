@@ -4,7 +4,27 @@ import { NextResponse } from "next/server";
 const isProtectedRoute = createRouteMatcher(["/dashboard(.*)", "/api/memories(.*)"]);
 const isAdminRoute = createRouteMatcher(["/api/admin(.*)"]);
 
+// Block bot scanner paths (WordPress, PHP vulns, etc.)
+const BLOCKED_PATHS = [
+  "/wp-admin", "/wp-login", "/wp-content", "/wp-includes", "/wp-config",
+  "/wordpress", "/xmlrpc", "/phpmyadmin", "/administrator", 
+  "/.env", "/.git", "/config.php", "/backup", "/db", "/sql",
+];
+
+function isBlockedPath(pathname: string): boolean {
+  const lower = pathname.toLowerCase();
+  if (lower.endsWith(".php")) return true;
+  return BLOCKED_PATHS.some(p => lower.includes(p));
+}
+
 export default clerkMiddleware(async (auth, request) => {
+  const pathname = request.nextUrl.pathname;
+  
+  // Block scanner bots immediately (return 404, not redirect)
+  if (isBlockedPath(pathname)) {
+    return new NextResponse(null, { status: 404 });
+  }
+  
   // Skip Clerk auth for admin routes (they use their own API key auth)
   if (isAdminRoute(request)) {
     return NextResponse.next();

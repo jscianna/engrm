@@ -29,8 +29,6 @@ export const EMBEDDING_DIMENSIONS = {
   "text-embedding-3-small": 1536,
 } as const;
 
-type SupportedDimension = 384 | 1536;
-
 // =============================================================================
 // Types
 // =============================================================================
@@ -114,7 +112,7 @@ let collectionInitialized = false;
  * Ensure collection exists with correct schema
  * Supports multi-vector (384 + 1536 dim) via named vectors
  */
-export async function ensureCollection(dimension: SupportedDimension = 384): Promise<void> {
+export async function ensureCollection(): Promise<void> {
   if (!isQdrantEnabled() || collectionInitialized) return;
 
   try {
@@ -281,6 +279,7 @@ export async function semanticSearchVectors(params: {
   query: string;
   vector: number[];
   topK?: number;
+  since?: string;
 }): Promise<VectorSearchResult[]> {
   if (!isQdrantEnabled()) {
     const { semanticSearchVectors: tursoSearch } = await import("./vector");
@@ -291,6 +290,10 @@ export async function semanticSearchVectors(params: {
 
   const vectorName = getVectorName(params.vector.length);
   const topK = params.topK ?? 10;
+  const must: Array<Record<string, unknown>> = [{ key: "user_id", match: { value: params.userId } }];
+  if (params.since) {
+    must.push({ key: "created_at", range: { gte: params.since } });
+  }
 
   const response = await qdrantFetch(`/collections/${COLLECTION_NAME}/points/search`, {
     method: "POST",
@@ -299,9 +302,7 @@ export async function semanticSearchVectors(params: {
         name: vectorName,
         vector: params.vector,
       },
-      filter: {
-        must: [{ key: "user_id", match: { value: params.userId } }],
-      },
+      filter: { must },
       limit: topK,
       with_payload: true,
     }),
@@ -333,6 +334,7 @@ export async function semanticSearchVectorsDirect(params: {
   userId: string;
   vector: number[];
   topK?: number;
+  since?: string;
 }): Promise<Array<{ id: string; score: number }>> {
   if (!isQdrantEnabled()) {
     const { semanticSearchVectorsDirect: tursoSearch } = await import("./vector");
@@ -344,6 +346,7 @@ export async function semanticSearchVectorsDirect(params: {
     query: "", // Not used in Qdrant
     vector: params.vector,
     topK: params.topK,
+    since: params.since,
   });
 
   return results.map((r) => ({

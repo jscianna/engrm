@@ -1,4 +1,4 @@
-import { deleteAgentMemoryById, getAgentMemoryById } from "@/lib/db";
+import { deleteAgentMemoryById, getAgentMemoryById, updateAgentMemory } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { recordMemoryDeleted } from "@/lib/rate-limiter";
@@ -18,6 +18,40 @@ export async function GET(
       throw new MemryError("MEMORY_NOT_FOUND");
     }
 
+    return Response.json({ memory });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export async function PATCH(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  try {
+    const identity = await validateApiKey(request, "memories.update");
+    const { id } = await context.params;
+    
+    const body = await request.json().catch(() => ({}));
+    const updates: { title?: string; text?: string } = {};
+    
+    if (typeof body.title === "string") {
+      updates.title = body.title.trim();
+    }
+    if (typeof body.text === "string") {
+      updates.text = body.text.trim();
+    }
+    
+    if (Object.keys(updates).length === 0) {
+      throw new MemryError("VALIDATION_ERROR", { reason: "No valid fields to update (title or text)" });
+    }
+
+    const updated = await updateAgentMemory(identity.userId, id, updates);
+    if (!updated) {
+      throw new MemryError("MEMORY_NOT_FOUND");
+    }
+
+    const memory = await getAgentMemoryById(identity.userId, id);
     return Response.json({ memory });
   } catch (error) {
     return errorResponse(error);

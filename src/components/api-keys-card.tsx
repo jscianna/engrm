@@ -11,6 +11,7 @@ type ApiKey = {
   id: string;
   agentName: string;
   keyPrefix: string;
+  keySuffix: string;
   createdAt: string;
   lastUsed: string | null;
   revokedAt: string | null;
@@ -26,6 +27,7 @@ export function ApiKeysCard() {
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [vaultConfigured, setVaultConfigured] = useState(true);
 
   const fetchKeys = useCallback(async () => {
     try {
@@ -33,6 +35,7 @@ export function ApiKeysCard() {
       if (res.ok) {
         const data = await res.json();
         setKeys(data.keys || []);
+        setVaultConfigured(data.vaultConfigured ?? true);
       }
     } catch {
       // Ignore errors
@@ -146,6 +149,15 @@ export function ApiKeysCard() {
           Create API keys for AI agents to access your memories via the Engrm API.
         </p>
 
+        {/* Vault required warning */}
+        {!vaultConfigured && !loading && (
+          <div className="rounded-lg border border-amber-800 bg-amber-950/30 p-3">
+            <p className="text-sm text-amber-300">
+              🔐 Set up your encryption vault below before creating API keys. All memories are encrypted by default.
+            </p>
+          </div>
+        )}
+
         {/* New key display (shown once after creation) */}
         {newKeyValue && (
           <div className="rounded-lg border border-cyan-800 bg-cyan-950/30 p-3">
@@ -187,8 +199,8 @@ export function ApiKeysCard() {
           />
           <Button
             onClick={() => void createKey()}
-            disabled={creating || !newKeyName.trim()}
-            className="bg-cyan-400 text-zinc-950 hover:bg-cyan-300"
+            disabled={creating || !newKeyName.trim() || !vaultConfigured}
+            className="bg-cyan-400 text-zinc-950 hover:bg-cyan-300 disabled:opacity-50"
           >
             {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             Create
@@ -232,7 +244,7 @@ export function ApiKeysCard() {
                     )}
                   </div>
                   <p className="text-xs text-zinc-500">
-                    {key.keyPrefix}••• · Created {new Date(key.createdAt).toLocaleDateString()}
+                    {key.keyPrefix}•••{key.keySuffix} · Created {new Date(key.createdAt).toLocaleDateString()}
                     {key.lastUsed && (
                       <> · Last used {new Date(key.lastUsed).toLocaleDateString()}</>
                     )}

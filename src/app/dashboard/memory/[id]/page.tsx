@@ -6,10 +6,12 @@ import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CommitMemoryButton } from "@/components/commit-memory-button";
-import { ArweaveVerifyButton } from "@/components/arweave-verify-button";
+// Arweave features hidden for now
+// import { CommitMemoryButton } from "@/components/commit-memory-button";
+// import { ArweaveVerifyButton } from "@/components/arweave-verify-button";
 import { EncryptedContentViewer } from "@/components/encrypted-content-viewer";
 import { MemoryRelationships } from "@/components/memory-relationships";
+import { MemoryEditForm } from "@/components/memory-edit-form";
 import { getCachedMemory, getCachedRelatedMemories } from "@/lib/memories";
 import { getMemoryTypeLabel } from "@/lib/memory-labels";
 
@@ -97,7 +99,6 @@ export default async function MemoryDetailPage({
                 </Badge>
               </div>
             </div>
-            <CommitMemoryButton memoryId={memory.id} arweaveTxId={memory.arweaveTxId} syncStatus={memory.syncStatus} />
           </div>
           <p className="text-xs text-zinc-500">Saved {new Date(memory.createdAt).toLocaleString()}</p>
         </CardHeader>
@@ -124,22 +125,7 @@ export default async function MemoryDetailPage({
             </div>
           ) : null}
 
-          {memory.arweaveTxId ? (
-            <div className="space-y-2">
-              <p className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Arweave Proof</p>
-              <ArweaveVerifyButton memoryId={memory.id} txId={memory.arweaveTxId} />
-              <p className="text-xs text-zinc-500">{memory.arweaveTxId}</p>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              <p className="text-sm text-amber-300">
-                Not committed yet. Use the commit button above after configuring your wallet in Settings.
-              </p>
-              {memory.syncStatus === "failed" ? (
-                <p className="text-xs text-rose-300">Last sync error: {memory.syncError ?? "Unknown error"}</p>
-              ) : null}
-            </div>
-          )}
+          {/* Arweave proof section hidden for now */}
 
           <div>
             <p className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Content Fingerprint</p>
@@ -149,7 +135,15 @@ export default async function MemoryDetailPage({
           </div>
 
           <div>
-            <p className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Memory Content</p>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs uppercase tracking-wide text-zinc-500">Memory Content</p>
+              <MemoryEditForm 
+                memoryId={memory.id} 
+                initialTitle={memory.title} 
+                initialText={memory.contentText}
+                isEncrypted={memory.isEncrypted || memory.contentText.startsWith('{"ciphertext"')}
+              />
+            </div>
             {memory.isEncrypted || memory.contentText.startsWith('{"ciphertext"') ? (
               <EncryptedContentViewer ciphertext={memory.contentText} iv={memory.contentIv} />
             ) : (

@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { forceCenter, forceLink, forceManyBody, forceSimulation, type SimulationNodeDatum } from "d3-force";
-import type { MemoryGraphEdge, MemoryGraphNode, MemoryRelationshipType } from "@/lib/types";
+import { ExternalLink, Loader2, X } from "lucide-react";
+import Link from "next/link";
+import type { MemoryGraphEdge, MemoryGraphNode, MemoryRecord, MemoryRelationshipType } from "@/lib/types";
 
 type GraphNode = MemoryGraphNode & SimulationNodeDatum;
 
@@ -34,6 +36,120 @@ function nodeRadius(node: MemoryGraphNode): number {
   return 6 + Math.max(0, Math.min(10, node.importance)) * 1.1;
 }
 
+function MemoryDetailCard({
+  memoryId,
+  onClose,
+}: {
+  memoryId: string;
+  onClose: () => void;
+}) {
+  const [memory, setMemory] = useState<MemoryRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchMemory() {
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await fetch(`/api/memories/${memoryId}`);
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to load memory");
+        }
+        setMemory(data.memory);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load");
+      } finally {
+        setLoading(false);
+      }
+    }
+    void fetchMemory();
+  }, [memoryId]);
+
+  return (
+    <div className="absolute right-4 top-4 z-10 w-80 rounded-lg border border-zinc-700 bg-zinc-900/95 shadow-xl backdrop-blur-sm">
+      <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
+        <h3 className="text-sm font-medium text-zinc-100 truncate pr-2">
+          {memory?.title || "Memory Details"}
+        </h3>
+        <button
+          onClick={onClose}
+          className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="p-4">
+        {loading ? (
+          <div className="flex items-center justify-center py-8 text-zinc-400">
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </div>
+        ) : error ? (
+          <div className="text-sm text-rose-400">{error}</div>
+        ) : memory ? (
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <span
+                className="rounded-full px-2 py-0.5 text-xs font-medium"
+                style={{
+                  backgroundColor: MEMORY_TYPE_COLORS[memory.memoryType] + "20",
+                  color: MEMORY_TYPE_COLORS[memory.memoryType],
+                }}
+              >
+                {memory.memoryType}
+              </span>
+              <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">
+                importance: {memory.importance}
+              </span>
+            </div>
+
+            {memory.contentText && (
+              <div className="max-h-40 overflow-y-auto rounded bg-zinc-950 p-3 text-xs text-zinc-300">
+                {memory.isEncrypted ? (
+                  <span className="italic text-zinc-500">🔒 Encrypted content</span>
+                ) : (
+                  memory.contentText.length > 400
+                    ? memory.contentText.slice(0, 400) + "..."
+                    : memory.contentText
+                )}
+              </div>
+            )}
+
+            {memory.tags && memory.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {memory.tags.slice(0, 5).map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-400"
+                  >
+                    {tag}
+                  </span>
+                ))}
+                {memory.tags.length > 5 && (
+                  <span className="text-xs text-zinc-500">+{memory.tags.length - 5}</span>
+                )}
+              </div>
+            )}
+
+            <div className="text-xs text-zinc-500">
+              Created {new Date(memory.createdAt).toLocaleDateString()}
+            </div>
+
+            <Link
+              href={`/dashboard/memory/${memoryId}`}
+              className="flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300"
+            >
+              View full details <ExternalLink className="h-3 w-3" />
+            </Link>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function MemoryGraph({
   nodes,
   edges,
@@ -47,6 +163,7 @@ export function MemoryGraph({
   const [hoverText, setHoverText] = useState<string>("");
   const [transform, setTransform] = useState({ x: 520, y: 320, scale: 1 });
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const simulationRef = useRef<ReturnType<typeof forceSimulation<GraphNode, GraphLink>> | null>(null);
 
@@ -110,6 +227,9 @@ export function MemoryGraph({
     if (target.dataset.role === "node") {
       return;
     }
+
+    // Close detail card when clicking background
+    setSelectedNodeId(null);
 
     const startX = event.clientX;
     const startY = event.clientY;
@@ -177,7 +297,13 @@ export function MemoryGraph({
 
   return (
     <div ref={wrapperRef} className="space-y-2">
-      <div className="h-[620px] w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
+      <div className="relative h-[620px] w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
+        {selectedNodeId && (
+          <MemoryDetailCard
+            memoryId={selectedNodeId}
+            onClose={() => setSelectedNodeId(null)}
+          />
+        )}
         <svg viewBox="0 0 1040 640" className="h-full w-full" onWheel={onWheel} onPointerDown={onBackgroundDragStart}>
           <g transform={`translate(${transform.x} ${transform.y}) scale(${transform.scale})`}>
             {filteredEdges.map((edge) => {
@@ -215,9 +341,7 @@ export function MemoryGraph({
                   onPointerDown={(event) => startNodeDrag(event, node.id)}
                   onMouseEnter={() => setHoverText(`${node.title} (${node.memoryType})`)}
                   onMouseLeave={() => setHoverText("")}
-                  onClick={() => {
-                    window.location.href = `/dashboard/memory/${node.id}`;
-                  }}
+                  onClick={() => setSelectedNodeId(node.id)}
                 />
               </g>
             ))}

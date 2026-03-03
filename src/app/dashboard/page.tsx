@@ -72,13 +72,7 @@ async function StatsSection({ statsPromise }: { statsPromise: ReturnType<typeof 
           </p>
         </CardContent>
       </Card>
-      <Card className="border-zinc-800 bg-zinc-900/60">
-        <CardContent className="p-5">
-          <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Arweave Status</p>
-          <p className="text-2xl font-semibold text-zinc-100">{stats.committedMemories} committed</p>
-          <p className="text-sm text-zinc-400">{stats.pendingMemories} pending</p>
-        </CardContent>
-      </Card>
+      {/* Arweave status hidden for now */}
     </section>
   );
 }
@@ -89,7 +83,7 @@ async function MemoriesSection({ memoriesPromise }: { memoriesPromise: ReturnTyp
   if (memories.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-zinc-700 bg-zinc-900/40 p-10 text-center text-sm text-zinc-400">
-        No memories yet. Add your first memory and anchor it to Arweave.
+        No memories yet. Add your first memory to get started.
       </div>
     );
   }

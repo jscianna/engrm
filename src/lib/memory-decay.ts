@@ -32,7 +32,6 @@ export interface DecayRunResult {
 // =============================================================================
 
 const RETENTION_RATE = 0.9;  // 90% retention per halflife period
-const ARCHIVE_THRESHOLD = 0.3;
 const ARCHIVE_DELETE_DAYS = 30;
 
 // =============================================================================
@@ -44,6 +43,16 @@ function daysBetween(date1: string | null, date2: Date): number {
   const d1 = new Date(date1);
   const diffMs = date2.getTime() - d1.getTime();
   return Math.max(0, diffMs / (1000 * 60 * 60 * 24));
+}
+
+function getEffectiveHalflife(memory: {
+  halflifeDays: number;
+  accessCount: number;
+  feedbackScore: number;
+}): number {
+  const accessBoost = Math.min(memory.accessCount, 50) * 0.5;
+  const feedbackBoost = memory.feedbackScore * 2;
+  return Math.max(7, memory.halflifeDays + accessBoost + feedbackBoost);
 }
 
 /**
@@ -75,7 +84,7 @@ export async function runDecayForUser(userId: string): Promise<DecayRunResult> {
     const newStrength = calculateDecayedStrength(
       memory.baseStrength,
       daysSinceAccess,
-      memory.halflifeDays,
+      getEffectiveHalflife(memory),
       RETENTION_RATE
     );
     

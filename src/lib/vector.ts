@@ -194,6 +194,7 @@ export async function semanticSearchVectors(params: {
   query: string;
   vector: number[];
   topK?: number;
+  since?: string;
 }): Promise<VectorSearchResult[]> {
   // Validate query vector
   const validation = validateVector(params.vector);
@@ -210,11 +211,14 @@ export async function semanticSearchVectors(params: {
     // TODO: For >10K memories, migrate to vector DB
     const result = await client.execute({
       sql: `
-        SELECT memory_id, user_id, title, source_type, memory_type, importance, vector_json, vector_dimension
-        FROM memory_vectors
-        WHERE user_id = ?
+        SELECT v.memory_id, v.user_id, v.title, v.source_type, v.memory_type, v.importance, v.vector_json, v.vector_dimension
+        FROM memory_vectors v
+        JOIN memories m ON m.id = v.memory_id
+        WHERE v.user_id = ?
+        AND m.archived_at IS NULL
+        ${params.since ? "AND m.created_at >= ?" : ""}
       `,
-      args: [params.userId],
+      args: params.since ? [params.userId, params.since] : [params.userId],
     });
 
     // Calculate similarities in-memory
@@ -265,6 +269,7 @@ export async function semanticSearchVectorsDirect(params: {
   userId: string;
   vector: number[];
   topK?: number;
+  since?: string;
 }): Promise<Array<{ id: string; score: number }>> {
   // Validate query vector
   const validation = validateVector(params.vector);
@@ -279,11 +284,14 @@ export async function semanticSearchVectorsDirect(params: {
 
     const result = await client.execute({
       sql: `
-        SELECT memory_id, vector_json, vector_dimension
-        FROM memory_vectors
-        WHERE user_id = ?
+        SELECT v.memory_id, v.vector_json, v.vector_dimension
+        FROM memory_vectors v
+        JOIN memories m ON m.id = v.memory_id
+        WHERE v.user_id = ?
+        AND m.archived_at IS NULL
+        ${params.since ? "AND m.created_at >= ?" : ""}
       `,
-      args: [params.userId],
+      args: params.since ? [params.userId, params.since] : [params.userId],
     });
 
     const scored = result.rows
