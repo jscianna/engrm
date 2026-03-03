@@ -44,6 +44,40 @@ function getMasterKey(): Buffer {
   return crypto.createHash("sha256").update(trimmed, "utf8").digest();
 }
 
+/**
+ * Derive a per-user encryption key from master key + userId.
+ * This ensures each user's data is encrypted with a unique key.
+ */
+function deriveUserKey(userId: string): Buffer {
+  const master = getMasterKey();
+  return crypto.createHash("sha256").update(Buffer.concat([master, Buffer.from(userId, "utf8")])).digest();
+}
+
+/**
+ * Encrypt memory content for at-rest storage.
+ * Returns the encrypted content as a JSON string containing ciphertext and iv.
+ */
+function encryptMemoryContent(plaintext: string, userId: string): string {
+  const key = deriveUserKey(userId);
+  const encrypted = encryptAesGcm(Buffer.from(plaintext, "utf8"), key);
+  return JSON.stringify(encrypted);
+}
+
+/**
+ * Decrypt memory content from at-rest storage.
+ * Expects the encrypted content as a JSON string containing ciphertext and iv.
+ */
+function decryptMemoryContent(encryptedJson: string, userId: string): string {
+  try {
+    const payload = JSON.parse(encryptedJson) as { ciphertext: string; iv: string };
+    const key = deriveUserKey(userId);
+    return decryptAesGcm(payload, key).toString("utf8");
+  } catch {
+    // If decryption fails, content might be plaintext (legacy) - return as-is
+    return encryptedJson;
+  }
+}
+
 function encryptAesGcm(plaintext: Buffer, key: Buffer): { ciphertext: string; iv: string } {
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, key, iv);
@@ -390,9 +424,14 @@ export type AgentMemoryRecord = {
 
 function mapRow(row: Record<string, unknown>): MemoryRecord {
   const entities = parseJsonStringArray((row.entities as string | null) ?? row.entities_json);
+  const userId = row.user_id as string;
+  const encryptedText = row.content_text as string;
+  // Decrypt content at rest (handles both encrypted and legacy plaintext)
+  const decryptedText = decryptMemoryContent(encryptedText, userId);
+  
   return {
     id: row.id as string,
-    userId: row.user_id as string,
+    userId,
     title: row.title as string,
     sourceType: row.source_type as MemorySourceType,
     memoryType: (row.memory_type as MemoryKind) ?? "episodic",
@@ -400,7 +439,7 @@ function mapRow(row: Record<string, unknown>): MemoryRecord {
     tags: parseTags((row.tags_csv as string) ?? ""),
     sourceUrl: row.source_url as string | null,
     fileName: row.file_name as string | null,
-    contentText: row.content_text as string,
+    contentText: decryptedText,
     contentIv: row.content_iv as string | null,
     isEncrypted: Number(row.content_encrypted ?? 0) === 1,
     contentHash: row.content_hash as string,
@@ -1059,11 +1098,16 @@ function mapMemoryEdgeRow(row: Record<string, unknown>): MemoryEdgeRecord {
 }
 
 function mapAgentMemoryRow(row: Record<string, unknown>): AgentMemoryRecord {
+  const userId = row.user_id as string;
+  const encryptedText = row.content_text as string;
+  // Decrypt content at rest (handles both encrypted and legacy plaintext)
+  const decryptedText = decryptMemoryContent(encryptedText, userId);
+  
   return {
     id: row.id as string,
-    userId: row.user_id as string,
+    userId,
     title: row.title as string,
-    text: row.content_text as string,
+    text: decryptedText,
     sourceType: (row.source_type as MemorySourceType) ?? "text",
     memoryType: (row.memory_type as MemoryKind) ?? "episodic",
     sourceUrl: (row.source_url as string | null) ?? null,
@@ -1539,6 +1583,10 @@ export async function insertAgentMemory(params: {
   const entitiesJson = JSON.stringify(entities);
   const contentHash = crypto.createHash("sha256").update(text, "utf8").digest("hex");
   const sizeBytes = Buffer.byteLength(text, "utf8");
+
+  // Encrypt content at rest (unless already client-side encrypted)
+  const storedText = params.isEncrypted ? text : encryptMemoryContent(text, params.userId);
+
   const tx = await client.transaction("write");
 
   try {
@@ -1559,8 +1607,8 @@ export async function insertAgentMemory(params: {
         memoryType,
         params.sourceUrl ?? null,
         params.fileName ?? null,
-        text,
-        params.isEncrypted ? 1 : 0,
+        storedText,
+        1, // Always mark as encrypted at rest
         contentHash,
         now,
         params.namespaceId ?? null,
