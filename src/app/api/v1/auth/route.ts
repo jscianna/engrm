@@ -1,5 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
-import { createApiKey, getUserVaultSalt } from "@/lib/db";
+import { createApiKey } from "@/lib/db";
 import { isObject, jsonError } from "@/lib/api-v1";
 
 export const runtime = "nodejs";
@@ -11,16 +11,6 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Require vault setup before creating API keys
-    const vaultSalt = await getUserVaultSalt(userId);
-    if (!vaultSalt) {
-      return jsonError(
-        "Please set up your encryption vault in Settings before creating API keys",
-        "VAULT_REQUIRED",
-        400
-      );
-    }
-
     const body = (await request.json().catch(() => ({}))) as unknown;
     const agentName = isObject(body) && typeof body.agentName === "string" ? body.agentName.trim() : undefined;
     const result = await createApiKey(userId, agentName);

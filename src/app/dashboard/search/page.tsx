@@ -209,7 +209,7 @@ export default function SearchPage() {
         </section>
       ) : (
         <div className="rounded-2xl border border-dashed border-zinc-700 bg-zinc-900/40 p-10 text-center text-sm text-zinc-400">
-          {loading ? "Searching your memory vault..." : "No results yet. Try a natural-language query."}
+          {loading ? "Searching your memories..." : "No results yet. Try a natural-language query."}
         </div>
       )}
     </div>

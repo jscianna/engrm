@@ -160,10 +160,9 @@ export default function DocsPage() {
               Give your AI agent permanent, encrypted memory in under 5 minutes.
             </p>
 
-            <h3 className="text-xl font-semibold mb-4">1. Create a Vault</h3>
+            <h3 className="text-xl font-semibold mb-4">1. Sign Up</h3>
             <p className="text-zinc-400 mb-4">
-              Sign up at <a href="https://engrm.xyz" className="text-cyan-400 hover:underline">engrm.xyz</a>, 
-              then create your encrypted vault with a password. Your password never leaves your device.
+              Create an account at <a href="https://engrm.xyz" className="text-cyan-400 hover:underline">engrm.xyz</a>.
             </p>
 
             <h3 className="text-xl font-semibold mb-4 mt-8">2. Generate an API Key</h3>
@@ -191,8 +190,7 @@ export default function DocsPage() {
   }'`}</CodeBlock>
 
             <Note type="tip">
-              For private retrieval, encrypt your content client-side before storing. 
-              Engrm stores only encrypted ciphertext and embedding vectors.
+              All content is automatically encrypted at rest. Just use the API — encryption is handled server-side.
             </Note>
           </section>
 
@@ -494,51 +492,31 @@ trigger_intensity = heuristic_score / 10`}</CodeBlock>
           <section id="privacy-encryption" className="mb-16">
             <h2 className="text-3xl font-bold mb-4">Privacy & Encryption</h2>
             <p className="text-zinc-400 mb-6">
-              Engrm encrypts your memory content client-side before upload.
-              The server stores only ciphertext and embedding vectors.
+              All memory content is encrypted at rest using AES-256-GCM with per-user keys.
+              This protects your data against database breaches.
             </p>
 
-            <h3 className="text-xl font-semibold mb-4">What Engrm Sees</h3>
+            <h3 className="text-xl font-semibold mb-4">How It Works</h3>
+            <CodeBlock language="text">{`1. Agent sends memory content to Engrm API
+2. Server generates embedding for semantic search
+3. Server encrypts content with per-user key
+4. Server stores encrypted content + embedding
+5. On retrieval, server decrypts and returns plaintext`}</CodeBlock>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Security Model</h3>
             <Table
-              headers={["Component", "Server Access", "Notes"]}
+              headers={["Threat", "Protected?", "Notes"]}
               rows={[
-                ["Memory content", "❌ No", "Only encrypted ciphertext"],
-                ["Chat/namespace names", "❌ No", "Hashed with vault password"],
-                ["Embedding vectors", "✅ Yes", "Used for similarity search"],
-                ["Memory metadata", "✅ Yes", "Type, importance, timestamps"],
-                ["Vault password", "❌ No", "Never leaves your device"],
-                ["Arweave wallet", "❌ No", "Encrypted with your vault key"],
+                ["Database breach", "✅ Yes", "Content encrypted at rest"],
+                ["SQL injection", "✅ Yes", "Attacker gets ciphertext only"],
+                ["Unauthorized DB access", "✅ Yes", "Encryption keys stored separately"],
+                ["Network interception", "✅ Yes", "HTTPS required"],
               ]}
             />
 
-            <Note type="warning">
-              <strong>Important:</strong> Embedding vectors encode semantic meaning. While we cannot read 
-              your plaintext, embeddings reveal topic similarity. This is inherent to vector search — 
-              true zero-knowledge would require homomorphic encryption (impractical for search).
-            </Note>
-
-            <h3 className="text-xl font-semibold mb-4 mt-8">Hashed Namespaces</h3>
-            <p className="text-zinc-400 mb-4">
-              Namespace/chat names are hashed with your vault password before upload:
-            </p>
-            <CodeBlock language="text">{`Input: "telegram-chat-12345"
-Hash:  PBKDF2(vault_password, namespace, 100k iterations)
-Stored: "ns_a3f2b8c1e4d7f9a2..."
-
-// Server sees only the hash, never "telegram-chat-12345"
-// Namespace hashing happens client-side only`}</CodeBlock>
-
-            <h3 className="text-xl font-semibold mb-4 mt-8">Encryption Flow</h3>
-            <CodeBlock language="text">{`1. Agent extracts memory from conversation
-2. Agent generates embedding (local ONNX model)
-3. Agent hashes namespace with vault password
-4. Agent encrypts content with vault key (AES-256-GCM)
-5. Agent sends encrypted blob + embedding to Engrm
-6. Engrm stores ciphertext + vectors (cannot decrypt)`}</CodeBlock>
-
-            <Note type="tip">
-              The MCP Server and Python CLI handle encryption and namespace hashing automatically.
-              Just set your vault password in the environment.
+            <Note type="info">
+              Your memories are accessible to any agent with your API key. This is by design —
+              agents need to read memories to inject context. Protect your API keys.
             </Note>
           </section>
 
@@ -561,7 +539,6 @@ Stored: "ns_a3f2b8c1e4d7f9a2..."
       "args": [],
       "env": {
         "ENGRM_API_KEY": "mem_your_api_key",
-        "ENGRM_VAULT_PASSWORD": "your_vault_password",
         "ENGRM_NAMESPACE": "optional-chat-id"
       }
     }

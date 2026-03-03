@@ -1,6 +1,5 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SecurityKeyCard } from "@/components/security-key-card";
 import { ApiKeysCard } from "@/components/api-keys-card";
 import { UsageCard } from "@/components/usage-card";
 
@@ -34,9 +33,6 @@ export default async function SettingsPage() {
 
       {/* Agent API Keys */}
       <ApiKeysCard />
-
-      {/* Vault Password & Recovery */}
-      <SecurityKeyCard />
     </div>
   );
 }
