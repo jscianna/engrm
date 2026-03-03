@@ -129,7 +129,7 @@ export async function POST(request: Request) {
         title: titleForStorage,
         sourceType: memory.sourceType,
         memoryType: memory.memoryType,
-        importance: memory.importance,
+        importance: 5, // Default importance
         vector: embedding,
       });
     } catch {
