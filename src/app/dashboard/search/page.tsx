@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Calendar, ChevronDown, Filter, Loader2, Search, Tag, X } from "lucide-react";
 import { toast } from "sonner";
 import { MemoryCard } from "@/components/memory-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import type { MemorySearchResult } from "@/lib/types";
+import type { MemoryListItem, MemorySearchResult } from "@/lib/types";
 
 const MEMORY_TYPES = [
   { value: "", label: "All Types" },
@@ -32,8 +32,11 @@ const DATE_RANGES = [
 export default function SearchPage() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MemorySearchResult[]>([]);
+  const [recentMemories, setRecentMemories] = useState<MemoryListItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
   
   // Advanced filters
   const [showFilters, setShowFilters] = useState(false);
@@ -42,6 +45,24 @@ export default function SearchPage() {
   const [tagFilter, setTagFilter] = useState("");
   const [minImportance, setMinImportance] = useState(0);
 
+  // Load recent memories on mount
+  useEffect(() => {
+    async function loadRecent() {
+      try {
+        const response = await fetch("/api/memories?limit=12");
+        const data = await response.json();
+        if (response.ok && data.memories) {
+          setRecentMemories(data.memories);
+        }
+      } catch {
+        // Silently fail - this is just for initial display
+      } finally {
+        setInitialLoading(false);
+      }
+    }
+    void loadRecent();
+  }, []);
+
   async function onSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!query.trim()) {
@@ -49,6 +70,7 @@ export default function SearchPage() {
     }
     setLoading(true);
     setError(null);
+    setHasSearched(true);
 
     try {
       // Build query params with filters
@@ -207,9 +229,26 @@ export default function SearchPage() {
             </div>
           ))}
         </section>
+      ) : hasSearched ? (
+        <div className="rounded-2xl border border-dashed border-zinc-700 bg-zinc-900/40 p-10 text-center text-sm text-zinc-400">
+          {loading ? "Searching your memories..." : "No matching memories found. Try a different query."}
+        </div>
+      ) : initialLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+        </div>
+      ) : recentMemories.length > 0 ? (
+        <div className="space-y-4">
+          <p className="text-sm text-zinc-400">Recent memories — search above to find by meaning</p>
+          <section className="memory-grid grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {recentMemories.map((memory) => (
+              <MemoryCard key={memory.id} memory={memory} />
+            ))}
+          </section>
+        </div>
       ) : (
         <div className="rounded-2xl border border-dashed border-zinc-700 bg-zinc-900/40 p-10 text-center text-sm text-zinc-400">
-          {loading ? "Searching your memories..." : "No results yet. Try a natural-language query."}
+          No memories yet. Add some to get started!
         </div>
       )}
     </div>
