@@ -1608,7 +1608,7 @@ export async function insertAgentMemory(params: {
         params.sourceUrl ?? null,
         params.fileName ?? null,
         storedText,
-        1, // Always mark as encrypted at rest
+        params.isEncrypted ? 1 : 0, // Only mark encrypted for client-side ZK encryption
         contentHash,
         now,
         params.namespaceId ?? null,
