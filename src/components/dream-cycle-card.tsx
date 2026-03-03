@@ -145,6 +145,23 @@ export function DreamCycleCard() {
 
         {!result ? (
           <p className="text-sm text-zinc-400">Run consolidation to generate suggestions from your memory graph.</p>
+        ) : visibleBonds.every((bond) => bond.persisted) && result.promotions.length === 0 ? (
+          <div className="rounded-lg border border-cyan-800/50 bg-cyan-950/20 p-4 text-center">
+            <Sparkles className="mx-auto h-6 w-6 text-cyan-400" />
+            <p className="mt-2 font-medium text-zinc-100">Dream cycle complete!</p>
+            <p className="mt-1 text-sm text-zinc-400">
+              {visibleBonds.length > 0 
+                ? `${visibleBonds.length} bond${visibleBonds.length === 1 ? '' : 's'} saved. Your memory graph has been strengthened.`
+                : "No new connections found. Add more memories to discover patterns."}
+            </p>
+            <Button
+              onClick={() => setResult(null)}
+              variant="outline"
+              className="mt-3 border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+            >
+              Close
+            </Button>
+          </div>
         ) : (
           <>
             <div>
@@ -232,6 +249,18 @@ export function DreamCycleCard() {
                 ))}
               </div>
             </div>
+
+            {visibleBonds.every((bond) => bond.persisted) && visibleBonds.length > 0 && (
+              <div className="flex justify-center pt-2">
+                <Button
+                  onClick={() => setResult(null)}
+                  variant="outline"
+                  className="border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+                >
+                  Done
+                </Button>
+              </div>
+            )}
           </>
         )}
       </CardContent>
