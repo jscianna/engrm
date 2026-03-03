@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ExternalLink, Link2 } from "lucide-react";
+import { Link2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getMemoryTypeLabel } from "@/lib/memory-labels";
@@ -37,18 +37,6 @@ export function MemoryCard({ memory }: { memory: MemoryListItem }) {
           </div>
         </CardHeader>
         <CardContent className="space-y-2 text-xs text-zinc-400">
-          {memory.arweaveTxId ? (
-            <div className="flex items-center gap-2 text-cyan-300">
-              <ExternalLink className="h-3.5 w-3.5" />
-              TX: {memory.arweaveTxId.slice(0, 16)}...
-            </div>
-          ) : memory.syncStatus === "failed" ? (
-            <div className="text-rose-300">Arweave sync failed: {memory.syncError ?? "Unknown error"}</div>
-          ) : memory.syncStatus === "pending" ? (
-            <div className="text-amber-300">Not committed to Arweave yet</div>
-          ) : (
-            <div className="text-zinc-400">Stored locally</div>
-          )}
           {memory.tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {memory.tags.slice(0, 4).map((tag) => (
@@ -58,7 +46,6 @@ export function MemoryCard({ memory }: { memory: MemoryListItem }) {
               ))}
             </div>
           )}
-          <div>{memory.isEncrypted ? "Encrypted (vault-protected)" : "Unencrypted (legacy)"}</div>
         </CardContent>
       </Card>
     </Link>

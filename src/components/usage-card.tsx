@@ -190,16 +190,6 @@ export function UsageCard() {
           color="bg-emerald-500"
         />
 
-        {data.usage.estimatedStorageCost > 0 && (
-          <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
-            <p className="text-xs text-zinc-500">Estimated Storage Cost</p>
-            <p className="text-lg font-semibold text-zinc-200">
-              ${data.usage.estimatedStorageCost.toFixed(2)}
-              <span className="ml-1 text-xs font-normal text-zinc-500">when committed to Arweave</span>
-            </p>
-          </div>
-        )}
-
         <p className="text-xs text-zinc-600">
           Limits reset at the start of each month (UTC). Rate limit: {data.limits.requestsPerMinute} req/min.
         </p>

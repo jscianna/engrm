@@ -36,8 +36,8 @@ async function HeroSection({ statsPromise }: { statsPromise: ReturnType<typeof g
     <section className="reveal-up flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5">
       <div>
         <p className="text-xs uppercase tracking-[0.22em] text-zinc-500">Dashboard</p>
-        <h1 className="text-2xl font-semibold text-zinc-100">Your Permanent Memories</h1>
-        <p className="text-sm text-zinc-400">{stats.totalMemories} memories indexed across your personal vault.</p>
+        <h1 className="text-2xl font-semibold text-zinc-100">Your Memories</h1>
+        <p className="text-sm text-zinc-400">{stats.totalMemories} memories indexed.</p>
       </div>
       <Button asChild className="bg-cyan-400 text-zinc-950 hover:bg-cyan-300">
         <Link href="/dashboard/add">
