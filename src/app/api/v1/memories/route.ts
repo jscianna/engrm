@@ -43,27 +43,19 @@ export async function POST(request: Request) {
       throw new MemryError("VALIDATION_ERROR", { field: "body", reason: "Invalid request body" });
     }
 
-    // Check for encrypted format (required)
+    // Check for encrypted vs plaintext format
     const hasEncrypted = typeof body.ciphertext === "string" && typeof body.iv === "string";
-    const hasPlaintext = typeof body.text === "string" && body.text.trim();
+    const plaintextContent = typeof body.content === "string" ? body.content.trim() : 
+                            typeof body.text === "string" ? body.text.trim() : null;
+    const hasPlaintext = plaintextContent && plaintextContent.length > 0;
 
     if (!hasEncrypted && !hasPlaintext) {
       throw new MemryError("VALIDATION_ERROR", { 
-        field: "ciphertext", 
-        reason: "Encrypted content required. Provide ciphertext and iv fields." 
+        field: "content", 
+        reason: "Provide either content (plaintext) or ciphertext+iv (encrypted)" 
       });
     }
 
-    // Reject plaintext - encryption is required
-    if (hasPlaintext && !hasEncrypted) {
-      throw new MemryError("ENCRYPTION_REQUIRED", {
-        reason: "All memories must be encrypted. Use client-side encryption and provide ciphertext + iv fields. See docs: https://engrm.xyz/docs#encryption"
-      });
-    }
-
-    // Use encrypted content
-    const encryptedText = JSON.stringify({ ciphertext: body.ciphertext, iv: body.iv });
-    const titleForStorage = typeof body.title === "string" ? body.title : "Encrypted memory";
     const namespace = typeof body.namespace === "string" ? body.namespace : undefined;
     const resolved = await resolveNamespaceIdOrError(identity.userId, namespace);
     if (resolved.error) {
@@ -85,20 +77,60 @@ export async function POST(request: Request) {
     }
 
     const metadata = isObject(body.metadata) ? body.metadata : null;
-    // For encrypted content, we can't extract entities or embed - store as-is
+
+    if (hasEncrypted) {
+      // Encrypted path: store ciphertext, skip embedding
+      const encryptedText = JSON.stringify({ ciphertext: body.ciphertext, iv: body.iv });
+      const titleForStorage = typeof body.title === "string" ? body.title : "Encrypted memory";
+
+      const memory = await insertAgentMemory({
+        userId: identity.userId,
+        title: titleForStorage,
+        text: encryptedText,
+        entities: [],
+        metadata,
+        namespaceId: resolved.namespaceId,
+        sessionId,
+        isEncrypted: true,
+      });
+
+      return Response.json({ memory }, { status: 201 });
+    }
+
+    // Plaintext path: extract entities, embed, store
+    const contentText = plaintextContent as string;
+    const titleForStorage = typeof body.title === "string" ? body.title : contentText.slice(0, 60);
+    
+    // Extract entities from content
+    let entities: string[] = [];
+    try {
+      entities = await extractEntities(contentText);
+    } catch {
+      // Entity extraction is best-effort, don't fail the request
+    }
+
     const memory = await insertAgentMemory({
       userId: identity.userId,
       title: titleForStorage,
-      text: encryptedText,
-      entities: [],
+      text: contentText,
+      entities,
       metadata,
       namespaceId: resolved.namespaceId,
       sessionId,
-      isEncrypted: true,
+      isEncrypted: false,
     });
 
-    // Skip embedding for encrypted content (can't embed ciphertext meaningfully)
-    // Encrypted memories won't appear in semantic search - use /v1/memories/zk for that
+    // Generate embedding and store in Qdrant for semantic search
+    try {
+      const embedding = await embedText(contentText);
+      await upsertMemoryVector(memory.id, identity.userId, embedding, {
+        title: titleForStorage,
+        memoryType: memory.memoryType,
+        namespaceId: resolved.namespaceId ?? null,
+      });
+    } catch {
+      // Embedding is best-effort, memory is still stored
+    }
 
     return Response.json({ memory }, { status: 201 });
   } catch (error) {
