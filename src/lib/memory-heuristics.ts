@@ -2,7 +2,7 @@
  * Memory Heuristics Engine
  * 
  * Scores memory importance using deterministic heuristics (no LLM).
- * All processing happens client-side to maintain zero-knowledge.
+ * Runs locally and deterministically without an LLM dependency.
  */
 
 // =============================================================================

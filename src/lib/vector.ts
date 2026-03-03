@@ -263,7 +263,7 @@ export async function semanticSearchVectors(params: {
 }
 
 /**
- * Search vectors directly - for zero-knowledge mode where client provides pre-computed vector
+ * Search vectors directly when the client provides a pre-computed vector.
  */
 export async function semanticSearchVectorsDirect(params: {
   userId: string;

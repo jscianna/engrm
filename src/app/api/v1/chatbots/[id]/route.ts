@@ -13,7 +13,6 @@ const updateChatbotSchema = z
     temperature: z.number().min(0).max(2).optional().nullable(),
     welcomeMessage: z.string().trim().min(1).optional().nullable(),
     theme: z.record(z.string(), z.unknown()).optional().nullable(),
-    arweaveEnabled: z.boolean().optional().nullable(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one field is required",

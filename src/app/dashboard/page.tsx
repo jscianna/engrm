@@ -72,7 +72,7 @@ async function StatsSection({ statsPromise }: { statsPromise: ReturnType<typeof 
           </p>
         </CardContent>
       </Card>
-      {/* Arweave status hidden for now */}
+      {/* Storage status intentionally simplified */}
     </section>
   );
 }

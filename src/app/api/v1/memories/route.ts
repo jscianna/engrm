@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     if (!hasEncrypted && !hasPlaintext) {
       throw new MemryError("VALIDATION_ERROR", { 
         field: "content", 
-        reason: "Provide either content (plaintext) or ciphertext+iv (encrypted)" 
+        reason: "Provide either content (plaintext) or encrypted content with an iv" 
       });
     }
 
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
     const metadata = isObject(body.metadata) ? body.metadata : null;
 
     if (hasEncrypted) {
-      // Encrypted path: store ciphertext, skip embedding
+      // Pre-encrypted path: store encrypted content as provided and skip embedding.
       const encryptedText = JSON.stringify({ ciphertext: body.ciphertext, iv: body.iv });
       const titleForStorage = typeof body.title === "string" ? body.title : "Encrypted memory";
 

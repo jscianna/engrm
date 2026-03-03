@@ -1,5 +1,5 @@
-import { MemoryFormEncrypted } from "@/components/memory-form-encrypted";
+import { MemoryForm } from "@/components/memory-form";
 
 export default function AddMemoryPage() {
-  return <MemoryFormEncrypted />;
+  return <MemoryForm />;
 }

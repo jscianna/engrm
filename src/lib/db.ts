@@ -24,7 +24,7 @@ const ENCRYPTION_ALGORITHM = "aes-256-gcm";
 function getMasterKey(): Buffer {
   const raw = process.env.ENCRYPTION_KEY;
   if (!raw) {
-    throw new Error("ENCRYPTION_KEY is required to store/retrieve Arweave keys.");
+    throw new Error("ENCRYPTION_KEY is required to encrypt and decrypt stored data.");
   }
 
   const trimmed = raw.trim();
@@ -103,50 +103,6 @@ function decryptAesGcm(payload: { ciphertext: string; iv: string }, key: Buffer)
   return Buffer.concat([decipher.update(Buffer.from(ciphertextB64, "base64")), decipher.final()]);
 }
 
-function encryptSecretEnvelope(plaintext: string): {
-  encryptedBlob: string;
-  iv: string;
-  encryptedDataKey: string;
-  dataKeyIv: string;
-} {
-  const masterKey = getMasterKey();
-  const dataKey = crypto.randomBytes(32);
-  const encryptedPayload = encryptAesGcm(Buffer.from(plaintext, "utf8"), dataKey);
-  const encryptedDataKey = encryptAesGcm(dataKey, masterKey);
-
-  return {
-    encryptedBlob: encryptedPayload.ciphertext,
-    iv: encryptedPayload.iv,
-    encryptedDataKey: encryptedDataKey.ciphertext,
-    dataKeyIv: encryptedDataKey.iv,
-  };
-}
-
-function decryptSecretEnvelope(payload: {
-  encryptedBlob: string;
-  iv: string;
-  encryptedDataKey: string;
-  dataKeyIv: string;
-}): string {
-  const masterKey = getMasterKey();
-  const dataKey = decryptAesGcm(
-    {
-      ciphertext: payload.encryptedDataKey,
-      iv: payload.dataKeyIv,
-    },
-    masterKey,
-  );
-
-  const plaintext = decryptAesGcm(
-    {
-      ciphertext: payload.encryptedBlob,
-      iv: payload.iv,
-    },
-    dataKey,
-  );
-  return plaintext.toString("utf8");
-}
-
 let initialized = false;
 
 async function ensureInitialized(): Promise<void> {
@@ -192,12 +148,6 @@ async function ensureInitialized(): Promise<void> {
 
     CREATE TABLE IF NOT EXISTS user_settings (
       user_id TEXT PRIMARY KEY,
-      arweave_jwk TEXT,
-      arweave_jwk_encrypted TEXT,
-      arweave_jwk_iv TEXT,
-      arweave_jwk_key_encrypted TEXT,
-      arweave_jwk_key_iv TEXT,
-      vault_salt TEXT,
       updated_at TEXT NOT NULL
     );
 
@@ -263,7 +213,6 @@ async function ensureInitialized(): Promise<void> {
   `);
     await ensureMemoriesColumns(client);
     await ensureMemoriesIndexes(client);
-    await ensureUserSettingsColumns(client);
 
     initialized = true;
   } catch (error) {
@@ -345,32 +294,6 @@ async function ensureMemoriesColumns(client: Client): Promise<void> {
       continue;
     }
     await client.execute(`ALTER TABLE memories ADD COLUMN ${column.name} ${column.ddl}`);
-  }
-}
-
-async function ensureUserSettingsColumns(client: Client): Promise<void> {
-  const requiredColumns: Array<{ name: string; ddl: string }> = [
-    { name: "vault_salt", ddl: "TEXT" },
-    { name: "arweave_wallet_encrypted", ddl: "TEXT" },
-    { name: "arweave_wallet_iv", ddl: "TEXT" },
-    { name: "arweave_wallet_address", ddl: "TEXT" },
-  ];
-
-  const tableInfo = await client.execute("PRAGMA table_info(user_settings)");
-  const existing = new Set(
-    tableInfo.rows
-      .map((row) => {
-        const record = row as Record<string, unknown>;
-        return typeof record.name === "string" ? record.name : null;
-      })
-      .filter((name): name is string => Boolean(name)),
-  );
-
-  for (const column of requiredColumns) {
-    if (existing.has(column.name)) {
-      continue;
-    }
-    await client.execute(`ALTER TABLE user_settings ADD COLUMN ${column.name} ${column.ddl}`);
   }
 }
 
@@ -794,7 +717,6 @@ export async function getDashboardStatsByUser(userId: string): Promise<MemoryDas
     sql: `
       SELECT
         COUNT(*) AS total_memories,
-        SUM(CASE WHEN arweave_tx_id IS NOT NULL AND arweave_tx_id != '' THEN 1 ELSE 0 END) AS committed_memories,
         SUM(LENGTH(content_text)) AS storage_bytes
       FROM memories
       WHERE user_id = ?
@@ -804,28 +726,13 @@ export async function getDashboardStatsByUser(userId: string): Promise<MemoryDas
 
   const row = result.rows[0] as Record<string, unknown> | undefined;
   const totalMemories = Number(row?.total_memories ?? 0);
-  const committedMemories = Number(row?.committed_memories ?? 0);
 
   return {
     totalMemories,
-    committedMemories,
-    pendingMemories: Math.max(totalMemories - committedMemories, 0),
+    committedMemories: 0,
+    pendingMemories: 0,
     storageBytes: Number(row?.storage_bytes ?? 0),
   };
-}
-
-export async function updateMemoryArweaveTx(memoryId: string, userId: string, arweaveTxId: string): Promise<void> {
-  await ensureInitialized();
-  const client = getDb();
-  
-  await client.execute({
-    sql: `
-      UPDATE memories
-      SET arweave_tx_id = ?, sync_status = 'synced', sync_error = NULL
-      WHERE id = ? AND user_id = ?
-    `,
-    args: [arweaveTxId, memoryId, userId],
-  });
 }
 
 export async function updateMemorySyncFailure(memoryId: string, userId: string, errorMessage: string): Promise<void> {
@@ -840,196 +747,6 @@ export async function updateMemorySyncFailure(memoryId: string, userId: string, 
     `,
     args: [errorMessage.slice(0, 1000), memoryId, userId],
   });
-}
-
-export async function setUserArweaveJwk(userId: string, jwkJson: string): Promise<void> {
-  await ensureInitialized();
-  const client = getDb();
-  const encrypted = encryptSecretEnvelope(jwkJson);
-  
-  await client.execute({
-    sql: `
-      INSERT INTO user_settings (
-        user_id, arweave_jwk, arweave_jwk_encrypted, arweave_jwk_iv,
-        arweave_jwk_key_encrypted, arweave_jwk_key_iv, updated_at
-      )
-      VALUES (?, NULL, ?, ?, ?, ?, ?)
-      ON CONFLICT(user_id) DO UPDATE SET
-        arweave_jwk = NULL,
-        arweave_jwk_encrypted = excluded.arweave_jwk_encrypted,
-        arweave_jwk_iv = excluded.arweave_jwk_iv,
-        arweave_jwk_key_encrypted = excluded.arweave_jwk_key_encrypted,
-        arweave_jwk_key_iv = excluded.arweave_jwk_key_iv,
-        updated_at = excluded.updated_at
-    `,
-    args: [
-      userId,
-      encrypted.encryptedBlob,
-      encrypted.iv,
-      encrypted.encryptedDataKey,
-      encrypted.dataKeyIv,
-      new Date().toISOString(),
-    ],
-  });
-}
-
-export async function clearUserArweaveJwk(userId: string): Promise<void> {
-  await ensureInitialized();
-  const client = getDb();
-  
-  await client.execute({
-    sql: `
-      INSERT INTO user_settings (
-        user_id, arweave_jwk, arweave_jwk_encrypted, arweave_jwk_iv,
-        arweave_jwk_key_encrypted, arweave_jwk_key_iv, updated_at
-      )
-      VALUES (?, NULL, NULL, NULL, NULL, NULL, ?)
-      ON CONFLICT(user_id) DO UPDATE SET
-        arweave_jwk = NULL,
-        arweave_jwk_encrypted = NULL,
-        arweave_jwk_iv = NULL,
-        arweave_jwk_key_encrypted = NULL,
-        arweave_jwk_key_iv = NULL,
-        updated_at = excluded.updated_at
-    `,
-    args: [userId, new Date().toISOString()],
-  });
-}
-
-export async function getUserArweaveJwk(userId: string): Promise<string | null> {
-  await ensureInitialized();
-  const client = getDb();
-  
-  const result = await client.execute({
-    sql: `
-      SELECT arweave_jwk, arweave_jwk_encrypted, arweave_jwk_iv, arweave_jwk_key_encrypted, arweave_jwk_key_iv
-      FROM user_settings
-      WHERE user_id = ?
-    `,
-    args: [userId],
-  });
-
-  if (result.rows.length === 0) {
-    return null;
-  }
-
-  const row = result.rows[0] as Record<string, unknown>;
-
-  if (row.arweave_jwk_encrypted && row.arweave_jwk_iv && row.arweave_jwk_key_encrypted && row.arweave_jwk_key_iv) {
-    return decryptSecretEnvelope({
-      encryptedBlob: row.arweave_jwk_encrypted as string,
-      iv: row.arweave_jwk_iv as string,
-      encryptedDataKey: row.arweave_jwk_key_encrypted as string,
-      dataKeyIv: row.arweave_jwk_key_iv as string,
-    });
-  }
-
-  if (row.arweave_jwk) {
-    try {
-      await setUserArweaveJwk(userId, row.arweave_jwk as string);
-    } catch {
-      // Keep serving legacy plaintext if ENCRYPTION_KEY is not configured yet.
-    }
-  }
-
-  return (row.arweave_jwk as string) ?? null;
-}
-
-export async function getUserVaultSalt(userId: string): Promise<string | null> {
-  await ensureInitialized();
-  const client = getDb();
-
-  const result = await client.execute({
-    sql: `
-      SELECT vault_salt
-      FROM user_settings
-      WHERE user_id = ?
-    `,
-    args: [userId],
-  });
-
-  if (result.rows.length === 0) {
-    return null;
-  }
-
-  const row = result.rows[0] as Record<string, unknown>;
-  return typeof row.vault_salt === "string" && row.vault_salt.length > 0 ? row.vault_salt : null;
-}
-
-export async function hasUserVaultSalt(userId: string): Promise<boolean> {
-  const salt = await getUserVaultSalt(userId);
-  return Boolean(salt);
-}
-
-export async function setUserVaultSalt(
-  userId: string,
-  vaultSalt: string,
-  arweaveWallet?: { encrypted: string; iv: string; address: string }
-): Promise<void> {
-  await ensureInitialized();
-  const client = getDb();
-  const now = new Date().toISOString();
-
-  const existing = await getUserVaultSalt(userId);
-  if (existing && existing !== vaultSalt) {
-    throw new Error("Vault is already configured for this account.");
-  }
-
-  await client.execute({
-    sql: `
-      INSERT INTO user_settings (
-        user_id, vault_salt, arweave_wallet_encrypted, arweave_wallet_iv, arweave_wallet_address, updated_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT(user_id) DO UPDATE SET
-        vault_salt = COALESCE(user_settings.vault_salt, excluded.vault_salt),
-        arweave_wallet_encrypted = COALESCE(excluded.arweave_wallet_encrypted, user_settings.arweave_wallet_encrypted),
-        arweave_wallet_iv = COALESCE(excluded.arweave_wallet_iv, user_settings.arweave_wallet_iv),
-        arweave_wallet_address = COALESCE(excluded.arweave_wallet_address, user_settings.arweave_wallet_address),
-        updated_at = excluded.updated_at
-    `,
-    args: [
-      userId,
-      vaultSalt,
-      arweaveWallet?.encrypted ?? null,
-      arweaveWallet?.iv ?? null,
-      arweaveWallet?.address ?? null,
-      now,
-    ],
-  });
-}
-
-export async function getUserArweaveWallet(userId: string): Promise<{
-  encrypted: string;
-  iv: string;
-  address: string;
-} | null> {
-  await ensureInitialized();
-  const client = getDb();
-
-  const result = await client.execute({
-    sql: `
-      SELECT arweave_wallet_encrypted, arweave_wallet_iv, arweave_wallet_address
-      FROM user_settings
-      WHERE user_id = ?
-    `,
-    args: [userId],
-  });
-
-  if (result.rows.length === 0) {
-    return null;
-  }
-
-  const row = result.rows[0] as Record<string, unknown>;
-  const encrypted = row.arweave_wallet_encrypted;
-  const iv = row.arweave_wallet_iv;
-  const address = row.arweave_wallet_address;
-
-  if (typeof encrypted !== "string" || typeof iv !== "string" || typeof address !== "string") {
-    return null;
-  }
-
-  return { encrypted, iv, address };
 }
 
 function hashApiKey(key: string): string {
@@ -1584,7 +1301,7 @@ export async function insertAgentMemory(params: {
   const contentHash = crypto.createHash("sha256").update(text, "utf8").digest("hex");
   const sizeBytes = Buffer.byteLength(text, "utf8");
 
-  // Encrypt content at rest (unless already client-side encrypted)
+  // Encrypt content at rest unless the payload is already encrypted.
   const storedText = params.isEncrypted ? text : encryptMemoryContent(text, params.userId);
 
   const tx = await client.transaction("write");
@@ -1608,7 +1325,7 @@ export async function insertAgentMemory(params: {
         params.sourceUrl ?? null,
         params.fileName ?? null,
         storedText,
-        params.isEncrypted ? 1 : 0, // Only mark encrypted for client-side ZK encryption
+        params.isEncrypted ? 1 : 0,
         contentHash,
         now,
         params.namespaceId ?? null,
@@ -2028,7 +1745,7 @@ export async function getMemoriesWithEmbeddings(
 
 /**
  * Check if a memory with the given embedding hash already exists
- * Used to prevent race condition duplicates in ZK storage
+ * Used to prevent race-condition duplicates during embedding-based storage
  */
 export async function checkEmbeddingHashExists(
   userId: string,

@@ -9,11 +9,7 @@ import {
   getMemoryById,
   insertMemory,
   listMemoriesByUser,
-  updateMemorySyncFailure,
-  updateMemoryArweaveTx,
 } from "@/lib/db";
-import { resolveUserArweaveKey } from "@/lib/arweave";
-import { uploadTextToArweave } from "@/lib/turbo";
 import type {
   MemoryDashboardStats,
   MemoryKind,
@@ -205,30 +201,6 @@ async function persistToDb(params: {
   return memory;
 }
 
-async function uploadToArweave(memory: MemoryRecord) {
-  try {
-    const wallet = await resolveUserArweaveKey(memory.userId);
-    const txId = await uploadTextToArweave({
-      title: memory.title,
-      content: memory.contentText,
-      sourceType: memory.sourceType,
-      memoryType: memory.memoryType,
-      importance: memory.importance,
-      tags: memory.tags,
-      jwk: wallet.key,
-      encryptedContent: memory.isEncrypted ? memory.contentText : undefined,
-      iv: memory.isEncrypted ? (memory.contentIv ?? undefined) : undefined,
-    });
-    if (txId) {
-      await updateMemoryArweaveTx(memory.id, memory.userId, txId);
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Arweave upload failed";
-    await updateMemorySyncFailure(memory.id, memory.userId, message);
-    console.error("Arweave upload failed during create; memory is stored for retry", error);
-  }
-}
-
 async function generateEmbedding(memory: MemoryRecord) {
   try {
     if (memory.isEncrypted) {
@@ -338,7 +310,6 @@ export async function createMemory(params: CreateMemoryParams): Promise<MemoryRe
     encryptedContent: params.encryptedContent,
     iv: params.iv,
   });
-  await uploadToArweave(memory);
   await generateEmbedding(memory);
 
   // "Memories that fire together, wire together"
@@ -413,53 +384,4 @@ export async function getRelatedMemories(params: {
       memory: memoryById.get(hit.item.id),
     }))
     .filter((result): result is { score: number; memory: MemoryListItem } => Boolean(result.memory));
-}
-
-export async function commitMemoryToArweave(params: {
-  userId: string;
-  memoryId: string;
-}): Promise<MemoryRecord> {
-  const memory = await getMemoryById(params.memoryId);
-  if (!memory || memory.userId !== params.userId) {
-    throw new Error("Memory not found");
-  }
-
-  if (memory.arweaveTxId) {
-    return memory;
-  }
-
-  const wallet = await resolveUserArweaveKey(params.userId);
-  if (!wallet.key) {
-    throw new Error("No Arweave wallet configured. Add one in Settings.");
-  }
-
-  try {
-    const txId = await uploadTextToArweave({
-      title: memory.title,
-      content: memory.contentText,
-      sourceType: memory.sourceType,
-      memoryType: memory.memoryType,
-      importance: memory.importance,
-      tags: memory.tags,
-      jwk: wallet.key,
-      encryptedContent: memory.isEncrypted ? memory.contentText : undefined,
-      iv: memory.isEncrypted ? (memory.contentIv ?? undefined) : undefined,
-    });
-
-    if (!txId) {
-      throw new Error("Arweave upload failed");
-    }
-
-    await updateMemoryArweaveTx(memory.id, params.userId, txId);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Arweave upload failed";
-    await updateMemorySyncFailure(memory.id, params.userId, message);
-    throw error;
-  }
-  const updated = await getMemoryById(memory.id);
-  if (!updated) {
-    throw new Error("Memory update failed after Arweave commit");
-  }
-
-  return updated;
 }

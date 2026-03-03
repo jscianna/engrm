@@ -12,7 +12,6 @@ const createChatbotSchema = z.object({
   temperature: z.number().min(0).max(2).optional().nullable(),
   welcomeMessage: z.string().trim().min(1).optional().nullable(),
   theme: z.record(z.string(), z.unknown()).optional().nullable(),
-  arweaveEnabled: z.boolean().optional().nullable(),
 });
 
 export async function GET(request: Request) {

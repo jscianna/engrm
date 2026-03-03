@@ -13,7 +13,7 @@ export async function GET() {
   try {
     const stats = await getUsageStats(userId);
     
-    // Calculate storage cost estimate (Arweave pricing ~$5/GB)
+    // Calculate storage cost estimate.
     const storageCostPerGB = 5;
     const storageGB = stats.storageBytes / (1024 * 1024 * 1024);
     const estimatedStorageCost = storageGB * storageCostPerGB;

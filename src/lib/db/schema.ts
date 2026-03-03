@@ -10,7 +10,6 @@ export const chatbots = sqliteTable("chatbots", {
   publicToken: text("public_token").unique(),
   welcomeMessage: text("welcome_message"),
   themeJson: text("theme_json"),
-  arweaveEnabled: integer("arweave_enabled", { mode: "boolean" }).default(false),
   createdAt: integer("created_at", { mode: "timestamp" }),
   updatedAt: integer("updated_at", { mode: "timestamp" }),
 });

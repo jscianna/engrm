@@ -319,14 +319,13 @@ export default function Home() {
               </CardHeader>
               <CardContent>
                 <p className="text-zinc-400 mb-4">
-                  Encrypted on your device before upload. We store ciphertext — 
-                  your memories stay private.
+                  Encrypted at rest with AES-256-GCM so stored memories stay protected.
                 </p>
                 <div className="text-sm font-mono text-zinc-500">
-                  Embeddings → generated locally<br />
+                  Embeddings → generated on ingest<br />
                   Encryption → AES-256-GCM<br />
-                  Server sees → vectors + ciphertext<br />
-                  <span className="text-cyan-400">Private by design</span>
+                  Storage → encrypted at rest<br />
+                  <span className="text-cyan-400">Server-side protection by default</span>
                 </div>
               </CardContent>
             </Card>
@@ -368,7 +367,7 @@ export default function Home() {
                 <Terminal className="w-6 h-6 text-cyan-400" />
                 <h3 className="font-semibold text-lg">Python CLI</h3>
               </div>
-              <p className="text-zinc-400 text-sm mb-4">Encrypted with local embeddings</p>
+              <p className="text-zinc-400 text-sm mb-4">Encrypted at rest with embeddings built in</p>
               <pre className="bg-zinc-950 rounded-lg p-4 text-sm font-mono text-zinc-300 overflow-x-auto">
 {`# engrm.py store/search/context
 python engrm.py store \\

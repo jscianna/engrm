@@ -275,7 +275,7 @@ Results:
 
             <h3 className="text-xl font-semibold mb-4">POST /api/v1/memories</h3>
             <CodeBlock>{`{
-  "content": "<encrypted-ciphertext>",
+  "content": "Remember that the user prefers concise responses.",
   "embedding": [0.1, 0.2, ...],  // 384 or 1536-dim vector
   "type": "fact",                 // optional, auto-detected
   "importance": 7,                // optional
@@ -302,7 +302,7 @@ Results:
             <Table
               headers={["Field", "Type", "Description"]}
               rows={[
-                ["content", "string", "Memory content (encrypted client-side)"],
+                ["content", "string", "Memory content"],
                 ["embedding", "number[]", "384-dimensional embedding vector"],
                 ["type", "MemoryType", "One of: constraint, identity, relationship, preference, how_to, fact, event"],
                 ["importance", "number", "1-10 scale. Auto-scored if omitted"],
@@ -496,27 +496,20 @@ trigger_intensity = heuristic_score / 10`}</CodeBlock>
               This protects your data against database breaches.
             </p>
 
-            <h3 className="text-xl font-semibold mb-4">How It Works</h3>
-            <CodeBlock language="text">{`1. Agent sends memory content to Engrm API
-2. Server generates embedding for semantic search
-3. Server encrypts content with per-user key
-4. Server stores encrypted content + embedding
-5. On retrieval, server decrypts and returns plaintext`}</CodeBlock>
-
             <h3 className="text-xl font-semibold mb-4 mt-8">Security Model</h3>
             <Table
               headers={["Threat", "Protected?", "Notes"]}
               rows={[
                 ["Database breach", "✅ Yes", "Content encrypted at rest"],
-                ["SQL injection", "✅ Yes", "Attacker gets ciphertext only"],
+                ["SQL injection", "✅ Yes", "Attacker gets encrypted data only"],
                 ["Unauthorized DB access", "✅ Yes", "Encryption keys stored separately"],
                 ["Network interception", "✅ Yes", "HTTPS required"],
               ]}
             />
 
             <Note type="info">
-              Your memories are accessible to any agent with your API key. This is by design —
-              agents need to read memories to inject context. Protect your API keys.
+              The model is simple: the API stores encrypted content and returns decrypted content to authorized callers.
+              Protect your API keys because any caller with that key can read your memories.
             </Note>
           </section>
 
@@ -567,13 +560,11 @@ trigger_intensity = heuristic_score / 10`}</CodeBlock>
           <section id="python-cli" className="mb-16">
             <h2 className="text-3xl font-bold mb-4">Python CLI</h2>
             <p className="text-zinc-400 mb-6">
-              The Python CLI (<code>engrm.py</code>) provides client-side encryption with local embeddings via FastEmbed.
-              All encryption and embedding happens on your machine.
+              The Python CLI (<code>engrm.py</code>) provides embeddings via FastEmbed and stores content through the Engrm API.
             </p>
 
             <h3 className="text-xl font-semibold mb-4">Environment Setup</h3>
             <CodeBlock language="bash">{`export ENGRM_API_KEY="mem_your_api_key"
-export ENGRM_VAULT_PASSWORD="your_vault_password"
 export ENGRM_NAMESPACE="optional-chat-id"  # auto-hashed
 export ENGRM_API_URL="https://engrm.xyz"   # optional`}</CodeBlock>
 
@@ -608,7 +599,7 @@ python engrm.py store "I'm John, a software engineer in Singapore"
 
             <Note>
               The CLI uses <code>fastembed</code> for local ONNX embeddings.
-              No API calls to external embedding services—everything runs locally.
+              Stored memory content remains encrypted at rest on the server.
             </Note>
           </section>
 

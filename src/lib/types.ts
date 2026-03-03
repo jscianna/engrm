@@ -49,6 +49,7 @@ export type MemoryRecord = {
   contentIv: string | null;
   isEncrypted: boolean;
   contentHash: string;
+  /** @deprecated Legacy database field retained for compatibility. */
   arweaveTxId: string | null;
   syncStatus: MemorySyncStatus;
   syncError: string | null;
@@ -87,12 +88,4 @@ export type MemoryGraphEdge = {
   target: string;
   relationshipType: MemoryRelationshipType;
   weight: number;
-};
-
-export type ArweaveWalletStatus = {
-  source: "user" | "env" | "none";
-  hasWallet: boolean;
-  address: string | null;
-  balanceAr: string | null;
-  token: string;
 };

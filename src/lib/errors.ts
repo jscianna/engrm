@@ -11,8 +11,6 @@ export type ErrorCode =
   | "RATE_LIMIT_DAILY"
   | "QUOTA_MEMORIES"
   | "QUOTA_STORAGE"
-  | "VAULT_LOCKED"
-  | "VAULT_NOT_FOUND"
   | "MEMORY_NOT_FOUND"
   | "CHATBOT_NOT_FOUND"
   | "SOURCE_NOT_FOUND"
@@ -22,7 +20,6 @@ export type ErrorCode =
   | "VALIDATION_ERROR"
   | "ENCRYPTION_REQUIRED"
   | "ENCRYPTION_ERROR"
-  | "ARWEAVE_ERROR"
   | "DATABASE_ERROR"
   | "INTERNAL_ERROR";
 
@@ -62,16 +59,6 @@ const ERROR_DETAILS: Record<ErrorCode, { status: number; message: string; userMe
     message: "Storage quota exceeded",
     userMessage: "Storage limit reached. Delete old memories or upgrade your plan.",
   },
-  VAULT_LOCKED: {
-    status: 403,
-    message: "Vault is locked",
-    userMessage: "Unlock your vault to access encrypted content.",
-  },
-  VAULT_NOT_FOUND: {
-    status: 404,
-    message: "Vault not configured",
-    userMessage: "Set up your vault first to use encryption.",
-  },
   MEMORY_NOT_FOUND: {
     status: 404,
     message: "Memory not found",
@@ -110,17 +97,12 @@ const ERROR_DETAILS: Record<ErrorCode, { status: number; message: string; userMe
   ENCRYPTION_REQUIRED: {
     status: 400,
     message: "Encryption required",
-    userMessage: "All memories must be encrypted. Provide ciphertext and iv fields. See docs for client-side encryption.",
+    userMessage: "Provide encrypted content and iv fields when sending encrypted memories.",
   },
   ENCRYPTION_ERROR: {
     status: 500,
     message: "Encryption failed",
-    userMessage: "Failed to encrypt/decrypt. Try unlocking your vault again.",
-  },
-  ARWEAVE_ERROR: {
-    status: 502,
-    message: "Arweave operation failed",
-    userMessage: "Storage service temporarily unavailable. Your data is safe locally.",
+    userMessage: "Failed to encrypt or decrypt stored content.",
   },
   DATABASE_ERROR: {
     status: 500,

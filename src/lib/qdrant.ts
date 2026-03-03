@@ -328,7 +328,7 @@ export async function semanticSearchVectors(params: {
 }
 
 /**
- * Direct vector search (for ZK mode)
+ * Direct vector search using a caller-provided vector.
  */
 export async function semanticSearchVectorsDirect(params: {
   userId: string;

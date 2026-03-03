@@ -2,24 +2,20 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Loader2, Save } from "lucide-react";
+import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
-import { useVault } from "@/components/vault-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { encryptClientSide } from "@/lib/client-crypto";
 import type { MemoryKind } from "@/lib/types";
-
 import { memoryTypeLabels } from "@/lib/memory-labels";
 
 const memoryTypes: MemoryKind[] = ["episodic", "semantic", "procedural", "self-model"];
 
-export function MemoryFormEncrypted() {
+export function MemoryForm() {
   const router = useRouter();
-  const { key } = useVault();
   const [sourceType, setSourceType] = useState<"text" | "url" | "file">("text");
   const [memoryType, setMemoryType] = useState<MemoryKind>("episodic");
   const [importance, setImportance] = useState(5);
@@ -32,11 +28,6 @@ export function MemoryFormEncrypted() {
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!key) {
-      toast.error("Unlock your vault first.");
-      return;
-    }
-
     setLoading(true);
 
     try {
@@ -52,10 +43,7 @@ export function MemoryFormEncrypted() {
         if (!cleaned) {
           throw new Error("Text memory cannot be empty.");
         }
-
-        const encrypted = await encryptClientSide(cleaned, key);
-        formData.set("encryptedContent", encrypted.ciphertext);
-        formData.set("iv", encrypted.iv);
+        formData.set("text", cleaned);
       } else if (sourceType === "url") {
         formData.set("url", url);
       } else if (file) {
@@ -68,17 +56,11 @@ export function MemoryFormEncrypted() {
       });
 
       const payload = await response.json();
-
       if (!response.ok) {
         throw new Error(payload.error || "Failed to save memory");
       }
 
-      if (sourceType !== "text") {
-        toast.warning("URL/File submission is currently stored unencrypted. Use Text for client-side encryption.");
-      } else {
-        toast.success("Encrypted memory saved permanently.");
-      }
-
+      toast.success("Memory saved.");
       router.push(`/dashboard/memory/${payload.memory.id}`);
       router.refresh();
     } catch (error) {
@@ -96,20 +78,13 @@ export function MemoryFormEncrypted() {
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={onSubmit}>
-            <Tabs value={sourceType} onValueChange={(value) => setSourceType(value as "text" | "url" | "file")}> 
+            <Tabs value={sourceType} onValueChange={(value) => setSourceType(value as "text" | "url" | "file")}>
               <TabsList className="grid w-full grid-cols-3 bg-zinc-800/70">
                 <TabsTrigger value="text">Text</TabsTrigger>
                 <TabsTrigger value="url">URL</TabsTrigger>
                 <TabsTrigger value="file">File</TabsTrigger>
               </TabsList>
             </Tabs>
-
-            {sourceType !== "text" ? (
-              <p className="rounded-lg border border-amber-800/50 bg-amber-950/40 p-3 text-xs text-amber-200">
-                <AlertTriangle className="mr-1 inline h-3 w-3" />
-                End-to-end encryption currently applies to Text memories.
-              </p>
-            ) : null}
 
             <Input
               placeholder="Memory title (optional)"
@@ -155,7 +130,7 @@ export function MemoryFormEncrypted() {
             </div>
 
             <Input
-              placeholder="Tags (comma separated): work, arweave, research"
+              placeholder="Tags (comma separated): work, research, planning"
               value={tags}
               onChange={(event) => setTags(event.target.value)}
               className="border-zinc-700 bg-zinc-900 text-zinc-100"

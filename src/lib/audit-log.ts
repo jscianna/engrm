@@ -21,8 +21,6 @@ export type AuditAction =
   | "auth.logout"
   | "auth.api_key_create"
   | "auth.api_key_revoke"
-  | "vault.create"
-  | "vault.access"
   | "settings.update"
   | "admin.migrate"
   | "admin.maintenance";

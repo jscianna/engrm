@@ -6,10 +6,6 @@ import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-// Arweave features hidden for now
-// import { CommitMemoryButton } from "@/components/commit-memory-button";
-// import { ArweaveVerifyButton } from "@/components/arweave-verify-button";
-import { EncryptedContentViewer } from "@/components/encrypted-content-viewer";
 import { MemoryRelationships } from "@/components/memory-relationships";
 import { MemoryEditForm } from "@/components/memory-edit-form";
 import { getCachedMemory, getCachedRelatedMemories } from "@/lib/memories";
@@ -125,8 +121,6 @@ export default async function MemoryDetailPage({
             </div>
           ) : null}
 
-          {/* Arweave proof section hidden for now */}
-
           <div>
             <p className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Content Fingerprint</p>
             <code className="block rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-300">
@@ -141,21 +135,12 @@ export default async function MemoryDetailPage({
                 memoryId={memory.id} 
                 initialTitle={memory.title} 
                 initialText={memory.contentText}
-                isEncrypted={memory.isEncrypted || memory.contentText.startsWith('{"ciphertext"')}
+                isEncrypted={memory.isEncrypted}
               />
             </div>
-            {memory.isEncrypted || memory.contentText.startsWith('{"ciphertext"') ? (
-              <EncryptedContentViewer ciphertext={memory.contentText} iv={memory.contentIv} />
-            ) : (
-              <>
-                <p className="mb-2 text-xs text-amber-300">
-                  Warning: this memory is stored unencrypted (not client-side encrypted).
-                </p>
-                <pre className="max-h-[460px] overflow-auto whitespace-pre-wrap rounded-md border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-200">
-                  {memory.contentText}
-                </pre>
-              </>
-            )}
+            <pre className="max-h-[460px] overflow-auto whitespace-pre-wrap rounded-md border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-200">
+              {memory.contentText}
+            </pre>
           </div>
         </CardContent>
       </Card>

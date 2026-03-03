@@ -13,7 +13,6 @@ export type ChatbotRecord = {
   publicToken: string | null;
   welcomeMessage: string | null;
   theme: Record<string, unknown> | null;
-  arweaveEnabled: boolean;
   createdAt: number | null;
   updatedAt: number | null;
 };
@@ -112,7 +111,6 @@ function mapChatbotRow(row: Record<string, unknown>): ChatbotRecord {
     publicToken: row.public_token ? String(row.public_token) : null,
     welcomeMessage: row.welcome_message ? String(row.welcome_message) : null,
     theme: parseJson<Record<string, unknown>>(row.theme_json),
-    arweaveEnabled: Number(row.arweave_enabled ?? 0) === 1,
     createdAt: row.created_at == null ? null : Number(row.created_at),
     updatedAt: row.updated_at == null ? null : Number(row.updated_at),
   };
@@ -185,7 +183,6 @@ export async function ensureChatbotTables(): Promise<void> {
       public_token TEXT UNIQUE,
       welcome_message TEXT,
       theme_json TEXT,
-      arweave_enabled INTEGER DEFAULT 0,
       created_at INTEGER,
       updated_at INTEGER
     );
@@ -267,7 +264,6 @@ export async function createChatbot(params: {
   temperature?: number | null;
   welcomeMessage?: string | null;
   theme?: Record<string, unknown> | null;
-  arweaveEnabled?: boolean | null;
 }): Promise<ChatbotRecord> {
   await ensureChatbotTables();
 
@@ -278,8 +274,8 @@ export async function createChatbot(params: {
     sql: `
       INSERT INTO chatbots (
         id, user_id, name, system_prompt, model, temperature, public_token,
-        welcome_message, theme_json, arweave_enabled, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        welcome_message, theme_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       id,
@@ -291,7 +287,6 @@ export async function createChatbot(params: {
       crypto.randomUUID().replaceAll("-", ""),
       params.welcomeMessage ?? null,
       stringifyJson(params.theme),
-      params.arweaveEnabled ? 1 : 0,
       timestamp,
       timestamp,
     ],
@@ -310,7 +305,7 @@ export async function listChatbotsByUser(userId: string): Promise<ChatbotRecord[
   const result = await client.execute({
     sql: `
       SELECT id, user_id, name, system_prompt, model, temperature, public_token,
-             welcome_message, theme_json, arweave_enabled, created_at, updated_at
+             welcome_message, theme_json, created_at, updated_at
       FROM chatbots
       WHERE user_id = ?
       ORDER BY created_at DESC
@@ -330,7 +325,7 @@ export async function getChatbotById(
   const result = await client.execute({
     sql: `
       SELECT id, user_id, name, system_prompt, model, temperature, public_token,
-             welcome_message, theme_json, arweave_enabled, created_at, updated_at
+             welcome_message, theme_json, created_at, updated_at
       FROM chatbots
       WHERE user_id = ? AND id = ?
       LIMIT 1
@@ -355,7 +350,6 @@ export async function updateChatbot(
     temperature?: number | null;
     welcomeMessage?: string | null;
     theme?: Record<string, unknown> | null;
-    arweaveEnabled?: boolean | null;
   },
 ): Promise<ChatbotRecord | null> {
   const existing = await getChatbotById(userId, chatbotId);
@@ -369,7 +363,7 @@ export async function updateChatbot(
     sql: `
       UPDATE chatbots
       SET name = ?, system_prompt = ?, model = ?, temperature = ?,
-          welcome_message = ?, theme_json = ?, arweave_enabled = ?, updated_at = ?
+          welcome_message = ?, theme_json = ?, updated_at = ?
       WHERE user_id = ? AND id = ?
     `,
     args: [
@@ -381,9 +375,6 @@ export async function updateChatbot(
         ? existing.welcomeMessage
         : patch.welcomeMessage,
       typeof patch.theme === "undefined" ? stringifyJson(existing.theme) : stringifyJson(patch.theme),
-      typeof patch.arweaveEnabled === "boolean"
-        ? Number(patch.arweaveEnabled)
-        : Number(existing.arweaveEnabled),
       updatedAt,
       userId,
       chatbotId,

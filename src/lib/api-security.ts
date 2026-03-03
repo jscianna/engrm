@@ -68,7 +68,7 @@ const HMAC_ALGORITHM = "sha256";
 
 /**
  * Generate HMAC for memory content
- * Uses user's vault key derivation as the secret
+ * Uses the user's derived secret as the HMAC key.
  */
 export function generateContentHMAC(content: string, userSecret: string): string {
   const hmac = crypto.createHmac(HMAC_ALGORITHM, userSecret);
