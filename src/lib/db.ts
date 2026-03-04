@@ -105,15 +105,24 @@ function decryptAesGcm(payload: { ciphertext: string; iv: string }, key: Buffer)
 }
 
 let initialized = false;
+let initializingPromise: Promise<void> | null = null;
 
 async function ensureInitialized(): Promise<void> {
   if (initialized) {
     return;
   }
+  
+  // Prevent concurrent initialization - wait for existing init
+  if (initializingPromise) {
+    await initializingPromise;
+    return;
+  }
 
-  const client = getDb();
+  // Start initialization
+  initializingPromise = (async () => {
+    const client = getDb();
 
-  try {
+    try {
     await client.executeMultiple(`
     CREATE TABLE IF NOT EXISTS memories (
       id TEXT PRIMARY KEY,
@@ -215,11 +224,15 @@ async function ensureInitialized(): Promise<void> {
     await ensureMemoriesColumns(client);
     await ensureMemoriesIndexes(client);
 
-    initialized = true;
-  } catch (error) {
-    console.error("[DB] ensureInitialized failed:", error);
-    throw error;
-  }
+      initialized = true;
+    } catch (error) {
+      console.error("[DB] ensureInitialized failed:", error);
+      initializingPromise = null;  // Allow retry on next request
+      throw error;
+    }
+  })();
+
+  await initializingPromise;
 }
 
 async function ensureMemoriesIndexes(client: Client): Promise<void> {
