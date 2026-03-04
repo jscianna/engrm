@@ -19,17 +19,6 @@ const DreamCycleCard = dynamic(
   },
 );
 
-const AnalyticsWidget = dynamic(
-  () => import("@/components/analytics-widget").then((module) => module.AnalyticsWidget),
-  {
-    loading: () => (
-      <Card className="border-zinc-800 bg-zinc-900/60">
-        <CardContent className="p-5 text-sm text-zinc-400">Loading analytics...</CardContent>
-      </Card>
-    ),
-  },
-);
-
 function formatBytes(bytes: number): string {
   if (bytes < 1024) {
     return `${bytes} B`;
@@ -127,10 +116,7 @@ export default async function DashboardPage() {
         <StatsSection statsPromise={statsPromise} />
       </Suspense>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <DreamCycleCard />
-        <AnalyticsWidget />
-      </div>
+      <DreamCycleCard />
 
       <Suspense fallback={<div className="h-48 animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900/40" />}>
         <MemoriesSection memoriesPromise={memoriesPromise} />

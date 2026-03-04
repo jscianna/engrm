@@ -1,193 +1,692 @@
-import { CodeBlock, Note, H1, H2, H3, P, InlineCode, Footer } from "./components";
+"use client";
 
-export const metadata = {
-  title: "Quick Start | Engrm Docs",
-  description: "Get started with Engrm in 5 minutes. Give your AI agents persistent memory.",
-};
+import { useState, useEffect } from "react";
+import Link from "next/link";
 
-export default function QuickStartPage() {
+// Navigation sections
+const NAV_SECTIONS = [
+  { id: "quick-start", label: "Quick Start" },
+  { id: "authentication", label: "Authentication" },
+  { id: "cli", label: "CLI" },
+  { id: "layered-memory", label: "Layered Memory" },
+  { id: "storing-memories", label: "Storing Memories" },
+  { id: "retrieving-memories", label: "Retrieving Memories" },
+  { id: "reinforcement", label: "Reinforcement" },
+  { id: "memory-decay", label: "Memory Decay" },
+  { id: "memory-types", label: "Memory Types" },
+  { id: "privacy-encryption", label: "Privacy & Encryption" },
+  { id: "mcp-server", label: "MCP Server" },
+  { id: "python-cli", label: "Python CLI" },
+];
+
+function CodeBlock({ children, language = "typescript" }: { children: string; language?: string }) {
   return (
-    <>
-      <H1>Quick Start</H1>
-      <P>
-        Give your AI agent persistent, intelligent memory in under 5 minutes.
-        This guide walks you through the essential steps to get started.
-      </P>
+    <div className="relative group">
+      <pre className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 overflow-x-auto text-sm">
+        <code className="text-zinc-300 font-mono">{children}</code>
+      </pre>
+      <button
+        onClick={() => navigator.clipboard.writeText(children)}
+        className="absolute top-2 right-2 px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-400 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        Copy
+      </button>
+    </div>
+  );
+}
 
-      <H2 id="step-1">1. Get Your API Key</H2>
-      <P>
-        Sign up at <a href="https://engrm.xyz" className="text-cyan-400 hover:underline">engrm.xyz</a> and 
-        go to <strong>Dashboard → Settings → API Keys</strong>.
-        Create a new key for your agent.
-      </P>
-      <P>
-        Your API key looks like: <InlineCode>mem_3e245c3069f3e096...</InlineCode>
-      </P>
+function Note({ children, type = "info" }: { children: React.ReactNode; type?: "info" | "warning" | "tip" }) {
+  const styles = {
+    info: "border-cyan-500/30 bg-cyan-500/5",
+    warning: "border-amber-500/30 bg-amber-500/5",
+    tip: "border-emerald-500/30 bg-emerald-500/5",
+  };
+  const labels = {
+    info: "Note",
+    warning: "Warning",
+    tip: "Tip",
+  };
+  return (
+    <div className={`border-l-4 ${styles[type]} p-4 rounded-r-lg my-4`}>
+      <p className="text-sm font-semibold text-zinc-400 mb-1">{labels[type]}</p>
+      <div className="text-zinc-300 text-sm">{children}</div>
+    </div>
+  );
+}
 
-      <H2 id="step-2">2. Store Your First Memory</H2>
-      <P>
-        The simplest way to store a memory is the <InlineCode>/v1/simple/remember</InlineCode> endpoint.
-        It handles classification, embedding, and consolidation automatically.
-      </P>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/simple/remember" \\
-  -H "Authorization: Bearer mem_your_api_key" \\
-  -H "Content-Type: application/json" \\
-  -d '{"text": "User prefers dark mode and concise responses"}'`}</CodeBlock>
-      
-      <P>Response:</P>
-      <CodeBlock language="json">{`{
-  "id": "mem_abc123",
-  "stored": true
-}`}</CodeBlock>
+function Table({ headers, rows }: { headers: string[]; rows: string[][] }) {
+  return (
+    <div className="overflow-x-auto my-4">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-zinc-800">
+            {headers.map((h, i) => (
+              <th key={i} className="text-left py-3 px-4 text-zinc-400 font-medium">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i} className="border-b border-zinc-800/50 hover:bg-zinc-900/50">
+              {row.map((cell, j) => (
+                <td key={j} className="py-3 px-4 text-zinc-300">
+                  {j === 0 ? <code className="text-cyan-400">{cell}</code> : cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
-      <Note type="tip">
-        The simple API auto-detects memory type (preference, fact, identity, etc.) and
-        importance tier (critical, high, normal). No need to specify these manually.
-      </Note>
+export default function DocsPage() {
+  const [activeSection, setActiveSection] = useState("quick-start");
 
-      <H2 id="step-3">3. Search Your Memories</H2>
-      <P>
-        Use <InlineCode>/v1/simple/recall</InlineCode> to search and retrieve memories.
-        It returns just the text content—perfect for injection into prompts.
-      </P>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/simple/recall" \\
-  -H "Authorization: Bearer mem_your_api_key" \\
-  -H "Content-Type: application/json" \\
-  -d '{"query": "user preferences", "limit": 5}'`}</CodeBlock>
-      
-      <P>Response:</P>
-      <CodeBlock language="json">{`{
-  "results": [
-    "User prefers dark mode and concise responses",
-    "User likes TypeScript over JavaScript",
-    "User works best in the mornings"
-  ],
-  "count": 3
-}`}</CodeBlock>
+  useEffect(() => {
+    const handleScroll = () => {
+      const sections = NAV_SECTIONS.map((s) => document.getElementById(s.id));
+      const scrollPos = window.scrollY + 100;
 
-      <H2 id="step-4">4. Get Context for a Session</H2>
-      <P>
-        For a complete session workflow, use <InlineCode>/v1/simple/context</InlineCode> to get
-        an injectable context string for your AI's system prompt.
-      </P>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/simple/context" \\
-  -H "Authorization: Bearer mem_your_api_key" \\
-  -H "Content-Type: application/json" \\
-  -d '{"message": "Help me design an API"}'`}</CodeBlock>
-      
-      <P>Response:</P>
-      <CodeBlock language="json">{`{
-  "context": "## User Context\\n- User prefers REST over GraphQL\\n- Timezone: GMT+8 (Singapore)\\n- Prefers concise responses",
-  "tokensUsed": 42,
-  "memoriesUsed": 3
-}`}</CodeBlock>
+      for (let i = sections.length - 1; i >= 0; i--) {
+        const section = sections[i];
+        if (section && section.offsetTop <= scrollPos) {
+          setActiveSection(NAV_SECTIONS[i].id);
+          break;
+        }
+      }
+    };
 
-      <Note>
-        The context is formatted as markdown that you can inject directly into your AI's system prompt.
-        This gives your agent instant awareness of the user's preferences and history.
-      </Note>
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
-      <H2 id="step-5">5. Full Session Flow (Optional)</H2>
-      <P>
-        For production agents, use the full session API for better tracking and analytics.
-      </P>
+  return (
+    <div className="min-h-screen bg-zinc-950 text-white">
+      {/* Header */}
+      <header className="fixed top-0 left-0 right-0 z-50 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <span className="text-xl font-bold">Engrm</span>
+            <span className="text-zinc-500 text-sm">docs</span>
+          </Link>
+          <div className="flex items-center gap-4">
+            <a
+              href="https://github.com/jscianna/engrm"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-zinc-400 hover:text-white transition-colors text-sm"
+            >
+              GitHub
+            </a>
+            <Link
+              href="/dashboard"
+              className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-medium rounded-lg transition-colors text-sm"
+            >
+              Dashboard
+            </Link>
+          </div>
+        </div>
+      </header>
 
-      <H3>Start a Session</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/sessions/start" \\
-  -H "Authorization: Bearer mem_your_api_key" \\
-  -H "Content-Type: application/json" \\
-  -d '{"firstMessage": "Help me design an API"}'`}</CodeBlock>
+      <div className="flex pt-16">
+        {/* Sidebar */}
+        <aside className="fixed left-0 top-16 w-64 h-[calc(100vh-4rem)] overflow-y-auto border-r border-zinc-800 bg-zinc-950 p-6">
+          <nav className="space-y-1">
+            {NAV_SECTIONS.map((section) => (
+              <a
+                key={section.id}
+                href={`#${section.id}`}
+                className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
+                  activeSection === section.id
+                    ? "bg-cyan-500/10 text-cyan-400 font-medium"
+                    : "text-zinc-400 hover:text-white hover:bg-zinc-900"
+                }`}
+              >
+                {section.label}
+              </a>
+            ))}
+          </nav>
+        </aside>
 
-      <H3>Record Turns (Optional)</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/sessions/{sessionId}/turn" \\
+        {/* Main Content */}
+        <main className="flex-1 ml-64 px-12 py-12 max-w-4xl">
+          {/* Quick Start */}
+          <section id="quick-start" className="mb-16">
+            <h1 className="text-4xl font-bold mb-4">Quick Start</h1>
+            <p className="text-zinc-400 text-lg mb-8">
+              Give your AI agent permanent, encrypted memory in under 5 minutes.
+            </p>
+
+            <h3 className="text-xl font-semibold mb-4">1. Sign Up</h3>
+            <p className="text-zinc-400 mb-4">
+              Create an account at <a href="https://engrm.xyz" className="text-cyan-400 hover:underline">engrm.xyz</a>.
+            </p>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">2. Generate an API Key</h3>
+            <p className="text-zinc-400 mb-4">
+              In your dashboard, go to Settings → API Keys and create a new key for your agent.
+            </p>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">3. Store a Memory</h3>
+            <CodeBlock>{`curl -X POST https://engrm.xyz/api/v1/memories \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "turnNumber": 1,
-    "messages": [
-      {"role": "user", "content": "Help me design an API"},
-      {"role": "assistant", "content": "I can help with that..."}
-    ],
-    "memoriesUsed": ["mem_abc123"]
+    "content": "User prefers dark theme and concise responses",
+    "type": "preference",
+    "importance": 8
   }'`}</CodeBlock>
 
-      <H3>End Session</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/sessions/{sessionId}/end" \\
+            <h3 className="text-xl font-semibold mb-4 mt-8">4. Retrieve Context</h3>
+            <CodeBlock>{`curl -X POST https://engrm.xyz/api/v1/context \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
-  -d '{"outcome": "success"}'`}</CodeBlock>
+  -d '{
+    "query_embedding": [0.1, 0.2, ...],
+    "limit": 5
+  }'`}</CodeBlock>
 
-      <H2 id="python">Python Example</H2>
-      <P>Here's a complete Python integration:</P>
-      <CodeBlock language="python">{`import requests
+            <Note type="tip">
+              All content is automatically encrypted at rest. Just use the API — encryption is handled server-side.
+            </Note>
+          </section>
 
-API_KEY = "mem_your_api_key"
-BASE_URL = "https://engrm.xyz/api/v1"
-headers = {
-    "Authorization": f"Bearer {API_KEY}",
-    "Content-Type": "application/json"
-}
+          {/* Authentication */}
+          <section id="authentication" className="mb-16">
+            <h2 className="text-3xl font-bold mb-4">Authentication</h2>
+            <p className="text-zinc-400 mb-6">
+              All API requests require a Bearer token. Generate API keys from your dashboard.
+            </p>
 
-# Start a session and get context
-def start_session(first_message: str) -> dict:
-    response = requests.post(
-        f"{BASE_URL}/sessions/start",
-        headers=headers,
-        json={"firstMessage": first_message}
-    )
-    return response.json()
+            <CodeBlock>{`Authorization: Bearer mem_your_api_key`}</CodeBlock>
 
-# Store a memory
-def remember(text: str) -> dict:
-    response = requests.post(
-        f"{BASE_URL}/simple/remember",
-        headers=headers,
-        json={"text": text}
-    )
-    return response.json()
+            <Table
+              headers={["Header", "Required", "Description"]}
+              rows={[
+                ["Authorization", "Yes", "Bearer token with your API key"],
+                ["Content-Type", "Yes", "application/json for POST requests"],
+                ["X-Namespace", "Optional", "Hashed namespace for privacy isolation"],
+              ]}
+            />
 
-# Search memories
-def recall(query: str, limit: int = 5) -> list[str]:
-    response = requests.post(
-        f"{BASE_URL}/simple/recall",
-        headers=headers,
-        json={"query": query, "limit": limit}
-    )
-    return response.json()["results"]
+            <Note>
+              API keys are scoped to your account. Each key has an associated agent_id 
+              for tracking which agent stored which memories.
+            </Note>
+          </section>
 
-# Example usage
-session = start_session("Help me with my project")
-print(f"Session ID: {session['sessionId']}")
-print(f"Context: {session['context']}")
+          {/* CLI */}
+          <section id="cli" className="mb-16">
+            <h2 className="text-3xl font-bold mb-4">CLI</h2>
+            <p className="text-zinc-400 mb-6">
+              The Engrm CLI helps you migrate existing memories, search from the terminal, and calculate token savings.
+            </p>
 
-# Store what you learned
-remember("User is building a REST API with FastAPI")
+            <h3 className="text-xl font-semibold mb-4">Installation</h3>
+            <CodeBlock language="bash">{`npm install -g engrm
+# or use directly with npx
+npx engrm --help`}</CodeBlock>
 
-# Later, recall relevant context
-memories = recall("What framework is the user using?")
-print(memories)  # ["User is building a REST API with FastAPI"]`}</CodeBlock>
+            <h3 className="text-xl font-semibold mb-4 mt-8">Migrate Existing Memories</h3>
+            <p className="text-zinc-400 mb-4">
+              Scan your workspace, extract memories from markdown files, and see token savings:
+            </p>
+            <CodeBlock language="bash">{`# Set your API key
+export ENGRM_API_KEY="mem_your_api_key"
 
-      <H2 id="next-steps">Next Steps</H2>
-      <ul className="list-disc list-inside text-zinc-400 space-y-2 mb-8">
-        <li>
-          <a href="/docs/concepts" className="text-cyan-400 hover:underline">Core Concepts</a> — 
-          Learn about memory tiers, decay, and reinforcement
-        </li>
-        <li>
-          <a href="/docs/api" className="text-cyan-400 hover:underline">API Reference</a> — 
-          Full documentation of all endpoints
-        </li>
-        <li>
-          <a href="/docs/guides/openai" className="text-cyan-400 hover:underline">OpenAI Integration</a> — 
-          Add memory to GPT-based agents
-        </li>
-        <li>
-          <a href="/docs/guides/anthropic" className="text-cyan-400 hover:underline">Anthropic Integration</a> — 
-          Add memory to Claude-based agents
-        </li>
-      </ul>
+# Scan workspace and show what would be migrated
+engrm init --dry-run
 
-      <Footer />
-    </>
+# Run the migration
+engrm init`}</CodeBlock>
+
+            <p className="text-zinc-400 my-4">
+              The init command will:
+            </p>
+            <ul className="list-disc list-inside text-zinc-400 mb-4 space-y-1">
+              <li>Scan <code>MEMORY.md</code> and <code>memory/*.md</code> files</li>
+              <li>Count tokens and extract memories</li>
+              <li>Show estimated token savings</li>
+              <li>Upload memories to Engrm</li>
+              <li>Generate a slim <code>MEMORY.md</code> template</li>
+              <li>Create an agent skill file for integration</li>
+            </ul>
+
+            <Note type="tip">
+              Agents typically load 8,000+ tokens of context every session. With Engrm, you load ~600 tokens 
+              of core identity and query relevant memories on-demand. At 20 sessions/day, this can save 
+              $100-500/month on API costs.
+            </Note>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Store Memories</h3>
+            <CodeBlock language="bash">{`# Store with auto-generated title
+engrm store "User prefers dark theme and concise responses"
+
+# Store with explicit title
+engrm store "Server-side encryption, no ZK" --title "Architecture Decision"`}</CodeBlock>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Search Memories</h3>
+            <CodeBlock language="bash">{`# Search your memories
+engrm search "encryption decision"
+
+# Limit results
+engrm search "user preferences" --limit 3`}</CodeBlock>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Agent Integration</h3>
+            <p className="text-zinc-400 mb-4">
+              After running <code>engrm init</code>, your agent should:
+            </p>
+            <ol className="list-decimal list-inside text-zinc-400 mb-4 space-y-1">
+              <li>Load slim MEMORY.md (core identity only)</li>
+              <li>Query Engrm before answering questions about projects, decisions, or context</li>
+              <li>Store important new learnings back to Engrm</li>
+            </ol>
+
+            <CodeBlock language="bash">{`# Example: Agent queries Engrm before responding
+curl -X POST "https://engrm.xyz/api/v1/search" \\
+  -H "Authorization: Bearer $ENGRM_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"query": "encryption architecture decision", "limit": 5}'`}</CodeBlock>
+          </section>
+
+          {/* Layered Memory */}
+          <section id="layered-memory" className="mb-16">
+            <h2 className="text-3xl font-bold mb-4">Layered Memory</h2>
+            <p className="text-zinc-400 mb-6">
+              Engrm uses a brain-like layered memory model with two tiers: <strong>global identity</strong> 
+              and <strong>chat-specific context</strong>. This mirrors how humans have persistent self-knowledge 
+              while also maintaining conversation-specific memories.
+            </p>
+
+            <h3 className="text-xl font-semibold mb-4">Global Identity Layer (🧠)</h3>
+            <p className="text-zinc-400 mb-4">
+              Memories that define who the user <em>is</em> — stored once, available everywhere.
+              Auto-detected from patterns like "I am", "I live in", "my name is".
+            </p>
+            <CodeBlock>{`// Auto-detected as identity → stored globally
+"I'm John, a software engineer in Singapore"
+
+// Stored in: __global__ namespace
+// Available in: ALL conversations`}</CodeBlock>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Chat-Specific Layer (💬)</h3>
+            <p className="text-zinc-400 mb-4">
+              Context-specific memories that only matter in a particular conversation.
+              Isolated by hashed namespace for privacy.
+            </p>
+            <CodeBlock>{`// Chat about Project Alpha
+"We decided to use PostgreSQL for this project"
+
+// Stored in: ns_a3f2b8c1... (hashed)
+// Available in: ONLY this chat namespace`}</CodeBlock>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Layered Search</h3>
+            <p className="text-zinc-400 mb-4">
+              Every search automatically queries both your current namespace AND the global identity layer.
+              Results are merged and ranked by relevance.
+            </p>
+            <CodeBlock language="text">{`search("What timezone is the user in?")
+
+Results:
+🧠 [Global] User is based in Singapore (GMT+8)     — similarity: 0.92
+💬 [Chat]   Meeting scheduled for 9am SGT          — similarity: 0.78`}</CodeBlock>
+
+            <Note type="tip">
+              Identity memories are <strong>never auto-deleted</strong> and have a 365-day halflife.
+              They form the stable foundation of your agent's understanding of the user.
+            </Note>
+          </section>
+
+          {/* Storing Memories */}
+          <section id="storing-memories" className="mb-16">
+            <h2 className="text-3xl font-bold mb-4">Storing Memories</h2>
+            <p className="text-zinc-400 mb-6">
+              Store memories with automatic type detection, reinforcement, and layered namespace routing.
+            </p>
+
+            <h3 className="text-xl font-semibold mb-4">POST /api/v1/memories</h3>
+            <CodeBlock>{`{
+  "content": "Remember that the user prefers concise responses.",
+  "embedding": [0.1, 0.2, ...],  // 384 or 1536-dim vector
+  "type": "fact",                 // optional, auto-detected
+  "importance": 7,                // optional
+  "namespace": "ns_a3f2b8c1...",  // hashed namespace
+  "session_id": "sess_abc123"     // optional, for grouping
+}`}</CodeBlock>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Response</h3>
+            <CodeBlock>{`{
+  "id": "mem_xyz789",
+  "action": "created",      // or "reinforced"
+  "strength": 1.0,
+  "mentionCount": 1,
+  "type": "fact",
+  "importance": 7
+}`}</CodeBlock>
+
+            <Note type="tip">
+              If you store a memory similar to one that already exists (cosine similarity &gt; 0.75), 
+              Engrm will <strong>reinforce</strong> the existing memory instead of creating a duplicate.
+              This implements the "fire together, wire together" principle.
+            </Note>
+
+            <Table
+              headers={["Field", "Type", "Description"]}
+              rows={[
+                ["content", "string", "Memory content"],
+                ["embedding", "number[]", "384-dimensional embedding vector"],
+                ["type", "MemoryType", "One of: constraint, identity, relationship, preference, how_to, fact, event"],
+                ["importance", "number", "1-10 scale. Auto-scored if omitted"],
+                ["entities", "string[]", "Named entities. Auto-extracted if omitted"],
+                ["namespace", "string", "Project/namespace for organization"],
+                ["session_id", "string", "Conversation session ID"],
+                ["metadata", "object", "Arbitrary JSON metadata"],
+              ]}
+            />
+          </section>
+
+          {/* Retrieving Memories */}
+          <section id="retrieving-memories" className="mb-16">
+            <h2 className="text-3xl font-bold mb-4">Retrieving Memories</h2>
+            <p className="text-zinc-400 mb-6">
+              Retrieve relevant memories using vector similarity search. 
+              Memories that are retrieved together strengthen their connections.
+            </p>
+
+            <h3 className="text-xl font-semibold mb-4">POST /api/v1/context</h3>
+            <CodeBlock>{`{
+  "query_embedding": [0.1, 0.2, ...],
+  "limit": 10,
+  "namespace": "personal",      // optional
+  "min_strength": 0.3,          // optional, filter weak memories
+  "types": ["fact", "preference"] // optional, filter by type
+}`}</CodeBlock>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Response</h3>
+            <CodeBlock>{`{
+  "memories": [
+    {
+      "id": "mem_abc",
+      "content": "<encrypted>",
+      "type": "fact",
+      "importance": 8,
+      "strength": 1.2,
+      "similarity": 0.89,
+      "createdAt": "2026-02-27T10:00:00Z"
+    }
+  ],
+  "co_retrieval_strengthened": 3  // edges strengthened
+}`}</CodeBlock>
+
+            <Note>
+              When memories are retrieved together, Engrm automatically strengthens the edges between them. 
+              This creates an associative network where related memories surface together more often.
+            </Note>
+          </section>
+
+          {/* Heuristic Scoring */}
+          <section id="heuristic-scoring" className="mb-16">
+            <h2 className="text-3xl font-bold mb-4">Heuristic Scoring</h2>
+            <p className="text-zinc-400 mb-6">
+              Engrm scores memory importance using deterministic heuristics—no LLM required at extraction time.
+              This keeps costs at zero while maintaining high accuracy.
+            </p>
+
+            <Table
+              headers={["Signal", "Points", "Pattern Examples"]}
+              rows={[
+                ["Explicit markers", "+3.0", '"remember this", "my name is", "I prefer"'],
+                ["Decision markers", "+2.0", '"decided", "going with", "committed to"'],
+                ["Correction signals", "+1.5", '"actually", "no wait", "I meant"'],
+                ["Emotional intensity", "+1.5", 'High arousal words, exclamations, ALL CAPS'],
+                ["Temporal specificity", "+1.0", '"January 5th", "next Tuesday", "every morning"'],
+                ["Causality", "+1.0", '"because", "therefore", "as a result"'],
+                ["Task completion", "+1.0", '"done", "shipped", "finished", "failed"'],
+                ["Entity density", "+2.0", 'Named entities per sentence'],
+              ]}
+            />
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Scoring Formula</h3>
+            <CodeBlock language="text">{`Final_Score = Base_Heuristic_Score (0-7) 
+            + Context_Modifiers (0-2) 
+            + Safety_Boost (0-2)
+            
+Type_Adjusted = Final_Score × Type_Multiplier
+
+Threshold: ≥ 6.0 for storage`}</CodeBlock>
+
+            <Note type="tip">
+              Constraints with safety keywords ("allergic", "emergency", "deadline") get an automatic +2.0 boost.
+              These memories are critical and should never be forgotten.
+            </Note>
+          </section>
+
+          {/* Reinforcement */}
+          <section id="reinforcement" className="mb-16">
+            <h2 className="text-3xl font-bold mb-4">Reinforcement</h2>
+            <p className="text-zinc-400 mb-6">
+              Instead of deduplicating, Engrm <strong>strengthens</strong> memories that are mentioned repeatedly.
+              This mirrors how biological memory consolidation works.
+            </p>
+
+            <h3 className="text-xl font-semibold mb-4">Frequency Boost</h3>
+            <Table
+              headers={["Mention Count", "Strength Multiplier"]}
+              rows={[
+                ["1st mention", "1.0× (base)"],
+                ["2nd mention", "1.4× (+40%)"],
+                ["3rd-5th mention", "+20% each"],
+                ["6th+ mention", "+5% each (logarithmic)"],
+                ["Maximum", "2.5× cap"],
+              ]}
+            />
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Strength Update (EMA)</h3>
+            <CodeBlock language="text">{`new_strength = (existing_strength × 0.7) + (trigger_intensity × 0.3)
+
+trigger_intensity = heuristic_score / 10`}</CodeBlock>
+
+            <Note>
+              <strong>Example:</strong> User mentions their dog "Rex" 5 times across conversations.
+              Memory strength: 0.6 → 0.84 → 0.97 → 1.08 → 1.13 (capped).
+              Rex becomes highly resistant to decay.
+            </Note>
+          </section>
+
+          {/* Memory Decay */}
+          <section id="memory-decay" className="mb-16">
+            <h2 className="text-3xl font-bold mb-4">Memory Decay</h2>
+            <p className="text-zinc-400 mb-6">
+              Memories that aren't accessed fade over time, following an Ebbinghaus-inspired forgetting curve.
+              Recall resets the decay clock and strengthens the memory.
+            </p>
+
+            <h3 className="text-xl font-semibold mb-4">Decay Formula</h3>
+            <CodeBlock language="text">{`current_strength = base_strength × (0.9 ^ (days_since_access / halflife))`}</CodeBlock>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Type-Specific Halflives</h3>
+            <Table
+              headers={["Memory Type", "Halflife", "Auto-Delete?"]}
+              rows={[
+                ["identity", "365 days", "❌ Never deleted"],
+                ["constraint", "180 days", "When strength < 0.20"],
+                ["how_to", "120 days", "When strength < 0.20"],
+                ["fact", "90 days", "When strength < 0.20"],
+                ["preference", "60 days", "When strength < 0.20"],
+                ["relationship", "30 days", "When strength < 0.20"],
+                ["event", "14 days", "When strength < 0.20"],
+              ]}
+            />
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Memory Lifecycle</h3>
+            <ul className="list-disc list-inside text-zinc-400 space-y-2">
+              <li><strong>Auto-delete threshold:</strong> strength &lt; 0.20 (~210 days of total neglect)</li>
+              <li><strong>Auto-archive:</strong> 90 days no access → archived (still searchable, deprioritized)</li>
+              <li><strong>Mention protection:</strong> ≥4 mentions protects memory for up to 365 days</li>
+              <li><strong>Identity memories:</strong> Never auto-deleted, 365-day halflife</li>
+              <li><strong>Retrieval = strengthening:</strong> Every recall bumps strength up</li>
+            </ul>
+
+            <Note type="tip">
+              Think of it like your brain pruning unused synapses. If you never think about something 
+              for 7+ months, it fades. But anything you recall stays strong.
+            </Note>
+          </section>
+
+          {/* Memory Types */}
+          <section id="memory-types" className="mb-16">
+            <h2 className="text-3xl font-bold mb-4">Memory Types</h2>
+            <p className="text-zinc-400 mb-6">
+              Each memory type has different decay rates and protection levels, optimized for its use case.
+            </p>
+
+            <Table
+              headers={["Type", "Halflife", "Protection", "Use Case"]}
+              rows={[
+                ["identity", "365 days", "Never deleted", "Name, location, core traits, values"],
+                ["constraint", "180 days", "Safety-boosted", "Hard limits, allergies, must-nots"],
+                ["how_to", "120 days", "Standard", "Procedures, workflows, recipes"],
+                ["fact", "90 days", "Standard", "Objective knowledge, properties"],
+                ["preference", "60 days", "Standard", "Likes, dislikes, tastes"],
+                ["relationship", "30 days", "Standard", "Social graph, colleagues"],
+                ["event", "14 days", "Standard", "Specific occurrences, episodes"],
+              ]}
+            />
+
+            <Note type="warning">
+              <strong>Safety Rule:</strong> Constraints containing medical/danger keywords 
+              ("allergic", "emergency contact", "diabetic") receive extra protection and slower decay.
+            </Note>
+          </section>
+
+          {/* Privacy & Encryption */}
+          <section id="privacy-encryption" className="mb-16">
+            <h2 className="text-3xl font-bold mb-4">Privacy & Encryption</h2>
+            <p className="text-zinc-400 mb-6">
+              All memory content is encrypted at rest using AES-256-GCM with per-user keys.
+              This protects your data against database breaches.
+            </p>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Security Model</h3>
+            <Table
+              headers={["Threat", "Protected?", "Notes"]}
+              rows={[
+                ["Database breach", "✅ Yes", "Content encrypted at rest"],
+                ["SQL injection", "✅ Yes", "Attacker gets encrypted data only"],
+                ["Unauthorized DB access", "✅ Yes", "Encryption keys stored separately"],
+                ["Network interception", "✅ Yes", "HTTPS required"],
+              ]}
+            />
+
+            <Note type="info">
+              The model is simple: the API stores encrypted content and returns decrypted content to authorized callers.
+              Protect your API keys because any caller with that key can read your memories.
+            </Note>
+          </section>
+
+          {/* MCP Server */}
+          <section id="mcp-server" className="mb-16">
+            <h2 className="text-3xl font-bold mb-4">MCP Server</h2>
+            <p className="text-zinc-400 mb-6">
+              The Engrm MCP Server integrates with Claude Desktop and other MCP-compatible agents.
+              It handles encryption, embedding, and layered memory automatically.
+            </p>
+
+            <h3 className="text-xl font-semibold mb-4">Installation</h3>
+            <CodeBlock language="bash">{`npm install -g engrm-mcp`}</CodeBlock>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Configuration (Claude Desktop)</h3>
+            <CodeBlock>{`{
+  "mcpServers": {
+    "engrm": {
+      "command": "engrm-mcp",
+      "args": [],
+      "env": {
+        "ENGRM_API_KEY": "mem_your_api_key",
+        "ENGRM_NAMESPACE": "optional-chat-id"
+      }
+    }
+  }
+}`}</CodeBlock>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Available Tools</h3>
+            <Table
+              headers={["Tool", "Description"]}
+              rows={[
+                ["engrm_store", "Store an encrypted memory (auto-detects identity)"],
+                ["engrm_search", "Search with layered recall (chat + global)"],
+                ["engrm_context", "Get relevant context for a query"],
+                ["engrm_list", "List recent memories"],
+                ["engrm_delete", "Delete a memory by ID"],
+              ]}
+            />
+
+            <Note>
+              Identity memories ("I am John", "I live in Singapore") are auto-detected and stored 
+              in the global namespace, available across all conversations.
+            </Note>
+          </section>
+
+          {/* Python CLI */}
+          <section id="python-cli" className="mb-16">
+            <h2 className="text-3xl font-bold mb-4">Python CLI</h2>
+            <p className="text-zinc-400 mb-6">
+              The Python CLI (<code>engrm.py</code>) provides embeddings via FastEmbed and stores content through the Engrm API.
+            </p>
+
+            <h3 className="text-xl font-semibold mb-4">Environment Setup</h3>
+            <CodeBlock language="bash">{`export ENGRM_API_KEY="mem_your_api_key"
+export ENGRM_NAMESPACE="optional-chat-id"  # auto-hashed
+export ENGRM_API_URL="https://engrm.xyz"   # optional`}</CodeBlock>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Commands</h3>
+            <CodeBlock language="bash">{`# Store a memory (auto-encrypts, auto-embeds)
+python engrm.py store "User prefers dark theme" --type preference
+
+# Search memories (queries chat + global namespaces)
+python engrm.py search "What are the user's preferences?"
+
+# Search across ALL namespaces
+python engrm.py search "What's the user's timezone?" --global
+
+# Get context for a query
+python engrm.py context "Schedule a meeting" --limit 5
+
+# List recent memories
+python engrm.py list --limit 10
+
+# Delete a memory
+python engrm.py delete mem_abc123`}</CodeBlock>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Identity Auto-Detection</h3>
+            <p className="text-zinc-400 mb-4">
+              The CLI automatically detects identity statements and stores them globally:
+            </p>
+            <CodeBlock language="bash">{`# This is auto-detected as identity
+python engrm.py store "I'm John, a software engineer in Singapore"
+
+# Stored in: __global__ namespace (available everywhere)
+# Type: identity (never auto-deleted)`}</CodeBlock>
+
+            <Note>
+              The CLI uses <code>fastembed</code> for local ONNX embeddings.
+              Stored memory content remains encrypted at rest on the server.
+            </Note>
+          </section>
+
+          {/* Footer */}
+          <footer className="border-t border-zinc-800 pt-8 mt-16">
+            <p className="text-zinc-500 text-sm">
+              Built by <a href="https://x.com/scianna" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">John Scianna</a>.
+              Open source on <a href="https://github.com/jscianna/engrm" className="text-cyan-400 hover:underline">GitHub</a>.
+            </p>
+          </footer>
+        </main>
+      </div>
+    </div>
   );
 }
