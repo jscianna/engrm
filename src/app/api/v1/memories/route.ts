@@ -1,10 +1,11 @@
 import { embedText } from "@/lib/embeddings";
 import { extractEntities } from "@/lib/entities";
 import { classifyMemoryType } from "@/lib/memory-classification";
-import { upsertMemoryVector } from "@/lib/qdrant";
+import { semanticSearchVectors, upsertMemoryVector } from "@/lib/qdrant";
 import { 
   createMemoryEdge,
   findMemoriesWithSharedEntities,
+  getAgentMemoriesByIds,
   getSessionById, 
   insertAgentMemory, 
   listAgentMemories 
@@ -13,6 +14,9 @@ import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject, normalizeIsoTimestamp, normalizeLimit, resolveNamespaceIdOrError } from "@/lib/api-v1";
 import type { MemoryKind } from "@/lib/types";
+
+// Similarity threshold for consolidation suggestion
+const CONSOLIDATION_THRESHOLD = 0.85;
 
 export const runtime = "nodejs";
 
@@ -132,6 +136,67 @@ export async function POST(request: Request) {
       ? body.importanceTier as "critical" | "high" | "normal"
       : "normal";
 
+    // Check for force=true query param to bypass consolidation
+    const url = new URL(request.url);
+    const forceCreate = url.searchParams.get("force") === "true";
+
+    // Generate embedding for consolidation check and storage
+    let embedding: number[] | null = null;
+    try {
+      embedding = await embedText(contentText);
+    } catch {
+      // Embedding failed, skip consolidation check
+    }
+
+    // Check for similar existing memories (consolidation suggestion)
+    if (embedding && !forceCreate) {
+      try {
+        const hits = await semanticSearchVectors({
+          userId: identity.userId,
+          query: contentText,
+          vector: embedding,
+          topK: 5,
+        });
+
+        // Filter hits above consolidation threshold
+        const similarHits = hits.filter((h) => h.score >= CONSOLIDATION_THRESHOLD);
+
+        if (similarHits.length > 0) {
+          // Get full memory records for similar memories
+          const similarMemories = await getAgentMemoriesByIds({
+            userId: identity.userId,
+            ids: similarHits.map((h) => h.item.id),
+          });
+
+          // Return consolidation suggestion instead of creating
+          return Response.json({
+            status: "consolidation_suggested",
+            newMemory: {
+              title: titleForStorage,
+              text: contentText,
+              memoryType,
+              importanceTier,
+              entities,
+            },
+            similarMemories: similarMemories.map((m, idx) => ({
+              id: m.id,
+              title: m.title,
+              text: m.text.slice(0, 500) + (m.text.length > 500 ? "..." : ""),
+              similarity: Math.round(similarHits[idx]?.score * 100) / 100,
+              memoryType: m.memoryType,
+              createdAt: m.createdAt,
+            })),
+            suggestion: similarMemories.length === 1 
+              ? "Consider merging with the existing memory"
+              : `Found ${similarMemories.length} similar memories. Consider consolidating.`,
+            hint: "Add ?force=true to create anyway",
+          }, { status: 200 });
+        }
+      } catch {
+        // Consolidation check is best-effort, continue with creation
+      }
+    }
+
     const memory = await insertAgentMemory({
       userId: identity.userId,
       title: titleForStorage,
@@ -145,20 +210,21 @@ export async function POST(request: Request) {
       isEncrypted: false,
     });
 
-    // Generate embedding and store in Qdrant for semantic search
-    try {
-      const embedding = await embedText(contentText);
-      await upsertMemoryVector({
-        memoryId: memory.id,
-        userId: identity.userId,
-        title: titleForStorage,
-        sourceType: memory.sourceType,
-        memoryType: memory.memoryType,
-        importance: 5, // Default importance
-        vector: embedding,
-      });
-    } catch {
-      // Embedding is best-effort, memory is still stored
+    // Store embedding in Qdrant for semantic search
+    if (embedding) {
+      try {
+        await upsertMemoryVector({
+          memoryId: memory.id,
+          userId: identity.userId,
+          title: titleForStorage,
+          sourceType: memory.sourceType,
+          memoryType: memory.memoryType,
+          importance: 5, // Default importance
+          vector: embedding,
+        });
+      } catch {
+        // Vector storage is best-effort
+      }
     }
 
     // Auto-link memories that share entities (same_entity relationship)

@@ -278,7 +278,10 @@ async function ensureMemoriesColumns(client: Client): Promise<void> {
     { name: "embedding_hash", ddl: "TEXT" },  // SHA256 hash of embedding for dedup
     { name: "content_mac", ddl: "TEXT" },  // HMAC-SHA256 for content integrity
     { name: "tags_json", ddl: "TEXT" },  // JSON array of user tags
-    { name: "importance_tier", ddl: "TEXT DEFAULT 'normal'" },  // critical/high/normal
+    { name: "importance_tier", ddl: "TEXT DEFAULT 'normal'" },  // critical/working/high/normal
+    { name: "promotion_locked", ddl: "INTEGER DEFAULT 0" },  // Prevents auto-demotion of manually set tiers
+    { name: "locked_tier", ddl: "TEXT" },  // Lock memory at specific tier (prevents promotion/demotion)
+    { name: "decay_immune", ddl: "INTEGER DEFAULT 0" },  // If 1, memory is immune to automatic decay
   ];
 
   const tableInfo = await client.execute("PRAGMA table_info(memories)");
@@ -376,6 +379,9 @@ function mapRow(row: Record<string, unknown>): MemoryRecord {
     entities,
     feedbackScore: Number(row.feedback_score ?? 0),
     accessCount: Number(row.access_count ?? 0),
+    promotionLocked: Number(row.promotion_locked ?? 0) === 1,
+    lockedTier: (row.locked_tier as MemoryImportanceTier | null) ?? null,
+    decayImmune: Number(row.decay_immune ?? 0) === 1,
     createdAt: row.created_at as string,
   };
 }
@@ -2360,5 +2366,460 @@ export async function insertMemoryWithMetadataAndQuota(params: {
       createdAt: now,
     },
     created: true,
+  };
+}
+
+// =============================================================================
+// Auto-Promotion System
+// =============================================================================
+
+/**
+ * Promotion thresholds for access-based tier upgrades
+ */
+const PROMOTION_THRESHOLDS = {
+  normalToHigh: 5,   // access_count >= 5 promotes normal → high
+  highToCritical: 15, // access_count >= 15 promotes high → critical
+} as const;
+
+/**
+ * Check and auto-promote memories based on access frequency.
+ * - normal → high when access_count >= 5
+ * - high → critical when access_count >= 15
+ * 
+ * Respects promotion_locked flag: locked memories won't be auto-promoted.
+ * Returns the count of promoted memories.
+ */
+export async function checkAndPromoteMemories(userId: string): Promise<{
+  promotedToHigh: number;
+  promotedToCritical: number;
+}> {
+  await ensureInitialized();
+  const client = getDb();
+
+  // Promote normal → high (access_count >= 5, not locked)
+  const highResult = await client.execute({
+    sql: `
+      UPDATE memories
+      SET importance_tier = 'high'
+      WHERE user_id = ?
+        AND importance_tier = 'normal'
+        AND access_count >= ?
+        AND (promotion_locked IS NULL OR promotion_locked = 0)
+        AND archived_at IS NULL
+    `,
+    args: [userId, PROMOTION_THRESHOLDS.normalToHigh],
+  });
+
+  // Promote high → critical (access_count >= 15, not locked)
+  const criticalResult = await client.execute({
+    sql: `
+      UPDATE memories
+      SET importance_tier = 'critical'
+      WHERE user_id = ?
+        AND importance_tier = 'high'
+        AND access_count >= ?
+        AND (promotion_locked IS NULL OR promotion_locked = 0)
+        AND archived_at IS NULL
+    `,
+    args: [userId, PROMOTION_THRESHOLDS.highToCritical],
+  });
+
+  return {
+    promotedToHigh: highResult.rowsAffected ?? 0,
+    promotedToCritical: criticalResult.rowsAffected ?? 0,
+  };
+}
+
+/**
+ * Set the promotion_locked flag on a memory to prevent auto-demotion.
+ * Use this when manually setting importance tiers.
+ */
+export async function setPromotionLocked(
+  userId: string,
+  memoryId: string,
+  locked: boolean
+): Promise<boolean> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const result = await client.execute({
+    sql: `
+      UPDATE memories
+      SET promotion_locked = ?
+      WHERE user_id = ? AND id = ?
+    `,
+    args: [locked ? 1 : 0, userId, memoryId],
+  });
+
+  return (result.rowsAffected ?? 0) > 0;
+}
+
+/**
+ * Get all high-tier memories for a user (for context synthesis)
+ */
+export async function getHighTierMemories(userId: string): Promise<AgentMemoryRecord[]> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, title, source_type, memory_type, importance_tier, source_url, file_name, 
+             content_text, metadata_json, namespace_id, session_id, entities, entities_json, 
+             feedback_score, access_count, created_at
+      FROM memories
+      WHERE user_id = ? AND importance_tier = 'high' AND archived_at IS NULL
+      ORDER BY access_count DESC, created_at DESC
+    `,
+    args: [userId],
+  });
+
+  return result.rows.map((row) => mapAgentMemoryRow(row as Record<string, unknown>));
+}
+
+/**
+ * Increment access count for multiple memories (batch operation).
+ * Used when search returns results to track retrieval frequency.
+ */
+export async function incrementAccessCounts(userId: string, memoryIds: string[]): Promise<void> {
+  await ensureInitialized();
+  if (memoryIds.length === 0) {
+    return;
+  }
+
+  const client = getDb();
+  const now = new Date().toISOString();
+  const placeholders = memoryIds.map(() => "?").join(",");
+
+  await client.execute({
+    sql: `
+      UPDATE memories
+      SET access_count = access_count + 1,
+          last_accessed_at = ?
+      WHERE user_id = ? AND id IN (${placeholders})
+    `,
+    args: [now, userId, ...memoryIds],
+  });
+}
+
+// =============================================================================
+// Memory Decay System
+// =============================================================================
+
+/**
+ * Demotion thresholds for score-based tier downgrades
+ */
+const DEMOTION_THRESHOLDS = {
+  criticalToHigh: 3,   // access_count < 3 demotes critical → high
+  highToNormal: 1,     // access_count < 1 demotes high → normal
+} as const;
+
+/**
+ * Apply decay to memory access scores.
+ * Memories not accessed in the last 7 days have their access_count reduced by 5%.
+ * Respects decay_immune and locked_tier flags.
+ * 
+ * Returns statistics about the decay operation.
+ */
+export async function decayMemoryScores(userId?: string): Promise<{
+  decayed: number;
+  demotedToHigh: number;
+  demotedToNormal: number;
+}> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const userFilter = userId ? "AND user_id = ?" : "";
+  const userArgs = userId ? [userId] : [];
+
+  // Apply 5% decay to access_count for memories not accessed in 7 days
+  const decayResult = await client.execute({
+    sql: `
+      UPDATE memories
+      SET access_count = CAST(access_count * 0.95 AS INTEGER)
+      WHERE last_accessed_at < datetime('now', '-7 days')
+        AND (promotion_locked IS NULL OR promotion_locked = 0)
+        AND (decay_immune IS NULL OR decay_immune = 0)
+        AND (locked_tier IS NULL)
+        AND access_count > 0
+        AND archived_at IS NULL
+        ${userFilter}
+    `,
+    args: userArgs,
+  });
+
+  // Demote critical → high when score falls below threshold
+  const demoteHighResult = await client.execute({
+    sql: `
+      UPDATE memories
+      SET importance_tier = 'high'
+      WHERE importance_tier = 'critical'
+        AND access_count < ?
+        AND (promotion_locked IS NULL OR promotion_locked = 0)
+        AND (locked_tier IS NULL OR locked_tier != 'critical')
+        AND archived_at IS NULL
+        ${userFilter}
+    `,
+    args: [DEMOTION_THRESHOLDS.criticalToHigh, ...userArgs],
+  });
+
+  // Demote high → normal when score falls below threshold
+  const demoteNormalResult = await client.execute({
+    sql: `
+      UPDATE memories
+      SET importance_tier = 'normal'
+      WHERE importance_tier = 'high'
+        AND access_count < ?
+        AND (promotion_locked IS NULL OR promotion_locked = 0)
+        AND (locked_tier IS NULL OR (locked_tier != 'critical' AND locked_tier != 'high'))
+        AND archived_at IS NULL
+        ${userFilter}
+    `,
+    args: [DEMOTION_THRESHOLDS.highToNormal, ...userArgs],
+  });
+
+  return {
+    decayed: decayResult.rowsAffected ?? 0,
+    demotedToHigh: demoteHighResult.rowsAffected ?? 0,
+    demotedToNormal: demoteNormalResult.rowsAffected ?? 0,
+  };
+}
+
+// =============================================================================
+// Reinforcement System
+// =============================================================================
+
+/**
+ * Apply explicit reinforcement to a memory.
+ * Positive reinforcement (+1) adds +5 to effective access_count.
+ * Negative reinforcement (-1) subtracts 3 from effective access_count.
+ * 
+ * Returns the updated memory with new feedback score and potentially new tier.
+ */
+export async function reinforceMemoryExplicit(
+  userId: string,
+  memoryId: string,
+  value: 1 | -1,
+  reason?: string
+): Promise<{
+  feedbackScore: number;
+  accessCount: number;
+  newTier: MemoryImportanceTier;
+  promoted: boolean;
+  demoted: boolean;
+} | null> {
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+
+  // Calculate the access_count delta based on reinforcement
+  // +1 reinforcement = +5 to access_count equivalent
+  // -1 reinforcement = -3 to access_count equivalent
+  const accessDelta = value === 1 ? 5 : -3;
+
+  // Get current state
+  const current = await client.execute({
+    sql: `SELECT importance_tier, access_count, feedback_score, locked_tier FROM memories WHERE id = ? AND user_id = ?`,
+    args: [memoryId, userId],
+  });
+
+  if (current.rows.length === 0) {
+    return null;
+  }
+
+  const row = current.rows[0] as Record<string, unknown>;
+  const currentTier = (row.importance_tier as MemoryImportanceTier) ?? "normal";
+  const currentAccess = Number(row.access_count ?? 0);
+  const currentFeedback = Number(row.feedback_score ?? 0);
+  const lockedTier = row.locked_tier as MemoryImportanceTier | null;
+
+  const newAccess = Math.max(0, currentAccess + accessDelta);
+  const newFeedback = currentFeedback + value;
+
+  // Update the memory
+  await client.execute({
+    sql: `
+      UPDATE memories
+      SET access_count = ?,
+          feedback_score = ?,
+          last_accessed_at = ?
+      WHERE id = ? AND user_id = ?
+    `,
+    args: [newAccess, newFeedback, now, memoryId, userId],
+  });
+
+  // Calculate new tier based on updated access_count
+  let newTier: MemoryImportanceTier = currentTier;
+  let promoted = false;
+  let demoted = false;
+
+  // Check for promotion (respects locked_tier)
+  if (newAccess >= PROMOTION_THRESHOLDS.highToCritical) {
+    // Can promote to critical if not already critical and lock allows
+    if (currentTier !== "critical" && (!lockedTier || lockedTier === "critical")) {
+      newTier = "critical";
+      promoted = true;
+    }
+  } else if (newAccess >= PROMOTION_THRESHOLDS.normalToHigh) {
+    // Can promote to high if currently normal and lock allows
+    if (currentTier === "normal" && (!lockedTier || lockedTier === "high" || lockedTier === "critical")) {
+      newTier = "high";
+      promoted = true;
+    }
+  }
+
+  // Check for demotion (respects locked_tier)
+  if (newAccess < DEMOTION_THRESHOLDS.highToNormal) {
+    // Demote high to normal if lock allows
+    if (currentTier === "high" && (!lockedTier || lockedTier === "normal")) {
+      newTier = "normal";
+      demoted = true;
+    }
+  } else if (newAccess < DEMOTION_THRESHOLDS.criticalToHigh) {
+    // Demote critical to high if lock allows
+    if (currentTier === "critical" && (!lockedTier || lockedTier === "high" || lockedTier === "normal")) {
+      newTier = "high";
+      demoted = true;
+    }
+  }
+
+  // Apply tier change if needed
+  if (newTier !== currentTier) {
+    await client.execute({
+      sql: `UPDATE memories SET importance_tier = ? WHERE id = ? AND user_id = ?`,
+      args: [newTier, memoryId, userId],
+    });
+  }
+
+  return {
+    feedbackScore: newFeedback,
+    accessCount: newAccess,
+    newTier,
+    promoted,
+    demoted,
+  };
+}
+
+// =============================================================================
+// Tier Locking System
+// =============================================================================
+
+/**
+ * Lock a memory at a specific tier.
+ * Once locked, the memory cannot be promoted past or demoted below this tier.
+ * Pass null to unlock.
+ */
+export async function setMemoryLockedTier(
+  userId: string,
+  memoryId: string,
+  tier: MemoryImportanceTier | null
+): Promise<{ success: boolean; currentTier: MemoryImportanceTier | null }> {
+  await ensureInitialized();
+  const client = getDb();
+
+  // If locking to a tier, also set the importance_tier to that tier
+  if (tier) {
+    const result = await client.execute({
+      sql: `
+        UPDATE memories
+        SET locked_tier = ?,
+            importance_tier = ?,
+            promotion_locked = 1
+        WHERE id = ? AND user_id = ?
+      `,
+      args: [tier, tier, memoryId, userId],
+    });
+    return {
+      success: (result.rowsAffected ?? 0) > 0,
+      currentTier: tier,
+    };
+  } else {
+    // Unlocking
+    const result = await client.execute({
+      sql: `
+        UPDATE memories
+        SET locked_tier = NULL,
+            promotion_locked = 0
+        WHERE id = ? AND user_id = ?
+      `,
+      args: [memoryId, userId],
+    });
+
+    // Get current tier
+    const current = await client.execute({
+      sql: `SELECT importance_tier FROM memories WHERE id = ? AND user_id = ?`,
+      args: [memoryId, userId],
+    });
+    const row = current.rows[0] as Record<string, unknown> | undefined;
+
+    return {
+      success: (result.rowsAffected ?? 0) > 0,
+      currentTier: row ? (row.importance_tier as MemoryImportanceTier) : null,
+    };
+  }
+}
+
+/**
+ * Set decay immunity for a memory.
+ */
+export async function setMemoryDecayImmune(
+  userId: string,
+  memoryId: string,
+  immune: boolean
+): Promise<boolean> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const result = await client.execute({
+    sql: `
+      UPDATE memories
+      SET decay_immune = ?
+      WHERE id = ? AND user_id = ?
+    `,
+    args: [immune ? 1 : 0, memoryId, userId],
+  });
+
+  return (result.rowsAffected ?? 0) > 0;
+}
+
+/**
+ * Get memory with tier lock info
+ */
+export async function getMemoryWithLockInfo(
+  userId: string,
+  memoryId: string
+): Promise<{
+  id: string;
+  importanceTier: MemoryImportanceTier;
+  lockedTier: MemoryImportanceTier | null;
+  promotionLocked: boolean;
+  decayImmune: boolean;
+  accessCount: number;
+  feedbackScore: number;
+} | null> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const result = await client.execute({
+    sql: `
+      SELECT id, importance_tier, locked_tier, promotion_locked, decay_immune, access_count, feedback_score
+      FROM memories
+      WHERE id = ? AND user_id = ?
+    `,
+    args: [memoryId, userId],
+  });
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  const row = result.rows[0] as Record<string, unknown>;
+  return {
+    id: row.id as string,
+    importanceTier: (row.importance_tier as MemoryImportanceTier) ?? "normal",
+    lockedTier: (row.locked_tier as MemoryImportanceTier | null) ?? null,
+    promotionLocked: Number(row.promotion_locked ?? 0) === 1,
+    decayImmune: Number(row.decay_immune ?? 0) === 1,
+    accessCount: Number(row.access_count ?? 0),
+    feedbackScore: Number(row.feedback_score ?? 0),
   };
 }
