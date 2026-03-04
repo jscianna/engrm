@@ -5,16 +5,17 @@ const isProtectedRoute = createRouteMatcher(["/dashboard(.*)", "/api/memories(.*
 const isAdminRoute = createRouteMatcher(["/api/admin(.*)"]);
 
 // Block bot scanner paths (WordPress, PHP vulns, etc.)
-const BLOCKED_PATHS = [
+// Use startsWith to avoid false positives (e.g., UUID starting with "db")
+const BLOCKED_PATH_PREFIXES = [
   "/wp-admin", "/wp-login", "/wp-content", "/wp-includes", "/wp-config",
   "/wordpress", "/xmlrpc", "/phpmyadmin", "/administrator", 
-  "/.env", "/.git", "/config.php", "/backup", "/db", "/sql",
+  "/.env", "/.git", "/config.php", "/backup.zip", "/db.sql", "/sql/",
 ];
 
 function isBlockedPath(pathname: string): boolean {
   const lower = pathname.toLowerCase();
   if (lower.endsWith(".php")) return true;
-  return BLOCKED_PATHS.some(p => lower.includes(p));
+  return BLOCKED_PATH_PREFIXES.some(p => lower.startsWith(p));
 }
 
 export default clerkMiddleware(async (auth, request) => {
