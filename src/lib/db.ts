@@ -5,6 +5,7 @@ import type {
   MemoryEdgeRecord,
   MemoryGraphEdge,
   MemoryGraphNode,
+  MemoryImportanceTier,
   MemoryKind,
   MemoryListItem,
   MemoryRecord,
@@ -277,6 +278,7 @@ async function ensureMemoriesColumns(client: Client): Promise<void> {
     { name: "embedding_hash", ddl: "TEXT" },  // SHA256 hash of embedding for dedup
     { name: "content_mac", ddl: "TEXT" },  // HMAC-SHA256 for content integrity
     { name: "tags_json", ddl: "TEXT" },  // JSON array of user tags
+    { name: "importance_tier", ddl: "TEXT DEFAULT 'normal'" },  // critical/high/normal
   ];
 
   const tableInfo = await client.execute("PRAGMA table_info(memories)");
@@ -333,6 +335,7 @@ export type AgentMemoryRecord = {
   text: string;
   sourceType: MemorySourceType;
   memoryType: MemoryKind;
+  importanceTier: MemoryImportanceTier;
   sourceUrl: string | null;
   fileName: string | null;
   metadata: Record<string, unknown> | null;
@@ -359,6 +362,7 @@ function mapRow(row: Record<string, unknown>): MemoryRecord {
     sourceType: row.source_type as MemorySourceType,
     memoryType: (row.memory_type as MemoryKind) ?? "episodic",
     importance: (row.importance as number) ?? 5,
+    importanceTier: (row.importance_tier as MemoryImportanceTier) ?? "normal",
     tags: parseTags((row.tags_csv as string) ?? ""),
     sourceUrl: row.source_url as string | null,
     fileName: row.file_name as string | null,
@@ -417,7 +421,7 @@ export async function listMemoriesByUser(userId: string, limit = 100): Promise<M
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, source_url, file_name, content_hash, arweave_tx_id, created_at,
-             memory_type, importance, tags_csv, sync_status, sync_error, content_iv, content_encrypted,
+             memory_type, importance, importance_tier, tags_csv, sync_status, sync_error, content_iv, content_encrypted,
              (
                SELECT COUNT(*)
                FROM memory_edges e
@@ -446,6 +450,7 @@ export async function listMemoriesByUser(userId: string, limit = 100): Promise<M
     sourceType: row.source_type as MemorySourceType,
     memoryType: (row.memory_type as MemoryKind) ?? "episodic",
     importance: (row.importance as number) ?? 5,
+    importanceTier: (row.importance_tier as MemoryImportanceTier) ?? "normal",
     tags: parseTags((row.tags_csv as string) ?? ""),
     sourceUrl: row.source_url as string | null,
     fileName: row.file_name as string | null,
@@ -513,7 +518,7 @@ export async function getMemoriesByIds(userId: string, ids: string[]): Promise<M
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, source_url, file_name, content_hash, arweave_tx_id, created_at,
-             memory_type, importance, tags_csv, sync_status, sync_error, content_iv, content_encrypted,
+             memory_type, importance, importance_tier, tags_csv, sync_status, sync_error, content_iv, content_encrypted,
              (
                SELECT COUNT(*)
                FROM memory_edges e
@@ -540,6 +545,7 @@ export async function getMemoriesByIds(userId: string, ids: string[]): Promise<M
     sourceType: row.source_type as MemorySourceType,
     memoryType: (row.memory_type as MemoryKind) ?? "episodic",
     importance: (row.importance as number) ?? 5,
+    importanceTier: (row.importance_tier as MemoryImportanceTier) ?? "normal",
     tags: parseTags((row.tags_csv as string) ?? ""),
     sourceUrl: row.source_url as string | null,
     fileName: row.file_name as string | null,
@@ -827,6 +833,7 @@ function mapAgentMemoryRow(row: Record<string, unknown>): AgentMemoryRecord {
     text: decryptedText,
     sourceType: (row.source_type as MemorySourceType) ?? "text",
     memoryType: (row.memory_type as MemoryKind) ?? "episodic",
+    importanceTier: (row.importance_tier as MemoryImportanceTier) ?? "normal",
     sourceUrl: (row.source_url as string | null) ?? null,
     fileName: (row.file_name as string | null) ?? null,
     metadata: parseJsonObject(row.metadata_json),
@@ -1278,6 +1285,7 @@ export async function insertAgentMemory(params: {
   text: string;
   sourceType?: MemorySourceType;
   memoryType?: MemoryKind;
+  importanceTier?: MemoryImportanceTier;
   sourceUrl?: string | null;
   fileName?: string | null;
   entities?: string[];
@@ -1296,6 +1304,7 @@ export async function insertAgentMemory(params: {
   const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
   const sourceType = params.sourceType ?? "text";
   const memoryType = params.memoryType ?? "episodic";
+  const importanceTier = params.importanceTier ?? "normal";
   const entities = params.entities ?? [];
   const entitiesJson = JSON.stringify(entities);
   const contentHash = crypto.createHash("sha256").update(text, "utf8").digest("hex");
@@ -1311,10 +1320,10 @@ export async function insertAgentMemory(params: {
     await tx.execute({
       sql: `
         INSERT INTO memories (
-          id, user_id, title, source_type, memory_type, importance, tags_csv,
+          id, user_id, title, source_type, memory_type, importance, importance_tier, tags_csv,
           source_url, file_name, content_text, content_iv, content_encrypted, content_hash, arweave_tx_id,
           sync_status, sync_error, created_at, namespace_id, session_id, metadata_json, entities, entities_json
-        ) VALUES (?, ?, ?, ?, ?, 5, '', ?, ?, ?, NULL, ?, ?, NULL, 'pending', NULL, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, 5, ?, '', ?, ?, ?, NULL, ?, ?, NULL, 'pending', NULL, ?, ?, ?, ?, ?, ?)
       `,
       args: [
         id,
@@ -1322,6 +1331,7 @@ export async function insertAgentMemory(params: {
         title,
         sourceType,
         memoryType,
+        importanceTier,
         params.sourceUrl ?? null,
         params.fileName ?? null,
         storedText,
@@ -1350,6 +1360,7 @@ export async function insertAgentMemory(params: {
     text,
     sourceType,
     memoryType,
+    importanceTier,
     sourceUrl: params.sourceUrl ?? null,
     fileName: params.fileName ?? null,
     metadata: params.metadata ?? null,
@@ -1588,7 +1599,7 @@ export async function getAgentMemoriesByIds(params: {
 
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, metadata_json,
+      SELECT id, user_id, title, source_type, memory_type, importance_tier, source_url, file_name, content_text, metadata_json,
              namespace_id, session_id, entities, entities_json, feedback_score, access_count, created_at
       FROM memories
       WHERE user_id = ? AND id IN (${placeholders}) AND archived_at IS NULL
@@ -1598,6 +1609,28 @@ export async function getAgentMemoriesByIds(params: {
       ${params.excludeMemoryTypes?.length ? `AND memory_type NOT IN (${params.excludeMemoryTypes.map(() => "?").join(",")})` : ""}
     `,
     args,
+  });
+
+  return result.rows.map((row) => mapAgentMemoryRow(row as Record<string, unknown>));
+}
+
+/**
+ * Get all critical-tier memories for a user (always injected at session start)
+ */
+export async function getCriticalMemories(userId: string): Promise<AgentMemoryRecord[]> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, title, source_type, memory_type, importance_tier, source_url, file_name, 
+             content_text, metadata_json, namespace_id, session_id, entities, entities_json, 
+             feedback_score, access_count, created_at
+      FROM memories
+      WHERE user_id = ? AND importance_tier = 'critical' AND archived_at IS NULL
+      ORDER BY created_at DESC
+    `,
+    args: [userId],
   });
 
   return result.rows.map((row) => mapAgentMemoryRow(row as Record<string, unknown>));
@@ -2204,6 +2237,7 @@ export async function insertMemoryWithMetadata(params: {
     text,
     sourceType: "text",
     memoryType: (params.memoryType as MemoryKind) ?? "episodic",
+    importanceTier: "normal" as MemoryImportanceTier,
     sourceUrl: null,
     fileName: null,
     metadata: params.metadata ?? null,
@@ -2314,6 +2348,7 @@ export async function insertMemoryWithMetadataAndQuota(params: {
       text,
       sourceType: "text",
       memoryType: (params.memoryType as MemoryKind) ?? "episodic",
+      importanceTier: "normal" as MemoryImportanceTier,
       sourceUrl: null,
       fileName: null,
       metadata: params.metadata ?? null,

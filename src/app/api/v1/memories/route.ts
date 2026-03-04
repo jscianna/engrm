@@ -126,11 +126,18 @@ export async function POST(request: Request) {
       memoryType = classifyMemoryType(titleForStorage, contentText);
     }
 
+    // Allow explicit importance tier override (critical/high/normal)
+    const importanceTier = typeof body.importanceTier === "string" && 
+      ["critical", "high", "normal"].includes(body.importanceTier) 
+      ? body.importanceTier as "critical" | "high" | "normal"
+      : "normal";
+
     const memory = await insertAgentMemory({
       userId: identity.userId,
       title: titleForStorage,
       text: contentText,
       memoryType,
+      importanceTier,
       entities,
       metadata,
       namespaceId: resolved.namespaceId,

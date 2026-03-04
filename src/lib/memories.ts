@@ -185,6 +185,7 @@ async function persistToDb(params: {
     sourceType: params.sourceType,
     memoryType: params.memoryType,
     importance: params.importance,
+    importanceTier: "normal",
     tags: params.tags,
     sourceUrl: params.parsed.sourceUrl,
     fileName: params.parsed.fileName,

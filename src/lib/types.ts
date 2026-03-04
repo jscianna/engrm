@@ -19,6 +19,7 @@ export type MemoryKind =
   | "belief"
   | "decision";
 export type MemorySyncStatus = "pending" | "synced" | "failed";
+export type MemoryImportanceTier = "critical" | "high" | "normal";
 export type MemoryRelationshipType =
   | "similar"
   | "updates"
@@ -46,6 +47,7 @@ export type MemoryRecord = {
   sourceType: MemorySourceType;
   memoryType: MemoryKind;
   importance: number;
+  importanceTier: MemoryImportanceTier;
   tags: string[];
   sourceUrl: string | null;
   fileName: string | null;
