@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Link2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getMemoryTypeLabel } from "@/lib/memory-labels";
+import { getMemoryTypeLabel, getMemoryTypeColor } from "@/lib/memory-labels";
 import type { MemoryListItem } from "@/lib/types";
 
 export function MemoryCard({ memory }: { memory: MemoryListItem }) {
@@ -16,7 +16,14 @@ export function MemoryCard({ memory }: { memory: MemoryListItem }) {
             <Badge variant="outline" className="border-zinc-700 text-zinc-300">
               {memory.sourceType}
             </Badge>
-            <Badge variant="outline" className="border-cyan-800/70 text-cyan-200">
+            <Badge 
+              variant="outline" 
+              className="border-current"
+              style={{ 
+                color: getMemoryTypeColor(memory.memoryType),
+                borderColor: `${getMemoryTypeColor(memory.memoryType)}70`
+              }}
+            >
               {getMemoryTypeLabel(memory.memoryType)}
             </Badge>
             <Badge variant="outline" className="border-zinc-700 text-zinc-300">

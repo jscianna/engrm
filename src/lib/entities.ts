@@ -38,6 +38,53 @@ const STOP_WORDS = new Set([
   "Why",
   "You",
   "Your",
+  // Common generic words that don't make good entities
+  "Today",
+  "Tomorrow",
+  "Yesterday",
+  "Now",
+  "Here",
+  "Then",
+  "Also",
+  "Just",
+  "Very",
+  "Really",
+  "Actually",
+  "Maybe",
+  "Perhaps",
+  "Some",
+  "Many",
+  "Most",
+  "Other",
+  "New",
+  "Good",
+  "Great",
+  "Best",
+  "First",
+  "Last",
+  "Next",
+  "Should",
+  "Would",
+  "Could",
+  "Will",
+  "Can",
+  "May",
+  "Must",
+  "Need",
+  "Want",
+  "Think",
+  "Know",
+  "See",
+  "Get",
+  "Make",
+  "Take",
+  "Use",
+  "Try",
+  "Let",
+  "Help",
+  "Start",
+  "End",
+  "Time",
 ]);
 
 function normalizeEntity(value: string): string {
@@ -99,4 +146,40 @@ export function countEntityOverlap(queryEntities: string[], memoryEntities: stri
     }
   }
   return overlap;
+}
+
+/**
+ * Find shared entities between two sets of entities.
+ * Returns the list of entities that appear in both sets.
+ */
+export function findSharedEntities(entitiesA: string[], entitiesB: string[]): string[] {
+  if (entitiesA.length === 0 || entitiesB.length === 0) {
+    return [];
+  }
+
+  const setB = new Set(entitiesB.map(normalizeEntityKey));
+  const shared: string[] = [];
+  const seen = new Set<string>();
+
+  for (const entity of entitiesA) {
+    const key = normalizeEntityKey(entity);
+    if (setB.has(key) && !seen.has(key)) {
+      shared.push(entity);
+      seen.add(key);
+    }
+  }
+
+  return shared;
+}
+
+/**
+ * Check if two memories share enough entities to warrant linking.
+ * Returns true if they share at least minShared entities.
+ */
+export function shouldLinkByEntities(
+  entitiesA: string[],
+  entitiesB: string[],
+  minShared: number = 1
+): boolean {
+  return countEntityOverlap(entitiesA, entitiesB) >= minShared;
 }

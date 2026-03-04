@@ -9,6 +9,7 @@ import type { MemoryListItem, MemoryRelationshipType } from "@/lib/types";
 
 const RELATIONSHIP_TYPES: MemoryRelationshipType[] = [
   "similar",
+  "same_entity",
   "updates",
   "contradicts",
   "extends",

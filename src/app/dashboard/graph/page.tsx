@@ -9,6 +9,7 @@ import type { MemoryGraphEdge, MemoryGraphNode, MemoryRelationshipType } from "@
 
 const ALL_RELATIONSHIP_TYPES: MemoryRelationshipType[] = [
   "similar",
+  "same_entity",
   "updates",
   "contradicts",
   "extends",

@@ -16,20 +16,56 @@ type GraphLink = {
   weight: number;
 };
 
+// Node colors by memory type
 const MEMORY_TYPE_COLORS: Record<string, string> = {
-  episodic: "#67e8f9",
-  semantic: "#86efac",
-  procedural: "#f9a8d4",
-  "self-model": "#fca5a5",
+  // Core classification types
+  identity: "#a855f7",     // purple
+  preference: "#3b82f6",   // blue
+  belief: "#06b6d4",       // cyan
+  decision: "#f59e0b",     // amber
+  fact: "#22c55e",         // green
+  // Legacy/supporting types
+  episodic: "#22c55e",     // green (maps to fact/event)
+  semantic: "#22c55e",     // green (maps to fact)
+  procedural: "#3b82f6",   // blue (maps to preference)
+  "self-model": "#a855f7", // purple (maps to identity)
+  constraint: "#ef4444",   // red
+  relationship: "#a855f7", // purple
+  how_to: "#3b82f6",       // blue
+  event: "#22c55e",        // green
+  reflected: "#6b7280",    // gray
+  session_summary: "#6b7280", // gray
+  compacted: "#6b7280",    // gray
 };
 
+// Edge colors by relationship type
 const RELATION_COLORS: Record<MemoryRelationshipType, string> = {
-  similar: "#67e8f9",
-  updates: "#fbbf24",
-  contradicts: "#fb7185",
-  extends: "#34d399",
-  derives_from: "#818cf8",
-  references: "#a1a1aa",
+  similar: "#6b7280",      // gray
+  same_entity: "#e5e7eb",  // white
+  updates: "#eab308",      // gold
+  contradicts: "#ef4444",  // red
+  extends: "#22c55e",      // green
+  derives_from: "#818cf8", // indigo
+  references: "#a1a1aa",   // gray
+};
+
+// Labels for the legend
+const MEMORY_TYPE_LABELS: Record<string, string> = {
+  identity: "Identity",
+  preference: "Preference",
+  belief: "Belief",
+  decision: "Decision",
+  fact: "Fact",
+};
+
+const RELATION_LABELS: Record<MemoryRelationshipType, string> = {
+  similar: "Similar",
+  same_entity: "Same Entity",
+  updates: "Updates",
+  contradicts: "Contradicts",
+  extends: "Extends",
+  derives_from: "Derives From",
+  references: "References",
 };
 
 function nodeRadius(node: MemoryGraphNode): number {
@@ -94,11 +130,11 @@ function MemoryDetailCard({
               <span
                 className="rounded-full px-2 py-0.5 text-xs font-medium"
                 style={{
-                  backgroundColor: MEMORY_TYPE_COLORS[memory.memoryType] + "20",
-                  color: MEMORY_TYPE_COLORS[memory.memoryType],
+                  backgroundColor: (MEMORY_TYPE_COLORS[memory.memoryType] ?? "#6b7280") + "20",
+                  color: MEMORY_TYPE_COLORS[memory.memoryType] ?? "#6b7280",
                 }}
               >
-                {memory.memoryType}
+                {MEMORY_TYPE_LABELS[memory.memoryType] ?? memory.memoryType}
               </span>
               <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">
                 importance: {memory.importance}
@@ -296,7 +332,36 @@ export function MemoryGraph({
   const nodeById = new Map(positions.map((node) => [node.id, node]));
 
   return (
-    <div ref={wrapperRef} className="space-y-2">
+    <div ref={wrapperRef} className="space-y-3">
+      {/* Legend */}
+      <div className="flex flex-wrap items-center gap-6 rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3">
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-medium text-zinc-400">Nodes:</span>
+          {Object.entries(MEMORY_TYPE_LABELS).map(([type, label]) => (
+            <div key={type} className="flex items-center gap-1.5">
+              <div
+                className="h-3 w-3 rounded-full"
+                style={{ backgroundColor: MEMORY_TYPE_COLORS[type] }}
+              />
+              <span className="text-xs text-zinc-300">{label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="h-4 w-px bg-zinc-700" />
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-medium text-zinc-400">Edges:</span>
+          {(["similar", "same_entity", "updates", "contradicts", "extends"] as const).map((type) => (
+            <div key={type} className="flex items-center gap-1.5">
+              <div
+                className="h-0.5 w-4 rounded"
+                style={{ backgroundColor: RELATION_COLORS[type] }}
+              />
+              <span className="text-xs text-zinc-300">{RELATION_LABELS[type]}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="relative h-[620px] w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
         {selectedNodeId && (
           <MemoryDetailCard

@@ -1,10 +1,18 @@
 import { embedText } from "@/lib/embeddings";
 import { extractEntities } from "@/lib/entities";
+import { classifyMemoryType } from "@/lib/memory-classification";
 import { upsertMemoryVector } from "@/lib/qdrant";
-import { getSessionById, insertAgentMemory, listAgentMemories } from "@/lib/db";
+import { 
+  createMemoryEdge,
+  findMemoriesWithSharedEntities,
+  getSessionById, 
+  insertAgentMemory, 
+  listAgentMemories 
+} from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject, normalizeIsoTimestamp, normalizeLimit, resolveNamespaceIdOrError } from "@/lib/api-v1";
+import type { MemoryKind } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -97,22 +105,32 @@ export async function POST(request: Request) {
       return Response.json({ memory }, { status: 201 });
     }
 
-    // Plaintext path: extract entities, embed, store
+    // Plaintext path: extract entities, classify type, embed, store
     const contentText = plaintextContent as string;
     const titleForStorage = typeof body.title === "string" ? body.title : contentText.slice(0, 60);
     
     // Extract entities from content
     let entities: string[] = [];
     try {
-      entities = await extractEntities(contentText);
+      entities = extractEntities(contentText);
     } catch {
       // Entity extraction is best-effort, don't fail the request
+    }
+
+    // Classify memory type based on title and content
+    // Allow explicit override via body.memoryType
+    let memoryType: MemoryKind;
+    if (typeof body.memoryType === "string" && body.memoryType) {
+      memoryType = body.memoryType as MemoryKind;
+    } else {
+      memoryType = classifyMemoryType(titleForStorage, contentText);
     }
 
     const memory = await insertAgentMemory({
       userId: identity.userId,
       title: titleForStorage,
       text: contentText,
+      memoryType,
       entities,
       metadata,
       namespaceId: resolved.namespaceId,
@@ -134,6 +152,34 @@ export async function POST(request: Request) {
       });
     } catch {
       // Embedding is best-effort, memory is still stored
+    }
+
+    // Auto-link memories that share entities (same_entity relationship)
+    if (entities.length > 0) {
+      try {
+        const sharedMemories = await findMemoriesWithSharedEntities(
+          identity.userId,
+          entities,
+          memory.id,
+          10 // Link to up to 10 related memories
+        );
+
+        for (const related of sharedMemories) {
+          await createMemoryEdge({
+            userId: identity.userId,
+            sourceId: memory.id,
+            targetId: related.id,
+            relationshipType: "same_entity",
+            weight: Math.min(entities.filter(e => 
+              related.entities.some(re => 
+                re.toLowerCase() === e.toLowerCase()
+              )
+            ).length * 0.5, 3), // Weight based on # of shared entities, max 3
+          });
+        }
+      } catch {
+        // Entity linking is best-effort, don't fail the request
+      }
     }
 
     return Response.json({ memory }, { status: 201 });

@@ -1471,6 +1471,73 @@ export async function listSessionMemories(userId: string, sessionId: string): Pr
   return result.rows.map((row) => mapAgentMemoryRow(row as Record<string, unknown>));
 }
 
+/**
+ * Find memories that have overlapping entities with the given entity list.
+ * Used for auto-linking memories based on shared entities.
+ * Returns up to `limit` memories (excluding the given memoryId).
+ */
+export async function findMemoriesWithSharedEntities(
+  userId: string,
+  entities: string[],
+  excludeMemoryId?: string,
+  limit: number = 20
+): Promise<Array<{ id: string; entities: string[] }>> {
+  if (entities.length === 0) {
+    return [];
+  }
+
+  await ensureInitialized();
+  const client = getDb();
+
+  // Query recent memories that have entities
+  const result = await client.execute({
+    sql: `
+      SELECT id, entities, entities_json
+      FROM memories
+      WHERE user_id = ?
+        AND archived_at IS NULL
+        ${excludeMemoryId ? "AND id != ?" : ""}
+        AND (entities IS NOT NULL OR entities_json IS NOT NULL)
+      ORDER BY created_at DESC
+      LIMIT ?
+    `,
+    args: excludeMemoryId 
+      ? [userId, excludeMemoryId, Math.min(limit * 5, 100)] 
+      : [userId, Math.min(limit * 5, 100)],
+  });
+
+  // Filter for memories with actual entity overlap
+  const normalizedInputEntities = new Set(
+    entities.map(e => e.trim().toLowerCase())
+  );
+
+  const matches: Array<{ id: string; entities: string[] }> = [];
+
+  for (const row of result.rows) {
+    const memoryEntities = parseJsonStringArray(
+      (row.entities as string | null) ?? (row.entities_json as string | null)
+    );
+
+    if (memoryEntities.length === 0) continue;
+
+    // Check for overlap
+    const hasOverlap = memoryEntities.some(e => 
+      normalizedInputEntities.has(e.trim().toLowerCase())
+    );
+
+    if (hasOverlap) {
+      matches.push({
+        id: row.id as string,
+        entities: memoryEntities,
+      });
+
+      if (matches.length >= limit) break;
+    }
+  }
+
+  return matches;
+}
+
 export async function getAgentMemoryById(userId: string, id: string): Promise<AgentMemoryRecord | null> {
   await ensureInitialized();
   const client = getDb();

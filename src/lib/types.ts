@@ -14,7 +14,10 @@ export type MemoryKind =
   | "preference"
   | "how_to"
   | "fact"
-  | "event";
+  | "event"
+  // New types for enhanced classification
+  | "belief"
+  | "decision";
 export type MemorySyncStatus = "pending" | "synced" | "failed";
 export type MemoryRelationshipType =
   | "similar"
@@ -22,7 +25,8 @@ export type MemoryRelationshipType =
   | "contradicts"
   | "extends"
   | "derives_from"
-  | "references";
+  | "references"
+  | "same_entity";
 
 export type MemoryEdgeRecord = {
   id: string;

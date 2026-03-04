@@ -7,6 +7,7 @@ export const runtime = "nodejs";
 
 const ALLOWED_RELATIONSHIP_TYPES: MemoryRelationshipType[] = [
   "similar",
+  "same_entity",
   "updates",
   "contradicts",
   "extends",
