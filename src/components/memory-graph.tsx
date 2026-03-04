@@ -347,6 +347,19 @@ export function MemoryGraph({
             </div>
           ))}
         </div>
+        <div className="h-4 w-px bg-zinc-700" />
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-medium text-zinc-400">Edges:</span>
+          {(["similar", "same_entity", "updates", "contradicts", "extends"] as const).map((type) => (
+            <div key={type} className="flex items-center gap-1.5">
+              <div
+                className="h-0.5 w-4 rounded"
+                style={{ backgroundColor: RELATION_COLORS[type] }}
+              />
+              <span className="text-xs text-zinc-300">{RELATION_LABELS[type]}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="relative h-[620px] w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
