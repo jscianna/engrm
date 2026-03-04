@@ -1605,6 +1605,7 @@ export async function getAgentMemoriesByIds(params: {
 
   // When namespace is specified, include both namespace-scoped AND global (null namespace) memories
   // This follows the spec: "Search defaults to current namespace + global"
+  // Note: We only add one placeholder, the arg was already pushed above
   const namespaceClause = hasNamespaceFilter
     ? (params.namespaceId ? "AND (namespace_id = ? OR namespace_id IS NULL)" : "AND namespace_id IS NULL")
     : "";
