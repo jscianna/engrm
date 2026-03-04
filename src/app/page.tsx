@@ -80,15 +80,14 @@ export default function Home() {
         <div className="mx-auto max-w-6xl">
           <div className="text-center space-y-6 max-w-3xl mx-auto">
             <Badge className="border-cyan-500/30 bg-cyan-500/10 text-cyan-300">
-              Memory for AI Agents
+              Persistent Intelligence
             </Badge>
             <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
-              Your AI finally<br />
-              <span className="text-cyan-400">remembers you.</span>
+              The cognitive<br />
+              <span className="text-cyan-400">layer.</span>
             </h1>
             <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
-              Every conversation starts fresh. Your AI forgets your name, your preferences, 
-              everything you've ever told it. Engrm fixes that.
+              Memory infrastructure for AI agents. Every conversation builds on the last.
             </p>
             <div className="flex flex-wrap gap-4 justify-center pt-4">
               {hasClerk ? (
