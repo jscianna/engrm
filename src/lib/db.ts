@@ -1,7 +1,4 @@
-/**
- * Edge-compatible database operations
- * No node:crypto - uses Web Crypto API + Turso infra encryption
- */
+import crypto from "node:crypto";
 import type { Client } from "@libsql/client";
 import type {
   MemoryDashboardStats,
@@ -22,68 +19,88 @@ import {
   reserveMemoryQuotaInTransaction,
 } from "@/lib/rate-limiter";
 
-// =============================================================================
-// Edge-compatible crypto helpers
-// =============================================================================
+const ENCRYPTION_ALGORITHM = "aes-256-gcm";
 
-function edgeRandomUUID(): string {
-  return globalThis.crypto.randomUUID();
-}
-
-function edgeRandomBytes(length: number): Uint8Array {
-  const bytes = new Uint8Array(length);
-  globalThis.crypto.getRandomValues(bytes);
-  return bytes;
-}
-
-function edgeRandomHex(length: number): string {
-  const bytes = edgeRandomBytes(length);
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-/**
- * Simple hash for content deduplication (not cryptographic security)
- * Uses djb2 algorithm - fast and good distribution
- */
-function simpleHash(str: string): string {
-  let hash = 5381;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) + hash) ^ str.charCodeAt(i);
+function getMasterKey(): Buffer {
+  const raw = process.env.ENCRYPTION_KEY;
+  if (!raw) {
+    throw new Error("ENCRYPTION_KEY is required to encrypt and decrypt stored data.");
   }
-  return (hash >>> 0).toString(16).padStart(8, "0");
-}
 
-/**
- * Content hash for deduplication - uses multiple simple hashes for collision resistance
- */
-function contentHash(text: string): string {
-  const h1 = simpleHash(text);
-  const h2 = simpleHash(text.split("").reverse().join(""));
-  const h3 = simpleHash(text + text.length.toString());
-  return `${h1}${h2}${h3}`.slice(0, 32);
-}
-
-/**
- * No-op encryption - Turso handles encryption at rest
- * New data stored as plaintext, Turso encrypts at infrastructure level
- */
-function encryptMemoryContent(plaintext: string, _userId: string): string {
-  return plaintext;
-}
-
-/**
- * Decrypt memory content - handles both legacy encrypted and new plaintext
- */
-function decryptMemoryContent(storedContent: string, _userId: string): string {
-  // Try to detect if this is old encrypted format (JSON with ciphertext/iv)
-  if (storedContent.startsWith("{") && storedContent.includes('"ciphertext"')) {
-    // Legacy encrypted data - return as-is, will need migration
-    // For now, just return a placeholder
-    console.warn("[DB] Found legacy encrypted content, needs migration");
-    return "[encrypted - needs migration]";
+  const trimmed = raw.trim();
+  if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+    return Buffer.from(trimmed, "hex");
   }
-  // New plaintext format
-  return storedContent;
+
+  try {
+    const maybeBase64 = Buffer.from(trimmed, "base64");
+    if (maybeBase64.length === 32) {
+      return maybeBase64;
+    }
+  } catch {
+    // no-op
+  }
+
+  return crypto.createHash("sha256").update(trimmed, "utf8").digest();
+}
+
+/**
+ * Derive a per-user encryption key from master key + userId.
+ * This ensures each user's data is encrypted with a unique key.
+ */
+function deriveUserKey(userId: string): Buffer {
+  const master = getMasterKey();
+  return crypto.createHash("sha256").update(Buffer.concat([master, Buffer.from(userId, "utf8")])).digest();
+}
+
+/**
+ * Encrypt memory content for at-rest storage.
+ * Returns the encrypted content as a JSON string containing ciphertext and iv.
+ */
+function encryptMemoryContent(plaintext: string, userId: string): string {
+  const key = deriveUserKey(userId);
+  const encrypted = encryptAesGcm(Buffer.from(plaintext, "utf8"), key);
+  return JSON.stringify(encrypted);
+}
+
+/**
+ * Decrypt memory content from at-rest storage.
+ * Expects the encrypted content as a JSON string containing ciphertext and iv.
+ */
+function decryptMemoryContent(encryptedJson: string, userId: string): string {
+  try {
+    const payload = JSON.parse(encryptedJson) as { ciphertext: string; iv: string };
+    const key = deriveUserKey(userId);
+    return decryptAesGcm(payload, key).toString("utf8");
+  } catch {
+    // If decryption fails, content might be plaintext (legacy) - return as-is
+    return encryptedJson;
+  }
+}
+
+function encryptAesGcm(plaintext: Buffer, key: Buffer): { ciphertext: string; iv: string } {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, key, iv);
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return {
+    ciphertext: `${ciphertext.toString("base64")}.${authTag.toString("base64")}`,
+    iv: iv.toString("base64"),
+  };
+}
+
+function decryptAesGcm(payload: { ciphertext: string; iv: string }, key: Buffer): Buffer {
+  const [ciphertextB64, authTagB64] = payload.ciphertext.split(".");
+  if (!ciphertextB64 || !authTagB64) {
+    throw new Error("Encrypted payload format is invalid.");
+  }
+  const decipher = crypto.createDecipheriv(
+    ENCRYPTION_ALGORITHM,
+    key,
+    Buffer.from(payload.iv, "base64"),
+  );
+  decipher.setAuthTag(Buffer.from(authTagB64, "base64"));
+  return Buffer.concat([decipher.update(Buffer.from(ciphertextB64, "base64")), decipher.final()]);
 }
 
 let initialized = false;
@@ -542,7 +559,7 @@ export async function createMemoryEdge(input: CreateMemoryEdgeInput): Promise<Me
   await ensureInitialized();
   const client = getDb();
   const now = new Date().toISOString();
-  const id = `edge_${edgeRandomUUID().replaceAll("-", "")}`;
+  const id = `edge_${crypto.randomUUID().replaceAll("-", "")}`;
   const weight = Number.isFinite(input.weight) ? Number(input.weight) : 1;
   const metadataJson = input.metadata ? JSON.stringify(input.metadata) : null;
 
@@ -733,7 +750,7 @@ export async function updateMemorySyncFailure(memoryId: string, userId: string, 
 }
 
 function hashApiKey(key: string): string {
-  return contentHash(key);
+  return crypto.createHash("sha256").update(key, "utf8").digest("hex");
 }
 
 function parseJsonObject(input: unknown): Record<string, unknown> | null {
@@ -825,9 +842,9 @@ function mapAgentMemoryRow(row: Record<string, unknown>): AgentMemoryRecord {
 export async function createApiKey(userId: string, agentName?: string): Promise<{ apiKey: string; agentId: string }> {
   await ensureInitialized();
   const client = getDb();
-  const id = edgeRandomUUID();
-  const agentId = `agent_${edgeRandomUUID().replaceAll("-", "")}`;
-  const token = edgeRandomHex(24);
+  const id = crypto.randomUUID();
+  const agentId = `agent_${crypto.randomUUID().replaceAll("-", "")}`;
+  const token = crypto.randomBytes(24).toString("hex");
   const apiKey = `mem_${token}`;
   const keyHash = hashApiKey(apiKey);
   const keySuffix = apiKey.slice(-3); // Store last 3 chars for identification
@@ -1064,7 +1081,7 @@ export async function createNamespace(userId: string, name: string): Promise<Nam
   if (!cleaned) {
     throw new Error("Namespace name is required.");
   }
-  const id = `ns_${edgeRandomUUID().replaceAll("-", "")}`;
+  const id = `ns_${crypto.randomUUID().replaceAll("-", "")}`;
 
   await client.execute({
     sql: `
@@ -1168,7 +1185,7 @@ export async function createSession(params: {
 }): Promise<SessionRecord> {
   await ensureInitialized();
   const client = getDb();
-  const id = `sess_${edgeRandomUUID().replaceAll("-", "")}`;
+  const id = `sess_${crypto.randomUUID().replaceAll("-", "")}`;
   const now = new Date().toISOString();
   const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
 
@@ -1272,7 +1289,7 @@ export async function insertAgentMemory(params: {
   await ensureInitialized();
   await ensureRateLimiterInitialized();
   const client = getDb();
-  const id = edgeRandomUUID();
+  const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const text = params.text.trim();
   const title = (params.title?.trim() || text.slice(0, 80) || "Untitled Memory").trim();
@@ -1281,7 +1298,7 @@ export async function insertAgentMemory(params: {
   const memoryType = params.memoryType ?? "episodic";
   const entities = params.entities ?? [];
   const entitiesJson = JSON.stringify(entities);
-  const textHash = contentHash(text);
+  const contentHash = crypto.createHash("sha256").update(text, "utf8").digest("hex");
   const sizeBytes = Buffer.byteLength(text, "utf8");
 
   // Encrypt content at rest unless the payload is already encrypted.
@@ -1309,7 +1326,7 @@ export async function insertAgentMemory(params: {
         params.fileName ?? null,
         storedText,
         params.isEncrypted ? 1 : 0,
-        textHash,
+        contentHash,
         now,
         params.namespaceId ?? null,
         params.sessionId ?? null,
@@ -1938,9 +1955,10 @@ export async function updateAgentMemory(
     setClauses.push("content_text = ?");
     args.push(updates.text);
     // Update content hash when text changes
-    const textHash = contentHash(updates.text);
+    const crypto = await import("crypto");
+    const contentHash = crypto.createHash("sha256").update(updates.text).digest("hex");
     setClauses.push("content_hash = ?");
-    args.push(textHash);
+    args.push(contentHash);
   }
 
   if (setClauses.length === 0) {
@@ -2113,7 +2131,7 @@ export async function deleteArchivedMemories(userId: string, olderThanDays: numb
 function hashEmbedding(vector: number[]): string {
   const quantized = vector.map(v => Math.round(v * 10000) / 10000);
   const data = JSON.stringify(quantized);
-  return contentHash(data).slice(0, 32);
+  return crypto.createHash("sha256").update(data).digest("hex").slice(0, 32);
 }
 
 export async function insertMemoryWithMetadata(params: {
@@ -2132,12 +2150,12 @@ export async function insertMemoryWithMetadata(params: {
 }): Promise<AgentMemoryRecord> {
   await ensureInitialized();
   const client = getDb();
-  const id = edgeRandomUUID();
+  const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const text = params.text.trim();
   const title = (params.title?.trim() || text.slice(0, 80) || "Untitled Memory").trim();
   const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
-  const textHash = contentHash(text);
+  const contentHash = crypto.createHash("sha256").update(text, "utf8").digest("hex");
   const embeddingJson = params.embedding ? JSON.stringify(params.embedding) : null;
   const embeddingHashValue = params.embedding ? hashEmbedding(params.embedding) : null;
   const entities = params.entities ?? [];
@@ -2162,7 +2180,7 @@ export async function insertMemoryWithMetadata(params: {
       params.memoryType ?? 'episodic',
       params.importance ?? 5,
       text,
-      textHash,
+      contentHash,
       now,
       params.namespaceId ?? null,
       params.sessionId ?? null,
@@ -2220,12 +2238,12 @@ export async function insertMemoryWithMetadataAndQuota(params: {
   await ensureRateLimiterInitialized();
 
   const client = getDb();
-  const id = edgeRandomUUID();
+  const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const text = params.text.trim();
   const title = (params.title?.trim() || text.slice(0, 80) || "Untitled Memory").trim();
   const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
-  const textHash = contentHash(text);
+  const contentHash = crypto.createHash("sha256").update(text, "utf8").digest("hex");
   const embeddingJson = params.embedding ? JSON.stringify(params.embedding) : null;
   const embeddingHashValue = params.embedding ? hashEmbedding(params.embedding) : null;
   const entities = params.entities ?? [];
@@ -2254,7 +2272,7 @@ export async function insertMemoryWithMetadataAndQuota(params: {
         params.memoryType ?? "episodic",
         params.importance ?? 5,
         text,
-        textHash,
+        contentHash,
         now,
         params.namespaceId ?? null,
         params.sessionId ?? null,
