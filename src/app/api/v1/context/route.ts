@@ -3,19 +3,44 @@
  * 
  * Returns tiered memories for session start:
  * - All 'critical' memories (core principles, always injected)
+ * - 'working' tier: synthetic summaries of related high memories (when synthesize=true)
  * - Top N 'high' memories matching the query (if relevant)
+ * 
+ * Tier hierarchy: critical > working > high > normal
  * 
  * Usage: Call once at session start with first user message
  */
 
 import { embedText } from "@/lib/embeddings";
 import { semanticSearchVectors } from "@/lib/qdrant";
-import { getCriticalMemories, getAgentMemoriesByIds } from "@/lib/db";
+import { getCriticalMemories, getAgentMemoriesByIds, getHighTierMemories } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
+import { countEntityOverlap } from "@/lib/entities";
 
 export const runtime = "nodejs";
+
+// Minimum number of high memories to trigger synthesis
+const SYNTHESIS_THRESHOLD = 5;
+
+type FormattedMemory = {
+  id: string;
+  title: string;
+  text: string;
+  type: string;
+  tier: string;
+  createdAt: string;
+  synthesizedFrom?: string[];
+};
+
+type SynthesizedMemory = {
+  id: string;
+  title: string;
+  text: string;
+  synthesizedFrom: string[];
+  tier: "working";
+};
 
 export async function POST(request: Request) {
   try {
@@ -29,6 +54,7 @@ export async function POST(request: Request) {
     const message = typeof body.message === "string" ? body.message.trim() : "";
     const includeHigh = body.includeHigh !== false; // default true
     const highLimit = typeof body.highLimit === "number" ? Math.min(body.highLimit, 10) : 5;
+    const synthesize = body.synthesize === true; // default false
 
     // 1. Always get critical memories
     const criticalMemories = await getCriticalMemories(identity.userId);
@@ -60,16 +86,42 @@ export async function POST(request: Request) {
 
     // 3. Deduplicate (in case a critical memory also matched)
     const criticalIds = new Set(criticalMemories.map((m) => m.id));
-    const dedupedHigh = highMemories.filter((m) => !criticalIds.has(m.id));
+    let dedupedHigh = highMemories.filter((m) => !criticalIds.has(m.id));
 
-    // 4. Format response
+    // 4. Handle synthesis of high memories into working tier
+    let workingMemories: SynthesizedMemory[] = [];
+    
+    if (synthesize && dedupedHigh.length >= SYNTHESIS_THRESHOLD) {
+      // Get all high-tier memories for grouping
+      const allHighMemories = await getHighTierMemories(identity.userId);
+      const filteredHigh = allHighMemories.filter((m) => !criticalIds.has(m.id));
+      
+      if (filteredHigh.length >= SYNTHESIS_THRESHOLD) {
+        // Group related memories by entity overlap
+        const groups = groupMemoriesByEntityOverlap(filteredHigh);
+        
+        // Synthesize each group into a working-tier summary
+        workingMemories = groups.map((group, index) => synthesizeGroup(group, index));
+        
+        // Clear high memories since they're now synthesized
+        dedupedHigh = [];
+      }
+    }
+
+    // 5. Format response
     const response = {
       critical: criticalMemories.map(formatMemory),
+      working: workingMemories.map(formatSynthesizedMemory),
       high: dedupedHigh.map(formatMemory),
       stats: {
         criticalCount: criticalMemories.length,
+        workingCount: workingMemories.length,
         highCount: dedupedHigh.length,
-        totalTokensEstimate: estimateTokens(criticalMemories) + estimateTokens(dedupedHigh),
+        synthesized: workingMemories.length > 0,
+        totalTokensEstimate: 
+          estimateTokens(criticalMemories) + 
+          estimateTokensFromSynthesized(workingMemories) +
+          estimateTokens(dedupedHigh),
       },
     };
 
@@ -79,7 +131,7 @@ export async function POST(request: Request) {
   }
 }
 
-function formatMemory(memory: { id: string; title: string; text: string; memoryType: string; importanceTier?: string; createdAt: string }) {
+function formatMemory(memory: { id: string; title: string; text: string; memoryType: string; importanceTier?: string; createdAt: string }): FormattedMemory {
   return {
     id: memory.id,
     title: memory.title,
@@ -90,7 +142,90 @@ function formatMemory(memory: { id: string; title: string; text: string; memoryT
   };
 }
 
+function formatSynthesizedMemory(memory: SynthesizedMemory): FormattedMemory {
+  return {
+    id: memory.id,
+    title: memory.title,
+    text: memory.text,
+    type: "synthesized",
+    tier: memory.tier,
+    createdAt: new Date().toISOString(),
+    synthesizedFrom: memory.synthesizedFrom,
+  };
+}
+
 function estimateTokens(memories: { text: string }[]): number {
   // Rough estimate: 4 chars per token
   return Math.ceil(memories.reduce((sum, m) => sum + m.text.length, 0) / 4);
+}
+
+function estimateTokensFromSynthesized(memories: SynthesizedMemory[]): number {
+  return Math.ceil(memories.reduce((sum, m) => sum + m.text.length, 0) / 4);
+}
+
+/**
+ * Group memories by entity overlap.
+ * Memories sharing entities are grouped together.
+ */
+function groupMemoriesByEntityOverlap(
+  memories: Array<{ id: string; title: string; text: string; entities: string[] }>
+): Array<Array<typeof memories[number]>> {
+  if (memories.length === 0) return [];
+
+  const groups: Array<Array<typeof memories[number]>> = [];
+  const assigned = new Set<string>();
+
+  for (const memory of memories) {
+    if (assigned.has(memory.id)) continue;
+
+    // Start a new group with this memory
+    const group = [memory];
+    assigned.add(memory.id);
+
+    // Find other memories with overlapping entities
+    for (const other of memories) {
+      if (assigned.has(other.id)) continue;
+      
+      // Check entity overlap with any memory already in the group
+      const hasOverlap = group.some(
+        (m) => countEntityOverlap(m.entities, other.entities) >= 1
+      );
+      
+      if (hasOverlap) {
+        group.push(other);
+        assigned.add(other.id);
+      }
+    }
+
+    groups.push(group);
+  }
+
+  return groups;
+}
+
+/**
+ * Synthesize a group of memories into a single working-tier summary.
+ * Uses simple concatenation with truncation (no LLM needed).
+ */
+function synthesizeGroup(
+  memories: Array<{ id: string; title: string; text: string }>,
+  groupIndex: number
+): SynthesizedMemory {
+  // Combine titles (truncated)
+  const titles = memories.map((m) => m.title).join(", ");
+  const truncatedTitles = titles.length > 60 ? titles.slice(0, 57) + "..." : titles;
+  
+  // Combine text snippets with separator
+  const combinedText = memories
+    .map((m) => m.text.slice(0, 200))
+    .join(" | ");
+  const truncatedText = combinedText.length > 500 ? combinedText.slice(0, 497) + "..." : combinedText;
+
+  return {
+    id: `synth_${groupIndex}_${Date.now()}`,
+    title: `Summary: ${truncatedTitles}`,
+    text: truncatedText,
+    synthesizedFrom: memories.map((m) => m.id),
+    tier: "working",
+  };
 }

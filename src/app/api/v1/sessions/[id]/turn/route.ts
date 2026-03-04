@@ -1,0 +1,146 @@
+/**
+ * Session Turn Endpoint
+ * 
+ * Record a turn in an ongoing session.
+ * Returns whether context refresh is needed and tracks memory usage.
+ */
+
+import { embedText } from "@/lib/embeddings";
+import { semanticSearchVectors } from "@/lib/qdrant";
+import { 
+  recordSessionTurn, 
+  getExtendedSessionById,
+  getCriticalMemories,
+  getAgentMemoriesByIds,
+  incrementAccessCounts,
+} from "@/lib/db";
+import { validateApiKey } from "@/lib/api-auth";
+import { MemryError, errorResponse } from "@/lib/errors";
+import { isObject } from "@/lib/api-v1";
+
+export const runtime = "nodejs";
+
+type Props = {
+  params: Promise<{ id: string }>;
+};
+
+export async function POST(request: Request, props: Props) {
+  try {
+    const identity = await validateApiKey(request, "sessions.turn");
+    const { id: sessionId } = await props.params;
+    const body = (await request.json().catch(() => null)) as unknown;
+
+    if (!isObject(body)) {
+      throw new MemryError("VALIDATION_ERROR", { field: "body", reason: "Invalid request body" });
+    }
+
+    // Validate session exists
+    const session = await getExtendedSessionById(identity.userId, sessionId);
+    if (!session) {
+      throw new MemryError("SESSION_NOT_FOUND");
+    }
+
+    if (session.endedAt) {
+      throw new MemryError("VALIDATION_ERROR", { 
+        field: "sessionId", 
+        reason: "Session has already ended" 
+      });
+    }
+
+    // Parse messages
+    const messages = Array.isArray(body.messages) ? body.messages : [];
+    if (messages.length === 0) {
+      throw new MemryError("VALIDATION_ERROR", { field: "messages", reason: "required" });
+    }
+
+    const turnNumber = typeof body.turnNumber === "number" 
+      ? body.turnNumber 
+      : session.turnCount + 1;
+
+    // Track which memories are being used this turn
+    const memoriesUsed = Array.isArray(body.memoriesUsed) 
+      ? body.memoriesUsed.filter((id): id is string => typeof id === "string")
+      : [];
+
+    // Record the turn
+    await recordSessionTurn({
+      userId: identity.userId,
+      sessionId,
+      turnNumber,
+      messages,
+      memoriesUsed,
+    });
+
+    // Increment access counts for used memories
+    if (memoriesUsed.length > 0) {
+      await incrementAccessCounts(identity.userId, memoriesUsed);
+    }
+
+    // Determine if refresh is needed (every 5 turns or topic drift)
+    const refreshNeeded = turnNumber % 5 === 0;
+
+    // Get new context if refresh needed
+    let newContext = null;
+    if (refreshNeeded) {
+      // Get most recent user message for context search
+      const userMessages = messages.filter(
+        (m: { role: string; content: string }) => m.role === "user"
+      );
+      const lastUserMessage = userMessages[userMessages.length - 1]?.content ?? "";
+
+      if (lastUserMessage) {
+        try {
+          const criticalMemories = await getCriticalMemories(identity.userId);
+          const vector = await embedText(lastUserMessage);
+          const hits = await semanticSearchVectors({
+            userId: identity.userId,
+            query: lastUserMessage,
+            vector,
+            topK: 10,
+          });
+
+          const relevantMemories = hits.length > 0 
+            ? await getAgentMemoriesByIds({
+                userId: identity.userId,
+                ids: hits.map((h) => h.item.id),
+                namespaceId: session.namespaceId,
+              })
+            : [];
+
+          const highMemories = relevantMemories.filter(
+            (m) => m.importanceTier === "high" || m.importanceTier === "critical"
+          );
+
+          const criticalIds = new Set(criticalMemories.map((m) => m.id));
+          const dedupedHigh = highMemories.filter((m) => !criticalIds.has(m.id)).slice(0, 5);
+
+          newContext = {
+            critical: criticalMemories.map((m) => ({
+              id: m.id,
+              title: m.title,
+              text: m.text,
+              type: m.memoryType,
+            })),
+            high: dedupedHigh.map((m) => ({
+              id: m.id,
+              title: m.title,
+              text: m.text,
+              type: m.memoryType,
+            })),
+          };
+        } catch {
+          // Refresh failed, continue without new context
+        }
+      }
+    }
+
+    return Response.json({
+      turnNumber,
+      refreshNeeded,
+      ...(newContext ? { newContext } : {}),
+      memoriesUsed,
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}

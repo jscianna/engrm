@@ -19,7 +19,7 @@ export type MemoryKind =
   | "belief"
   | "decision";
 export type MemorySyncStatus = "pending" | "synced" | "failed";
-export type MemoryImportanceTier = "critical" | "high" | "normal";
+export type MemoryImportanceTier = "critical" | "working" | "high" | "normal";
 export type MemoryRelationshipType =
   | "similar"
   | "updates"
@@ -62,6 +62,11 @@ export type MemoryRecord = {
   entities?: string[];
   feedbackScore?: number;
   accessCount?: number;
+  promotionLocked?: boolean;
+  /** Lock memory at a specific tier - prevents both promotion past and demotion below this tier */
+  lockedTier?: MemoryImportanceTier | null;
+  /** If true, memory is immune to automatic decay */
+  decayImmune?: boolean;
   createdAt: string;
   relationshipCount?: number;
   supersededByCount?: number;

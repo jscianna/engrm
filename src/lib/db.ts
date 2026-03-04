@@ -278,7 +278,10 @@ async function ensureMemoriesColumns(client: Client): Promise<void> {
     { name: "embedding_hash", ddl: "TEXT" },  // SHA256 hash of embedding for dedup
     { name: "content_mac", ddl: "TEXT" },  // HMAC-SHA256 for content integrity
     { name: "tags_json", ddl: "TEXT" },  // JSON array of user tags
-    { name: "importance_tier", ddl: "TEXT DEFAULT 'normal'" },  // critical/high/normal
+    { name: "importance_tier", ddl: "TEXT DEFAULT 'normal'" },  // critical/working/high/normal
+    { name: "promotion_locked", ddl: "INTEGER DEFAULT 0" },  // Prevents auto-demotion of manually set tiers
+    { name: "locked_tier", ddl: "TEXT" },  // Lock memory at specific tier (prevents promotion/demotion)
+    { name: "decay_immune", ddl: "INTEGER DEFAULT 0" },  // If 1, memory is immune to automatic decay
   ];
 
   const tableInfo = await client.execute("PRAGMA table_info(memories)");
@@ -376,6 +379,9 @@ function mapRow(row: Record<string, unknown>): MemoryRecord {
     entities,
     feedbackScore: Number(row.feedback_score ?? 0),
     accessCount: Number(row.access_count ?? 0),
+    promotionLocked: Number(row.promotion_locked ?? 0) === 1,
+    lockedTier: (row.locked_tier as MemoryImportanceTier | null) ?? null,
+    decayImmune: Number(row.decay_immune ?? 0) === 1,
     createdAt: row.created_at as string,
   };
 }
@@ -1597,13 +1603,20 @@ export async function getAgentMemoriesByIds(params: {
     args.push(...params.excludeMemoryTypes);
   }
 
+  // When namespace is specified, include both namespace-scoped AND global (null namespace) memories
+  // This follows the spec: "Search defaults to current namespace + global"
+  // Note: We only add one placeholder, the arg was already pushed above
+  const namespaceClause = hasNamespaceFilter
+    ? (params.namespaceId ? "AND (namespace_id = ? OR namespace_id IS NULL)" : "AND namespace_id IS NULL")
+    : "";
+
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, memory_type, importance_tier, source_url, file_name, content_text, metadata_json,
              namespace_id, session_id, entities, entities_json, feedback_score, access_count, created_at
       FROM memories
       WHERE user_id = ? AND id IN (${placeholders}) AND archived_at IS NULL
-      ${hasNamespaceFilter ? "AND namespace_id = ?" : ""}
+      ${namespaceClause}
       ${hasSince ? "AND created_at >= ?" : ""}
       ${params.memoryTypes?.length ? `AND memory_type IN (${params.memoryTypes.map(() => "?").join(",")})` : ""}
       ${params.excludeMemoryTypes?.length ? `AND memory_type NOT IN (${params.excludeMemoryTypes.map(() => "?").join(",")})` : ""}
@@ -2361,4 +2374,908 @@ export async function insertMemoryWithMetadataAndQuota(params: {
     },
     created: true,
   };
+}
+
+// =============================================================================
+// Auto-Promotion System
+// =============================================================================
+
+/**
+ * Promotion thresholds for access-based tier upgrades
+ */
+const PROMOTION_THRESHOLDS = {
+  normalToHigh: 5,   // access_count >= 5 promotes normal → high
+  highToCritical: 15, // access_count >= 15 promotes high → critical
+} as const;
+
+/**
+ * Check and auto-promote memories based on access frequency.
+ * - normal → high when access_count >= 5
+ * - high → critical when access_count >= 15
+ * 
+ * Respects promotion_locked flag: locked memories won't be auto-promoted.
+ * Returns the count of promoted memories.
+ */
+export async function checkAndPromoteMemories(userId: string): Promise<{
+  promotedToHigh: number;
+  promotedToCritical: number;
+}> {
+  await ensureInitialized();
+  const client = getDb();
+
+  // Promote normal → high (access_count >= 5, not locked)
+  const highResult = await client.execute({
+    sql: `
+      UPDATE memories
+      SET importance_tier = 'high'
+      WHERE user_id = ?
+        AND importance_tier = 'normal'
+        AND access_count >= ?
+        AND (promotion_locked IS NULL OR promotion_locked = 0)
+        AND archived_at IS NULL
+    `,
+    args: [userId, PROMOTION_THRESHOLDS.normalToHigh],
+  });
+
+  // Promote high → critical (access_count >= 15, not locked)
+  const criticalResult = await client.execute({
+    sql: `
+      UPDATE memories
+      SET importance_tier = 'critical'
+      WHERE user_id = ?
+        AND importance_tier = 'high'
+        AND access_count >= ?
+        AND (promotion_locked IS NULL OR promotion_locked = 0)
+        AND archived_at IS NULL
+    `,
+    args: [userId, PROMOTION_THRESHOLDS.highToCritical],
+  });
+
+  return {
+    promotedToHigh: highResult.rowsAffected ?? 0,
+    promotedToCritical: criticalResult.rowsAffected ?? 0,
+  };
+}
+
+/**
+ * Set the promotion_locked flag on a memory to prevent auto-demotion.
+ * Use this when manually setting importance tiers.
+ */
+export async function setPromotionLocked(
+  userId: string,
+  memoryId: string,
+  locked: boolean
+): Promise<boolean> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const result = await client.execute({
+    sql: `
+      UPDATE memories
+      SET promotion_locked = ?
+      WHERE user_id = ? AND id = ?
+    `,
+    args: [locked ? 1 : 0, userId, memoryId],
+  });
+
+  return (result.rowsAffected ?? 0) > 0;
+}
+
+/**
+ * Get all high-tier memories for a user (for context synthesis)
+ */
+export async function getHighTierMemories(userId: string): Promise<AgentMemoryRecord[]> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, title, source_type, memory_type, importance_tier, source_url, file_name, 
+             content_text, metadata_json, namespace_id, session_id, entities, entities_json, 
+             feedback_score, access_count, created_at
+      FROM memories
+      WHERE user_id = ? AND importance_tier = 'high' AND archived_at IS NULL
+      ORDER BY access_count DESC, created_at DESC
+    `,
+    args: [userId],
+  });
+
+  return result.rows.map((row) => mapAgentMemoryRow(row as Record<string, unknown>));
+}
+
+/**
+ * Increment access count for multiple memories (batch operation).
+ * Used when search returns results to track retrieval frequency.
+ */
+export async function incrementAccessCounts(userId: string, memoryIds: string[]): Promise<void> {
+  await ensureInitialized();
+  if (memoryIds.length === 0) {
+    return;
+  }
+
+  const client = getDb();
+  const now = new Date().toISOString();
+  const placeholders = memoryIds.map(() => "?").join(",");
+
+  await client.execute({
+    sql: `
+      UPDATE memories
+      SET access_count = access_count + 1,
+          last_accessed_at = ?
+      WHERE user_id = ? AND id IN (${placeholders})
+    `,
+    args: [now, userId, ...memoryIds],
+  });
+}
+
+// =============================================================================
+// Memory Decay System
+// =============================================================================
+
+/**
+ * Demotion thresholds for score-based tier downgrades
+ */
+const DEMOTION_THRESHOLDS = {
+  criticalToHigh: 3,   // access_count < 3 demotes critical → high
+  highToNormal: 1,     // access_count < 1 demotes high → normal
+} as const;
+
+/**
+ * Apply decay to memory access scores.
+ * Memories not accessed in the last 7 days have their access_count reduced by 5%.
+ * Respects decay_immune and locked_tier flags.
+ * 
+ * Returns statistics about the decay operation.
+ */
+export async function decayMemoryScores(userId?: string): Promise<{
+  decayed: number;
+  demotedToHigh: number;
+  demotedToNormal: number;
+}> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const userFilter = userId ? "AND user_id = ?" : "";
+  const userArgs = userId ? [userId] : [];
+
+  // Apply 5% decay to access_count for memories not accessed in 7 days
+  const decayResult = await client.execute({
+    sql: `
+      UPDATE memories
+      SET access_count = CAST(access_count * 0.95 AS INTEGER)
+      WHERE last_accessed_at < datetime('now', '-7 days')
+        AND (promotion_locked IS NULL OR promotion_locked = 0)
+        AND (decay_immune IS NULL OR decay_immune = 0)
+        AND (locked_tier IS NULL)
+        AND access_count > 0
+        AND archived_at IS NULL
+        ${userFilter}
+    `,
+    args: userArgs,
+  });
+
+  // Demote critical → high when score falls below threshold
+  const demoteHighResult = await client.execute({
+    sql: `
+      UPDATE memories
+      SET importance_tier = 'high'
+      WHERE importance_tier = 'critical'
+        AND access_count < ?
+        AND (promotion_locked IS NULL OR promotion_locked = 0)
+        AND (locked_tier IS NULL OR locked_tier != 'critical')
+        AND archived_at IS NULL
+        ${userFilter}
+    `,
+    args: [DEMOTION_THRESHOLDS.criticalToHigh, ...userArgs],
+  });
+
+  // Demote high → normal when score falls below threshold
+  const demoteNormalResult = await client.execute({
+    sql: `
+      UPDATE memories
+      SET importance_tier = 'normal'
+      WHERE importance_tier = 'high'
+        AND access_count < ?
+        AND (promotion_locked IS NULL OR promotion_locked = 0)
+        AND (locked_tier IS NULL OR (locked_tier != 'critical' AND locked_tier != 'high'))
+        AND archived_at IS NULL
+        ${userFilter}
+    `,
+    args: [DEMOTION_THRESHOLDS.highToNormal, ...userArgs],
+  });
+
+  return {
+    decayed: decayResult.rowsAffected ?? 0,
+    demotedToHigh: demoteHighResult.rowsAffected ?? 0,
+    demotedToNormal: demoteNormalResult.rowsAffected ?? 0,
+  };
+}
+
+// =============================================================================
+// Reinforcement System
+// =============================================================================
+
+/**
+ * Apply explicit reinforcement to a memory.
+ * Positive reinforcement (+1) adds +5 to effective access_count.
+ * Negative reinforcement (-1) subtracts 3 from effective access_count.
+ * 
+ * Returns the updated memory with new feedback score and potentially new tier.
+ */
+export async function reinforceMemoryExplicit(
+  userId: string,
+  memoryId: string,
+  value: 1 | -1,
+  reason?: string
+): Promise<{
+  feedbackScore: number;
+  accessCount: number;
+  newTier: MemoryImportanceTier;
+  promoted: boolean;
+  demoted: boolean;
+} | null> {
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+
+  // Calculate the access_count delta based on reinforcement
+  // +1 reinforcement = +5 to access_count equivalent
+  // -1 reinforcement = -3 to access_count equivalent
+  const accessDelta = value === 1 ? 5 : -3;
+
+  // Get current state
+  const current = await client.execute({
+    sql: `SELECT importance_tier, access_count, feedback_score, locked_tier FROM memories WHERE id = ? AND user_id = ?`,
+    args: [memoryId, userId],
+  });
+
+  if (current.rows.length === 0) {
+    return null;
+  }
+
+  const row = current.rows[0] as Record<string, unknown>;
+  const currentTier = (row.importance_tier as MemoryImportanceTier) ?? "normal";
+  const currentAccess = Number(row.access_count ?? 0);
+  const currentFeedback = Number(row.feedback_score ?? 0);
+  const lockedTier = row.locked_tier as MemoryImportanceTier | null;
+
+  const newAccess = Math.max(0, currentAccess + accessDelta);
+  const newFeedback = currentFeedback + value;
+
+  // Update the memory
+  await client.execute({
+    sql: `
+      UPDATE memories
+      SET access_count = ?,
+          feedback_score = ?,
+          last_accessed_at = ?
+      WHERE id = ? AND user_id = ?
+    `,
+    args: [newAccess, newFeedback, now, memoryId, userId],
+  });
+
+  // Calculate new tier based on updated access_count
+  let newTier: MemoryImportanceTier = currentTier;
+  let promoted = false;
+  let demoted = false;
+
+  // Check for promotion (respects locked_tier)
+  if (newAccess >= PROMOTION_THRESHOLDS.highToCritical) {
+    // Can promote to critical if not already critical and lock allows
+    if (currentTier !== "critical" && (!lockedTier || lockedTier === "critical")) {
+      newTier = "critical";
+      promoted = true;
+    }
+  } else if (newAccess >= PROMOTION_THRESHOLDS.normalToHigh) {
+    // Can promote to high if currently normal and lock allows
+    if (currentTier === "normal" && (!lockedTier || lockedTier === "high" || lockedTier === "critical")) {
+      newTier = "high";
+      promoted = true;
+    }
+  }
+
+  // Check for demotion (respects locked_tier)
+  if (newAccess < DEMOTION_THRESHOLDS.highToNormal) {
+    // Demote high to normal if lock allows
+    if (currentTier === "high" && (!lockedTier || lockedTier === "normal")) {
+      newTier = "normal";
+      demoted = true;
+    }
+  } else if (newAccess < DEMOTION_THRESHOLDS.criticalToHigh) {
+    // Demote critical to high if lock allows
+    if (currentTier === "critical" && (!lockedTier || lockedTier === "high" || lockedTier === "normal")) {
+      newTier = "high";
+      demoted = true;
+    }
+  }
+
+  // Apply tier change if needed
+  if (newTier !== currentTier) {
+    await client.execute({
+      sql: `UPDATE memories SET importance_tier = ? WHERE id = ? AND user_id = ?`,
+      args: [newTier, memoryId, userId],
+    });
+  }
+
+  return {
+    feedbackScore: newFeedback,
+    accessCount: newAccess,
+    newTier,
+    promoted,
+    demoted,
+  };
+}
+
+// =============================================================================
+// Tier Locking System
+// =============================================================================
+
+/**
+ * Lock a memory at a specific tier.
+ * Once locked, the memory cannot be promoted past or demoted below this tier.
+ * Pass null to unlock.
+ */
+export async function setMemoryLockedTier(
+  userId: string,
+  memoryId: string,
+  tier: MemoryImportanceTier | null
+): Promise<{ success: boolean; currentTier: MemoryImportanceTier | null }> {
+  await ensureInitialized();
+  const client = getDb();
+
+  // If locking to a tier, also set the importance_tier to that tier
+  if (tier) {
+    const result = await client.execute({
+      sql: `
+        UPDATE memories
+        SET locked_tier = ?,
+            importance_tier = ?,
+            promotion_locked = 1
+        WHERE id = ? AND user_id = ?
+      `,
+      args: [tier, tier, memoryId, userId],
+    });
+    return {
+      success: (result.rowsAffected ?? 0) > 0,
+      currentTier: tier,
+    };
+  } else {
+    // Unlocking
+    const result = await client.execute({
+      sql: `
+        UPDATE memories
+        SET locked_tier = NULL,
+            promotion_locked = 0
+        WHERE id = ? AND user_id = ?
+      `,
+      args: [memoryId, userId],
+    });
+
+    // Get current tier
+    const current = await client.execute({
+      sql: `SELECT importance_tier FROM memories WHERE id = ? AND user_id = ?`,
+      args: [memoryId, userId],
+    });
+    const row = current.rows[0] as Record<string, unknown> | undefined;
+
+    return {
+      success: (result.rowsAffected ?? 0) > 0,
+      currentTier: row ? (row.importance_tier as MemoryImportanceTier) : null,
+    };
+  }
+}
+
+/**
+ * Set decay immunity for a memory.
+ */
+export async function setMemoryDecayImmune(
+  userId: string,
+  memoryId: string,
+  immune: boolean
+): Promise<boolean> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const result = await client.execute({
+    sql: `
+      UPDATE memories
+      SET decay_immune = ?
+      WHERE id = ? AND user_id = ?
+    `,
+    args: [immune ? 1 : 0, memoryId, userId],
+  });
+
+  return (result.rowsAffected ?? 0) > 0;
+}
+
+/**
+ * Get memory with tier lock info
+ */
+export async function getMemoryWithLockInfo(
+  userId: string,
+  memoryId: string
+): Promise<{
+  id: string;
+  importanceTier: MemoryImportanceTier;
+  lockedTier: MemoryImportanceTier | null;
+  promotionLocked: boolean;
+  decayImmune: boolean;
+  accessCount: number;
+  feedbackScore: number;
+} | null> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const result = await client.execute({
+    sql: `
+      SELECT id, importance_tier, locked_tier, promotion_locked, decay_immune, access_count, feedback_score
+      FROM memories
+      WHERE id = ? AND user_id = ?
+    `,
+    args: [memoryId, userId],
+  });
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  const row = result.rows[0] as Record<string, unknown>;
+  return {
+    id: row.id as string,
+    importanceTier: (row.importance_tier as MemoryImportanceTier) ?? "normal",
+    lockedTier: (row.locked_tier as MemoryImportanceTier | null) ?? null,
+    promotionLocked: Number(row.promotion_locked ?? 0) === 1,
+    decayImmune: Number(row.decay_immune ?? 0) === 1,
+    accessCount: Number(row.access_count ?? 0),
+    feedbackScore: Number(row.feedback_score ?? 0),
+  };
+}
+
+// =============================================================================
+// Memory Misses System
+// =============================================================================
+
+export type MemoryMissRecord = {
+  id: string;
+  userId: string;
+  query: string;
+  context: string | null;
+  sessionId: string | null;
+  createdAt: string;
+};
+
+async function ensureMissesTable(): Promise<void> {
+  const client = getDb();
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS memory_misses (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      query TEXT NOT NULL,
+      context TEXT,
+      session_id TEXT,
+      created_at TEXT NOT NULL
+    )
+  `);
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_memory_misses_user_created_at
+    ON memory_misses(user_id, created_at DESC)
+  `);
+}
+
+/**
+ * Log a memory miss - when agent searched but didn't find what it needed
+ */
+export async function logMemoryMiss(params: {
+  userId: string;
+  query: string;
+  context?: string | null;
+  sessionId?: string | null;
+}): Promise<MemoryMissRecord> {
+  await ensureInitialized();
+  await ensureMissesTable();
+  const client = getDb();
+  const id = `miss_${crypto.randomUUID().replaceAll("-", "")}`;
+  const now = new Date().toISOString();
+
+  await client.execute({
+    sql: `
+      INSERT INTO memory_misses (id, user_id, query, context, session_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `,
+    args: [
+      id,
+      params.userId,
+      params.query.trim(),
+      params.context?.trim() ?? null,
+      params.sessionId ?? null,
+      now,
+    ],
+  });
+
+  return {
+    id,
+    userId: params.userId,
+    query: params.query.trim(),
+    context: params.context?.trim() ?? null,
+    sessionId: params.sessionId ?? null,
+    createdAt: now,
+  };
+}
+
+/**
+ * Get memory misses for a user
+ */
+export async function getMisses(userId: string, limit: number = 50): Promise<MemoryMissRecord[]> {
+  await ensureInitialized();
+  await ensureMissesTable();
+  const client = getDb();
+  const boundedLimit = Math.max(1, Math.min(limit, 200));
+
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, query, context, session_id, created_at
+      FROM memory_misses
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `,
+    args: [userId, boundedLimit],
+  });
+
+  return result.rows.map((row) => {
+    const record = row as Record<string, unknown>;
+    return {
+      id: record.id as string,
+      userId: record.user_id as string,
+      query: record.query as string,
+      context: (record.context as string | null) ?? null,
+      sessionId: (record.session_id as string | null) ?? null,
+      createdAt: record.created_at as string,
+    };
+  });
+}
+
+/**
+ * Generate suggestion text based on query patterns
+ */
+export function generateMissSuggestion(query: string): string {
+  const lowerQuery = query.toLowerCase();
+  
+  if (lowerQuery.includes("timezone") || lowerQuery.includes("time zone")) {
+    return "Consider storing timezone preferences when learned";
+  }
+  if (lowerQuery.includes("preference") || lowerQuery.includes("prefer")) {
+    return "Consider storing user preferences when expressed";
+  }
+  if (lowerQuery.includes("name") || lowerQuery.includes("called")) {
+    return "Consider storing names and identities when introduced";
+  }
+  if (lowerQuery.includes("project") || lowerQuery.includes("working on")) {
+    return "Consider storing project context when discussed";
+  }
+  if (lowerQuery.includes("how to") || lowerQuery.includes("how do")) {
+    return "Consider storing procedural knowledge when explained";
+  }
+  
+  return "Consider storing this type of information when learned";
+}
+
+// =============================================================================
+// Extended Session System
+// =============================================================================
+
+export type ExtendedSessionRecord = {
+  id: string;
+  userId: string;
+  namespaceId: string | null;
+  namespaceName: string | null;
+  metadata: Record<string, unknown> | null;
+  turnCount: number;
+  outcome: "success" | "failure" | "abandoned" | null;
+  feedback: string | null;
+  createdAt: string;
+  endedAt: string | null;
+};
+
+export type SessionTurnRecord = {
+  id: string;
+  sessionId: string;
+  turnNumber: number;
+  messagesJson: string;
+  memoriesUsed: string[];
+  createdAt: string;
+};
+
+async function ensureExtendedSessionsTables(): Promise<void> {
+  const client = getDb();
+  
+  // Add columns to sessions table if not present
+  const tableInfo = await client.execute("PRAGMA table_info(sessions)");
+  const existing = new Set(
+    tableInfo.rows
+      .map((row) => (row as Record<string, unknown>).name as string)
+      .filter(Boolean)
+  );
+
+  const columnsToAdd: Array<{ name: string; ddl: string }> = [
+    { name: "turn_count", ddl: "INTEGER DEFAULT 0" },
+    { name: "outcome", ddl: "TEXT" },
+    { name: "feedback", ddl: "TEXT" },
+    { name: "ended_at", ddl: "TEXT" },
+  ];
+
+  for (const col of columnsToAdd) {
+    if (!existing.has(col.name)) {
+      await client.execute(`ALTER TABLE sessions ADD COLUMN ${col.name} ${col.ddl}`);
+    }
+  }
+
+  // Create session_turns table
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS session_turns (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      turn_number INTEGER NOT NULL,
+      messages_json TEXT NOT NULL,
+      memories_used TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+    )
+  `);
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_session_turns_session_turn
+    ON session_turns(session_id, turn_number)
+  `);
+}
+
+/**
+ * Start a new session with extended tracking
+ */
+export async function startExtendedSession(params: {
+  userId: string;
+  namespaceId?: string | null;
+  metadata?: Record<string, unknown> | null;
+}): Promise<ExtendedSessionRecord> {
+  await ensureInitialized();
+  await ensureExtendedSessionsTables();
+  const client = getDb();
+  const id = `sess_${crypto.randomUUID().replaceAll("-", "")}`;
+  const now = new Date().toISOString();
+  const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
+
+  await client.execute({
+    sql: `
+      INSERT INTO sessions (id, user_id, namespace_id, metadata_json, turn_count, created_at)
+      VALUES (?, ?, ?, ?, 0, ?)
+    `,
+    args: [id, params.userId, params.namespaceId ?? null, metadataJson, now],
+  });
+
+  const namespaceName = params.namespaceId
+    ? (await getNamespaceById(params.userId, params.namespaceId))?.name ?? null
+    : null;
+
+  return {
+    id,
+    userId: params.userId,
+    namespaceId: params.namespaceId ?? null,
+    namespaceName,
+    metadata: params.metadata ?? null,
+    turnCount: 0,
+    outcome: null,
+    feedback: null,
+    createdAt: now,
+    endedAt: null,
+  };
+}
+
+/**
+ * Record a turn in a session
+ */
+export async function recordSessionTurn(params: {
+  userId: string;
+  sessionId: string;
+  turnNumber: number;
+  messages: Array<{ role: string; content: string }>;
+  memoriesUsed?: string[];
+}): Promise<SessionTurnRecord> {
+  await ensureInitialized();
+  await ensureExtendedSessionsTables();
+  const client = getDb();
+  const id = `turn_${crypto.randomUUID().replaceAll("-", "")}`;
+  const now = new Date().toISOString();
+  const messagesJson = JSON.stringify(params.messages);
+  const memoriesUsedJson = params.memoriesUsed ? JSON.stringify(params.memoriesUsed) : "[]";
+
+  // Verify session exists and belongs to user
+  const session = await client.execute({
+    sql: "SELECT id FROM sessions WHERE id = ? AND user_id = ?",
+    args: [params.sessionId, params.userId],
+  });
+  if (session.rows.length === 0) {
+    throw new Error("Session not found");
+  }
+
+  await client.execute({
+    sql: `
+      INSERT INTO session_turns (id, session_id, turn_number, messages_json, memories_used, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `,
+    args: [id, params.sessionId, params.turnNumber, messagesJson, memoriesUsedJson, now],
+  });
+
+  // Update session turn count
+  await client.execute({
+    sql: "UPDATE sessions SET turn_count = ? WHERE id = ?",
+    args: [params.turnNumber, params.sessionId],
+  });
+
+  return {
+    id,
+    sessionId: params.sessionId,
+    turnNumber: params.turnNumber,
+    messagesJson,
+    memoriesUsed: params.memoriesUsed ?? [],
+    createdAt: now,
+  };
+}
+
+/**
+ * End a session and record outcome
+ */
+export async function endSession(params: {
+  userId: string;
+  sessionId: string;
+  outcome: "success" | "failure" | "abandoned";
+  feedback?: string | null;
+}): Promise<ExtendedSessionRecord | null> {
+  await ensureInitialized();
+  await ensureExtendedSessionsTables();
+  const client = getDb();
+  const now = new Date().toISOString();
+
+  const result = await client.execute({
+    sql: `
+      UPDATE sessions
+      SET outcome = ?, feedback = ?, ended_at = ?
+      WHERE id = ? AND user_id = ?
+    `,
+    args: [
+      params.outcome,
+      params.feedback ?? null,
+      now,
+      params.sessionId,
+      params.userId,
+    ],
+  });
+
+  if ((result.rowsAffected ?? 0) === 0) {
+    return null;
+  }
+
+  return getExtendedSessionById(params.userId, params.sessionId);
+}
+
+/**
+ * Get extended session by ID
+ */
+export async function getExtendedSessionById(
+  userId: string,
+  sessionId: string
+): Promise<ExtendedSessionRecord | null> {
+  await ensureInitialized();
+  await ensureExtendedSessionsTables();
+  const client = getDb();
+
+  const result = await client.execute({
+    sql: `
+      SELECT s.id, s.user_id, s.namespace_id, s.metadata_json, s.turn_count, 
+             s.outcome, s.feedback, s.created_at, s.ended_at, n.name AS namespace_name
+      FROM sessions s
+      LEFT JOIN namespaces n ON n.id = s.namespace_id
+      WHERE s.user_id = ? AND s.id = ?
+      LIMIT 1
+    `,
+    args: [userId, sessionId],
+  });
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  const row = result.rows[0] as Record<string, unknown>;
+  return {
+    id: row.id as string,
+    userId: row.user_id as string,
+    namespaceId: (row.namespace_id as string | null) ?? null,
+    namespaceName: (row.namespace_name as string | null) ?? null,
+    metadata: parseJsonObject(row.metadata_json),
+    turnCount: Number(row.turn_count ?? 0),
+    outcome: (row.outcome as "success" | "failure" | "abandoned" | null) ?? null,
+    feedback: (row.feedback as string | null) ?? null,
+    createdAt: row.created_at as string,
+    endedAt: (row.ended_at as string | null) ?? null,
+  };
+}
+
+/**
+ * Get all turns for a session
+ */
+export async function getSessionTurns(
+  userId: string,
+  sessionId: string
+): Promise<SessionTurnRecord[]> {
+  await ensureInitialized();
+  await ensureExtendedSessionsTables();
+  const client = getDb();
+
+  // Verify session belongs to user
+  const session = await client.execute({
+    sql: "SELECT id FROM sessions WHERE id = ? AND user_id = ?",
+    args: [sessionId, userId],
+  });
+  if (session.rows.length === 0) {
+    return [];
+  }
+
+  const result = await client.execute({
+    sql: `
+      SELECT id, session_id, turn_number, messages_json, memories_used, created_at
+      FROM session_turns
+      WHERE session_id = ?
+      ORDER BY turn_number ASC
+    `,
+    args: [sessionId],
+  });
+
+  return result.rows.map((row) => {
+    const record = row as Record<string, unknown>;
+    let memoriesUsed: string[] = [];
+    try {
+      memoriesUsed = JSON.parse((record.memories_used as string) || "[]") as string[];
+    } catch {
+      // no-op
+    }
+    return {
+      id: record.id as string,
+      sessionId: record.session_id as string,
+      turnNumber: Number(record.turn_number),
+      messagesJson: record.messages_json as string,
+      memoriesUsed,
+      createdAt: record.created_at as string,
+    };
+  });
+}
+
+/**
+ * Get all unique memory IDs used across all turns in a session
+ */
+export async function getSessionMemoriesUsed(
+  userId: string,
+  sessionId: string
+): Promise<string[]> {
+  const turns = await getSessionTurns(userId, sessionId);
+  const usedSet = new Set<string>();
+  for (const turn of turns) {
+    for (const id of turn.memoriesUsed) {
+      usedSet.add(id);
+    }
+  }
+  return Array.from(usedSet);
+}
+
+/**
+ * Reinforce memories that were used in a successful session
+ */
+export async function reinforceSessionMemories(
+  userId: string,
+  sessionId: string
+): Promise<number> {
+  const memoryIds = await getSessionMemoriesUsed(userId, sessionId);
+  if (memoryIds.length === 0) {
+    return 0;
+  }
+
+  await incrementAccessCounts(userId, memoryIds);
+  return memoryIds.length;
 }

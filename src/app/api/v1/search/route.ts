@@ -1,7 +1,7 @@
 import { embedText } from "@/lib/embeddings";
 import { countEntityOverlap, extractEntities } from "@/lib/entities";
 import { semanticSearchVectors } from "@/lib/qdrant";
-import { getAgentMemoriesByIds, recordMemorySearchHits } from "@/lib/db";
+import { getAgentMemoriesByIds, recordMemorySearchHits, incrementAccessCounts, checkAndPromoteMemories } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject, normalizeIsoTimestamp, normalizeLimit, resolveNamespaceIdOrError } from "@/lib/api-v1";
@@ -81,7 +81,15 @@ export async function POST(request: Request) {
       .sort((left, right) => right.score - left.score)
       .slice(0, topK);
 
-    await recordMemorySearchHits(identity.userId, results.map((result) => result.id));
+    // Increment access counts for retrieved memories
+    const retrievedIds = results.map((result) => result.id);
+    await incrementAccessCounts(identity.userId, retrievedIds);
+    await recordMemorySearchHits(identity.userId, retrievedIds);
+
+    // Trigger auto-promotion check (async, non-blocking)
+    checkAndPromoteMemories(identity.userId).catch((err) => {
+      console.error("[Search] Auto-promotion check failed:", err);
+    });
 
     return Response.json(results);
   } catch (error) {
