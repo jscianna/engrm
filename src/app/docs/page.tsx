@@ -7,6 +7,7 @@ import Link from "next/link";
 const NAV_SECTIONS = [
   { id: "quick-start", label: "Quick Start" },
   { id: "authentication", label: "Authentication" },
+  { id: "cli", label: "CLI" },
   { id: "layered-memory", label: "Layered Memory" },
   { id: "storing-memories", label: "Storing Memories" },
   { id: "retrieving-memories", label: "Retrieving Memories" },
@@ -216,6 +217,80 @@ export default function DocsPage() {
               API keys are scoped to your account. Each key has an associated agent_id 
               for tracking which agent stored which memories.
             </Note>
+          </section>
+
+          {/* CLI */}
+          <section id="cli" className="mb-16">
+            <h2 className="text-3xl font-bold mb-4">CLI</h2>
+            <p className="text-zinc-400 mb-6">
+              The Engrm CLI helps you migrate existing memories, search from the terminal, and calculate token savings.
+            </p>
+
+            <h3 className="text-xl font-semibold mb-4">Installation</h3>
+            <CodeBlock language="bash">{`npm install -g engrm
+# or use directly with npx
+npx engrm --help`}</CodeBlock>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Migrate Existing Memories</h3>
+            <p className="text-zinc-400 mb-4">
+              Scan your workspace, extract memories from markdown files, and see token savings:
+            </p>
+            <CodeBlock language="bash">{`# Set your API key
+export ENGRM_API_KEY="mem_your_api_key"
+
+# Scan workspace and show what would be migrated
+engrm init --dry-run
+
+# Run the migration
+engrm init`}</CodeBlock>
+
+            <p className="text-zinc-400 my-4">
+              The init command will:
+            </p>
+            <ul className="list-disc list-inside text-zinc-400 mb-4 space-y-1">
+              <li>Scan <code>MEMORY.md</code> and <code>memory/*.md</code> files</li>
+              <li>Count tokens and extract memories</li>
+              <li>Show estimated token savings</li>
+              <li>Upload memories to Engrm</li>
+              <li>Generate a slim <code>MEMORY.md</code> template</li>
+              <li>Create an agent skill file for integration</li>
+            </ul>
+
+            <Note type="tip">
+              Agents typically load 8,000+ tokens of context every session. With Engrm, you load ~600 tokens 
+              of core identity and query relevant memories on-demand. At 20 sessions/day, this can save 
+              $100-500/month on API costs.
+            </Note>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Store Memories</h3>
+            <CodeBlock language="bash">{`# Store with auto-generated title
+engrm store "User prefers dark theme and concise responses"
+
+# Store with explicit title
+engrm store "Server-side encryption, no ZK" --title "Architecture Decision"`}</CodeBlock>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Search Memories</h3>
+            <CodeBlock language="bash">{`# Search your memories
+engrm search "encryption decision"
+
+# Limit results
+engrm search "user preferences" --limit 3`}</CodeBlock>
+
+            <h3 className="text-xl font-semibold mb-4 mt-8">Agent Integration</h3>
+            <p className="text-zinc-400 mb-4">
+              After running <code>engrm init</code>, your agent should:
+            </p>
+            <ol className="list-decimal list-inside text-zinc-400 mb-4 space-y-1">
+              <li>Load slim MEMORY.md (core identity only)</li>
+              <li>Query Engrm before answering questions about projects, decisions, or context</li>
+              <li>Store important new learnings back to Engrm</li>
+            </ol>
+
+            <CodeBlock language="bash">{`# Example: Agent queries Engrm before responding
+curl -X POST "https://engrm.xyz/api/v1/search" \\
+  -H "Authorization: Bearer $ENGRM_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"query": "encryption architecture decision", "limit": 5}'`}</CodeBlock>
           </section>
 
           {/* Layered Memory */}
