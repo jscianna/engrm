@@ -1,9 +1,12 @@
 /**
  * Embeddings with fallback chain:
- * 1. OpenAI text-embedding-3-small (primary)
- * 2. Cohere embed-english-v3.0 (fallback)
- * 3. Zero vector (last resort)
+ * 1. Cache (warm lambda memory)
+ * 2. OpenAI text-embedding-3-small (primary)
+ * 3. Cohere embed-english-v3.0 (fallback)
+ * 4. Zero vector (last resort)
  */
+
+import { getCachedEmbedding, setCachedEmbedding } from "./embedding-cache";
 
 const EMBEDDING_DIMENSION = 384; // Standardized output dimension
 
@@ -89,15 +92,23 @@ export async function embedText(input: string): Promise<number[]> {
     return new Array(EMBEDDING_DIMENSION).fill(0);
   }
 
+  // Check cache first (warm lambda memory)
+  const cached = getCachedEmbedding(input);
+  if (cached) {
+    return cached;
+  }
+
   // Try OpenAI first
   const openaiResult = await embedWithOpenAI(input);
   if (openaiResult) {
+    setCachedEmbedding(input, openaiResult);
     return openaiResult;
   }
 
   // Fallback to Cohere
   const cohereResult = await embedWithCohere(input);
   if (cohereResult) {
+    setCachedEmbedding(input, cohereResult);
     return cohereResult;
   }
 
