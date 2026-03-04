@@ -37,8 +37,9 @@ export default clerkMiddleware(async (auth, request) => {
 
 export const config = {
   matcher: [
-    // Skip health check (must respond fast, no auth needed)
-    "/((?!_next|api/health|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    "/(api(?!/health)|trpc)(.*)"
+    // Only run middleware on protected routes - skip everything else
+    "/dashboard/:path*",
+    "/api/memories/:path*",
+    "/api/dashboard/:path*",
   ],
 };
