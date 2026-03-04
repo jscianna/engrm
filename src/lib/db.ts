@@ -68,7 +68,7 @@ function encryptMemoryContent(plaintext: string, userId: string): string {
  * Decrypt memory content from at-rest storage.
  * Expects the encrypted content as a JSON string containing ciphertext and iv.
  */
-function decryptMemoryContent(encryptedJson: string, userId: string): string {
+export function decryptMemoryContent(encryptedJson: string, userId: string): string {
   try {
     const payload = JSON.parse(encryptedJson) as { ciphertext: string; iv: string };
     const key = deriveUserKey(userId);

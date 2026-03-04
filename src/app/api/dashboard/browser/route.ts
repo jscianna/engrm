@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/turso";
+import { decryptMemoryContent } from "@/lib/db";
 import type { MemoryImportanceTier, MemoryKind } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -34,10 +35,12 @@ export async function GET() {
 
     const memories = memoriesResult.rows.map((row) => {
       const r = row as Record<string, unknown>;
+      const rawText = r.content_text as string;
+      const decryptedText = decryptMemoryContent(rawText, userId);
       return {
         id: r.id as string,
         title: r.title as string,
-        text: (r.content_text as string).slice(0, 500), // Truncate for display
+        text: decryptedText.slice(0, 500), // Truncate for display
         memoryType: (r.memory_type as MemoryKind) ?? "episodic",
         importanceTier: (r.importance_tier as MemoryImportanceTier) ?? "normal",
         accessCount: Number(r.access_count ?? 0),
