@@ -9,11 +9,11 @@ export const runtime = "nodejs";
 
 export async function GET(
   request: Request,
-  context: { params: Promise<{ sessionId: string }> },
+  context: { params: Promise<{ id: string }> },
 ) {
   try {
     const identity = await validateApiKey(request, "sessions.memories.list");
-    const { sessionId } = await context.params;
+    const { id: sessionId } = await context.params;
     const session = await getSessionById(identity.userId, sessionId);
     
     if (!session) {
@@ -29,11 +29,11 @@ export async function GET(
 
 export async function POST(
   request: Request,
-  context: { params: Promise<{ sessionId: string }> },
+  context: { params: Promise<{ id: string }> },
 ) {
   try {
     const identity = await validateApiKey(request, "sessions.memories.create");
-    const { sessionId } = await context.params;
+    const { id: sessionId } = await context.params;
     const session = await getSessionById(identity.userId, sessionId);
     
     if (!session) {

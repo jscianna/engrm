@@ -83,11 +83,11 @@ function buildSummarizePrompt(memories: Array<{ id: string; title: string; text:
 
 export async function POST(
   request: Request,
-  context: { params: Promise<{ sessionId: string }> },
+  context: { params: Promise<{ id: string }> },
 ) {
   try {
     const identity = await validateApiKey(request, "sessions.summarize");
-    const { sessionId } = await context.params;
+    const { id: sessionId } = await context.params;
     const session = await getSessionById(identity.userId, sessionId);
     if (!session) {
       throw new MemryError("SESSION_NOT_FOUND");
