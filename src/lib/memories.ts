@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { cache } from "react";
 import { embedText } from "@/lib/embeddings";
 import { cleanText, extractUrlContent, hashContent } from "@/lib/content";
+import { containsSecrets } from "@/lib/secrets";
 import {
   createMemoryEdge,
   getDashboardStatsByUser,
@@ -193,6 +194,7 @@ async function persistToDb(params: {
     contentIv: params.iv ?? null,
     isEncrypted,
     contentHash: hashContent(contentHashInput),
+    sensitive: containsSecrets(contentText),
     syncStatus: "pending",
     syncError: null,
     createdAt: new Date().toISOString(),

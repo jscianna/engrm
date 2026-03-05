@@ -78,6 +78,8 @@ export async function POST(request: Request) {
         };
       })
       .filter((value): value is { id: string; score: number; vectorScore: number; provenance: ReturnType<typeof buildProvenance>; memory: (typeof memories)[number] } => Boolean(value))
+      // Exclude sensitive memories (containing detected secrets) from LLM context
+      .filter((result) => !result.memory.sensitive)
       .sort((left, right) => right.score - left.score)
       .slice(0, topK);
 

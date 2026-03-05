@@ -55,6 +55,8 @@ export type MemoryRecord = {
   contentIv: string | null;
   isEncrypted: boolean;
   contentHash: string;
+  /** If true, memory contains detected secrets and is excluded from LLM context */
+  sensitive: boolean;
   syncStatus: MemorySyncStatus;
   syncError: string | null;
   entities?: string[];

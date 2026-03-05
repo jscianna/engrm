@@ -19,6 +19,7 @@ import {
   ensureRateLimiterInitialized,
   reserveMemoryQuotaInTransaction,
 } from "@/lib/rate-limiter";
+import { containsSecrets } from "@/lib/secrets";
 
 const ENCRYPTION_ALGORITHM = "aes-256-gcm";
 
@@ -360,6 +361,8 @@ export type AgentMemoryRecord = {
   feedbackScore: number;
   accessCount: number;
   isEncrypted?: boolean;
+  /** If true, memory contains detected secrets and is excluded from LLM context */
+  sensitive: boolean;
   createdAt: string;
 };
 
@@ -385,6 +388,7 @@ function mapRow(row: Record<string, unknown>): MemoryRecord {
     contentIv: row.content_iv as string | null,
     isEncrypted: Number(row.content_encrypted ?? 0) === 1,
     contentHash: row.content_hash as string,
+    sensitive: Number(row.sensitive ?? 0) === 1,
     syncStatus: (row.sync_status as MemorySyncStatus) ?? "pending",
     syncError: row.sync_error as string | null,
     entities,
@@ -406,8 +410,8 @@ export async function insertMemory(memory: MemoryRecord): Promise<void> {
       INSERT INTO memories (
         id, user_id, title, source_type, memory_type, importance, tags_csv,
         source_url, file_name, content_text, content_iv, content_encrypted, content_hash,
-        sync_status, sync_error, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        sensitive, sync_status, sync_error, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       memory.id,
@@ -423,6 +427,7 @@ export async function insertMemory(memory: MemoryRecord): Promise<void> {
       memory.contentIv,
       memory.isEncrypted ? 1 : 0,
       memory.contentHash,
+      memory.sensitive ? 1 : 0,
       memory.syncStatus,
       memory.syncError,
       memory.createdAt,
@@ -437,7 +442,7 @@ export async function listMemoriesByUser(userId: string, limit = 100): Promise<M
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, source_url, file_name, content_hash, created_at,
-             memory_type, importance, importance_tier, tags_csv, sync_status, sync_error, content_iv, content_encrypted,
+             memory_type, importance, importance_tier, tags_csv, sensitive, sync_status, sync_error, content_iv, content_encrypted,
              (
                SELECT COUNT(*)
                FROM memory_edges e
@@ -473,6 +478,7 @@ export async function listMemoriesByUser(userId: string, limit = 100): Promise<M
     contentIv: row.content_iv as string | null,
     isEncrypted: Number(row.content_encrypted ?? 0) === 1,
     contentHash: row.content_hash as string,
+    sensitive: Number(row.sensitive ?? 0) === 1,
     syncStatus: (row.sync_status as MemorySyncStatus) ?? "pending",
     syncError: row.sync_error as string | null,
     createdAt: row.created_at as string,
@@ -488,7 +494,7 @@ export async function listMemoryRecordsByUser(userId: string, limit = 100): Prom
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, created_at,
-             memory_type, importance, tags_csv, sync_status, sync_error, content_iv, content_encrypted
+             memory_type, importance, tags_csv, sensitive, sync_status, sync_error, content_iv, content_encrypted
       FROM memories
       WHERE user_id = ?
       ORDER BY created_at DESC
@@ -507,7 +513,7 @@ export async function getMemoryById(id: string): Promise<MemoryRecord | null> {
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, created_at,
-             memory_type, importance, tags_csv, sync_status, sync_error, content_iv, content_encrypted
+             memory_type, importance, tags_csv, sensitive, sync_status, sync_error, content_iv, content_encrypted
       FROM memories
       WHERE id = ?
     `,
@@ -533,7 +539,7 @@ export async function getMemoriesByIds(userId: string, ids: string[]): Promise<M
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, source_url, file_name, content_hash, created_at,
-             memory_type, importance, importance_tier, tags_csv, sync_status, sync_error, content_iv, content_encrypted,
+             memory_type, importance, importance_tier, tags_csv, sensitive, sync_status, sync_error, content_iv, content_encrypted,
              (
                SELECT COUNT(*)
                FROM memory_edges e
@@ -567,6 +573,7 @@ export async function getMemoriesByIds(userId: string, ids: string[]): Promise<M
     contentIv: row.content_iv as string | null,
     isEncrypted: Number(row.content_encrypted ?? 0) === 1,
     contentHash: row.content_hash as string,
+    sensitive: Number(row.sensitive ?? 0) === 1,
     syncStatus: (row.sync_status as MemorySyncStatus) ?? "pending",
     syncError: row.sync_error as string | null,
     createdAt: row.created_at as string,
@@ -856,6 +863,7 @@ function mapAgentMemoryRow(row: Record<string, unknown>): AgentMemoryRecord {
     entities: parseJsonStringArray((row.entities as string | null) ?? row.entities_json),
     feedbackScore: Number(row.feedback_score ?? 0),
     accessCount: Number(row.access_count ?? 0),
+    sensitive: Number(row.sensitive ?? 0) === 1,
     createdAt: row.created_at as string,
   };
 }
@@ -1323,6 +1331,7 @@ export async function insertAgentMemory(params: {
   const entitiesJson = JSON.stringify(entities);
   const contentHash = crypto.createHash("sha256").update(text, "utf8").digest("hex");
   const sizeBytes = Buffer.byteLength(text, "utf8");
+  const sensitive = containsSecrets(text) ? 1 : 0;
 
   // Encrypt content at rest unless the payload is already encrypted.
   const storedText = params.isEncrypted ? text : encryptMemoryContent(text, params.userId);
@@ -1335,9 +1344,9 @@ export async function insertAgentMemory(params: {
       sql: `
         INSERT INTO memories (
           id, user_id, title, source_type, memory_type, importance, importance_tier, tags_csv,
-          source_url, file_name, content_text, content_iv, content_encrypted, content_hash,
+          source_url, file_name, content_text, content_iv, content_encrypted, content_hash, sensitive,
           sync_status, sync_error, created_at, namespace_id, session_id, metadata_json, entities, entities_json
-        ) VALUES (?, ?, ?, ?, ?, 5, ?, '', ?, ?, ?, NULL, ?, ?, 'pending', NULL, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, 5, ?, '', ?, ?, ?, NULL, ?, ?, ?, 'pending', NULL, ?, ?, ?, ?, ?, ?)
       `,
       args: [
         id,
@@ -1351,6 +1360,7 @@ export async function insertAgentMemory(params: {
         storedText,
         params.isEncrypted ? 1 : 0,
         contentHash,
+        sensitive,
         now,
         params.namespaceId ?? null,
         params.sessionId ?? null,
@@ -1384,6 +1394,7 @@ export async function insertAgentMemory(params: {
     feedbackScore: 0,
     accessCount: 0,
     isEncrypted: params.isEncrypted ?? false,
+    sensitive: sensitive === 1,
     createdAt: now,
   };
 }
@@ -1431,7 +1442,7 @@ export async function listAgentMemories(params: {
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, metadata_json,
-             namespace_id, session_id, entities, entities_json, feedback_score, access_count, created_at
+             namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive, created_at
       FROM memories
       ${where}
       ORDER BY created_at DESC
@@ -1468,7 +1479,7 @@ export async function listConsolidatedMemories(params: {
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, metadata_json,
-             namespace_id, session_id, entities, entities_json, feedback_score, access_count, created_at
+             namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive, created_at
       FROM memories
       ${where}
       ORDER BY created_at DESC
@@ -1486,7 +1497,7 @@ export async function listSessionMemories(userId: string, sessionId: string): Pr
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, metadata_json,
-             namespace_id, session_id, entities, entities_json, feedback_score, access_count, created_at
+             namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive, created_at
       FROM memories
       WHERE user_id = ? AND session_id = ? AND archived_at IS NULL
       ORDER BY created_at ASC
@@ -1569,7 +1580,7 @@ export async function getAgentMemoryById(userId: string, id: string): Promise<Ag
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, metadata_json,
-             namespace_id, session_id, entities, entities_json, feedback_score, access_count, created_at
+             namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive, created_at
       FROM memories
       WHERE user_id = ? AND id = ?
       LIMIT 1
@@ -1621,7 +1632,7 @@ export async function getAgentMemoriesByIds(params: {
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, memory_type, importance_tier, source_url, file_name, content_text, metadata_json,
-             namespace_id, session_id, entities, entities_json, feedback_score, access_count, created_at
+             namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive, created_at
       FROM memories
       WHERE user_id = ? AND id IN (${placeholders}) AND archived_at IS NULL
       ${namespaceClause}
@@ -1646,7 +1657,7 @@ export async function getCriticalMemories(userId: string): Promise<AgentMemoryRe
     sql: `
       SELECT id, user_id, title, source_type, memory_type, importance_tier, source_url, file_name, 
              content_text, metadata_json, namespace_id, session_id, entities, entities_json, 
-             feedback_score, access_count, created_at
+             feedback_score, access_count, sensitive, created_at
       FROM memories
       WHERE user_id = ? AND importance_tier = 'critical' AND archived_at IS NULL
       ORDER BY created_at DESC
@@ -1758,7 +1769,7 @@ export async function listMemoryCompactionCandidates(params: {
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, metadata_json,
-             namespace_id, session_id, entities, entities_json, feedback_score, access_count, created_at,
+             namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive, created_at,
              embedding, strength, mention_count, archived_at
       FROM memories
       ${where}
@@ -2215,16 +2226,17 @@ export async function insertMemoryWithMetadata(params: {
   const entities = params.entities ?? [];
   const entitiesJson = JSON.stringify(entities);
   const conversationsJson = params.conversationId ? JSON.stringify([params.conversationId]) : null;
+  const sensitive = containsSecrets(text) ? 1 : 0;
 
   await client.execute({
     sql: `
       INSERT INTO memories (
         id, user_id, title, source_type, memory_type, importance, tags_csv,
-        source_url, file_name, content_text, content_iv, content_encrypted, content_hash,
+        source_url, file_name, content_text, content_iv, content_encrypted, content_hash, sensitive,
         sync_status, sync_error, created_at, namespace_id, session_id, metadata_json,
         embedding, embedding_hash, strength, base_strength, halflife_days, entities, entities_json, source_conversations,
         first_mentioned_at, last_mentioned_at, last_accessed_at
-      ) VALUES (?, ?, ?, 'text', ?, ?, '', NULL, NULL, ?, NULL, 0, ?, 'pending', NULL, ?, ?, ?, ?,
+      ) VALUES (?, ?, ?, 'text', ?, ?, '', NULL, NULL, ?, NULL, 0, ?, ?, 'pending', NULL, ?, ?, ?, ?,
                 ?, ?, 1.0, 1.0, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
@@ -2235,6 +2247,7 @@ export async function insertMemoryWithMetadata(params: {
       params.importance ?? 5,
       text,
       contentHash,
+      sensitive,
       now,
       params.namespaceId ?? null,
       params.sessionId ?? null,
@@ -2267,6 +2280,7 @@ export async function insertMemoryWithMetadata(params: {
     entities,
     feedbackScore: 0,
     accessCount: 0,
+    sensitive: sensitive === 1,
     createdAt: now,
   };
 }
@@ -2305,6 +2319,7 @@ export async function insertMemoryWithMetadataAndQuota(params: {
   const entitiesJson = JSON.stringify(entities);
   const conversationsJson = params.conversationId ? JSON.stringify([params.conversationId]) : null;
   const sizeBytes = Buffer.byteLength(text, "utf8");
+  const sensitive = containsSecrets(text) ? 1 : 0;
   const tx = await client.transaction("write");
 
   try {
@@ -2313,11 +2328,11 @@ export async function insertMemoryWithMetadataAndQuota(params: {
       sql: `
         INSERT INTO memories (
           id, user_id, title, source_type, memory_type, importance, tags_csv,
-          source_url, file_name, content_text, content_iv, content_encrypted, content_hash,
+          source_url, file_name, content_text, content_iv, content_encrypted, content_hash, sensitive,
           sync_status, sync_error, created_at, namespace_id, session_id, metadata_json,
           embedding, embedding_hash, strength, base_strength, halflife_days, entities, entities_json, source_conversations,
           first_mentioned_at, last_mentioned_at, last_accessed_at
-        ) VALUES (?, ?, ?, 'text', ?, ?, '', NULL, NULL, ?, NULL, 0, ?, 'pending', NULL, ?, ?, ?, ?,
+        ) VALUES (?, ?, ?, 'text', ?, ?, '', NULL, NULL, ?, NULL, 0, ?, ?, 'pending', NULL, ?, ?, ?, ?,
                   ?, ?, 1.0, 1.0, ?, ?, ?, ?, ?, ?, ?)
       `,
       args: [
@@ -2328,6 +2343,7 @@ export async function insertMemoryWithMetadataAndQuota(params: {
         params.importance ?? 5,
         text,
         contentHash,
+        sensitive,
         now,
         params.namespaceId ?? null,
         params.sessionId ?? null,
@@ -2378,6 +2394,7 @@ export async function insertMemoryWithMetadataAndQuota(params: {
       entities,
       feedbackScore: 0,
       accessCount: 0,
+      sensitive: sensitive === 1,
       createdAt: now,
     },
     created: true,
@@ -2480,7 +2497,7 @@ export async function getHighTierMemories(userId: string): Promise<AgentMemoryRe
     sql: `
       SELECT id, user_id, title, source_type, memory_type, importance_tier, source_url, file_name, 
              content_text, metadata_json, namespace_id, session_id, entities, entities_json, 
-             feedback_score, access_count, created_at
+             feedback_score, access_count, sensitive, created_at
       FROM memories
       WHERE user_id = ? AND importance_tier = 'high' AND archived_at IS NULL
       ORDER BY access_count DESC, created_at DESC
