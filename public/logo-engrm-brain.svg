@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="memGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#22D3EE"/>
+      <stop offset="50%" style="stop-color:#8B5CF6"/>
+      <stop offset="100%" style="stop-color:#22D3EE"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background -->
+  <circle cx="100" cy="100" r="95" fill="#09090b"/>
+  
+  <!-- Abstract brain shape - two hemispheres -->
+  <g fill="none" stroke="url(#memGrad)" stroke-width="4" filter="url(#glow)">
+    <!-- Left hemisphere -->
+    <path d="M 100 45 
+             Q 60 50, 50 80 
+             Q 40 110, 55 135 
+             Q 70 160, 100 155" 
+          stroke-linecap="round"/>
+    
+    <!-- Right hemisphere -->
+    <path d="M 100 45 
+             Q 140 50, 150 80 
+             Q 160 110, 145 135 
+             Q 130 160, 100 155" 
+          stroke-linecap="round"/>
+    
+    <!-- Internal folds/gyri -->
+    <path d="M 70 75 Q 85 85, 70 100" opacity="0.7"/>
+    <path d="M 130 75 Q 115 85, 130 100" opacity="0.7"/>
+    <path d="M 65 115 Q 80 125, 75 140" opacity="0.7"/>
+    <path d="M 135 115 Q 120 125, 125 140" opacity="0.7"/>
+  </g>
+  
+  <!-- Central connection - corpus callosum style -->
+  <ellipse cx="100" cy="100" rx="20" ry="8" fill="none" stroke="#22D3EE" stroke-width="3" opacity="0.8"/>
+  
+  <!-- Memory "spark" nodes -->
+  <g fill="#22D3EE">
+    <circle cx="60" cy="90" r="4"/>
+    <circle cx="140" cy="90" r="4"/>
+    <circle cx="75" cy="130" r="3"/>
+    <circle cx="125" cy="130" r="3"/>
+    <circle cx="100" cy="60" r="5">
+      <animate attributeName="opacity" values="1;0.5;1" dur="2s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+  
+  <!-- Central glow -->
+  <circle cx="100" cy="100" r="6" fill="#fff" opacity="0.9"/>
+</svg>
