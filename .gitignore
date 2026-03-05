@@ -54,3 +54,6 @@ create_deck*.py
 # Logo drafts
 logo-asymmetric*
 logo-engrm*.svg
+
+# Local data
+data/
