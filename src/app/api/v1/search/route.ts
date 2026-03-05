@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     const memoryById = new Map(memories.map((memory) => [memory.id, memory]));
     const queryEntities = extractEntities(body.query);
 
-    const results = hits
+    const allResults = hits
       .map((hit) => {
         const memory = memoryById.get(hit.item.id);
         if (!memory) {
@@ -78,13 +78,14 @@ export async function POST(request: Request) {
         };
       })
       .filter((value): value is { id: string; score: number; vectorScore: number; provenance: ReturnType<typeof buildProvenance>; memory: (typeof memories)[number] } => Boolean(value))
-      // Exclude sensitive memories (containing detected secrets) from LLM context
-      .filter((result) => !result.memory.sensitive)
-      .sort((left, right) => right.score - left.score)
-      .slice(0, topK);
+      .sort((left, right) => right.score - left.score);
+
+    // Separate sensitive memories (containing detected secrets) - excluded from LLM context
+    const sensitiveResults = allResults.filter((result) => result.memory.sensitive);
+    const safeResults = allResults.filter((result) => !result.memory.sensitive).slice(0, topK);
 
     // Non-blocking: increment access counts and record hits
-    const retrievedIds = results.map((result) => result.id);
+    const retrievedIds = safeResults.map((result) => result.id);
     Promise.all([
       incrementAccessCounts(identity.userId, retrievedIds),
       recordMemorySearchHits(identity.userId, retrievedIds),
@@ -93,7 +94,14 @@ export async function POST(request: Request) {
       console.error("[Search] Background tasks failed:", err);
     });
 
-    return Response.json(results);
+    // If sensitive memories were filtered, add header so agent can inform user
+    const headers: Record<string, string> = {};
+    if (sensitiveResults.length > 0) {
+      headers["X-Engrm-Sensitive-Omitted"] = String(sensitiveResults.length);
+      headers["X-Engrm-Sensitive-Hint"] = `${sensitiveResults.length} memory(ies) containing credentials were found but excluded for security. View them in your Engrm dashboard.`;
+    }
+
+    return Response.json(safeResults, { headers });
   } catch (error) {
     return errorResponse(error);
   }
