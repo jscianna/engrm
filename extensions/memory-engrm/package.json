@@ -1,0 +1,33 @@
+{
+  "name": "@engrm/openclaw-memory",
+  "version": "0.1.0",
+  "description": "OpenClaw memory plugin powered by Engrm - cloud-native encrypted memory with auto-recall and auto-capture",
+  "author": "Engrm",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jscianna/engrm.git",
+    "directory": "extensions/memory-engrm"
+  },
+  "keywords": [
+    "openclaw",
+    "plugin",
+    "memory",
+    "ai",
+    "agent",
+    "engrm"
+  ],
+  "openclaw": {
+    "extensions": ["./index.ts"]
+  },
+  "files": [
+    "index.ts",
+    "openclaw.plugin.json"
+  ],
+  "peerDependencies": {
+    "openclaw": ">=2025.1.0"
+  },
+  "devDependencies": {
+    "@sinclair/typebox": "^0.32.0"
+  }
+}
