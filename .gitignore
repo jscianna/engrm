@@ -48,12 +48,24 @@ extensions/memory-engrm/node_modules/
 
 # Private/internal files
 *.pptx
+*.ppt
+*.key
 *.pen
 create_deck*.py
+
+# Design files (keep local)
+*.fig
+*.sketch
+*.ai
+*.psd
+*.pdf
+/design/
+/decks/
 
 # Logo drafts
 logo-asymmetric*
 logo-engrm*.svg
+/public/logo-draft*
 
 # Local data
 data/

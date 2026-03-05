@@ -55,8 +55,6 @@ export type MemoryRecord = {
   contentIv: string | null;
   isEncrypted: boolean;
   contentHash: string;
-  /** @deprecated Legacy database field retained for compatibility. */
-  arweaveTxId: string | null;
   syncStatus: MemorySyncStatus;
   syncError: string | null;
   entities?: string[];

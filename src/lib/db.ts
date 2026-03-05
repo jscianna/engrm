@@ -138,7 +138,6 @@ async function ensureInitialized(): Promise<void> {
       content_iv TEXT,
       content_encrypted INTEGER NOT NULL DEFAULT 0,
       content_hash TEXT NOT NULL,
-      arweave_tx_id TEXT,
       sync_status TEXT NOT NULL DEFAULT 'pending',
       sync_error TEXT,
       namespace_id TEXT,
@@ -386,7 +385,6 @@ function mapRow(row: Record<string, unknown>): MemoryRecord {
     contentIv: row.content_iv as string | null,
     isEncrypted: Number(row.content_encrypted ?? 0) === 1,
     contentHash: row.content_hash as string,
-    arweaveTxId: row.arweave_tx_id as string | null,
     syncStatus: (row.sync_status as MemorySyncStatus) ?? "pending",
     syncError: row.sync_error as string | null,
     entities,
@@ -407,9 +405,9 @@ export async function insertMemory(memory: MemoryRecord): Promise<void> {
     sql: `
       INSERT INTO memories (
         id, user_id, title, source_type, memory_type, importance, tags_csv,
-        source_url, file_name, content_text, content_iv, content_encrypted, content_hash, arweave_tx_id,
+        source_url, file_name, content_text, content_iv, content_encrypted, content_hash,
         sync_status, sync_error, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       memory.id,
@@ -425,7 +423,6 @@ export async function insertMemory(memory: MemoryRecord): Promise<void> {
       memory.contentIv,
       memory.isEncrypted ? 1 : 0,
       memory.contentHash,
-      memory.arweaveTxId,
       memory.syncStatus,
       memory.syncError,
       memory.createdAt,
@@ -439,7 +436,7 @@ export async function listMemoriesByUser(userId: string, limit = 100): Promise<M
   
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, source_type, source_url, file_name, content_hash, arweave_tx_id, created_at,
+      SELECT id, user_id, title, source_type, source_url, file_name, content_hash, created_at,
              memory_type, importance, importance_tier, tags_csv, sync_status, sync_error, content_iv, content_encrypted,
              (
                SELECT COUNT(*)
@@ -476,7 +473,6 @@ export async function listMemoriesByUser(userId: string, limit = 100): Promise<M
     contentIv: row.content_iv as string | null,
     isEncrypted: Number(row.content_encrypted ?? 0) === 1,
     contentHash: row.content_hash as string,
-    arweaveTxId: row.arweave_tx_id as string | null,
     syncStatus: (row.sync_status as MemorySyncStatus) ?? "pending",
     syncError: row.sync_error as string | null,
     createdAt: row.created_at as string,
@@ -491,7 +487,7 @@ export async function listMemoryRecordsByUser(userId: string, limit = 100): Prom
   
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, arweave_tx_id, created_at,
+      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, created_at,
              memory_type, importance, tags_csv, sync_status, sync_error, content_iv, content_encrypted
       FROM memories
       WHERE user_id = ?
@@ -510,7 +506,7 @@ export async function getMemoryById(id: string): Promise<MemoryRecord | null> {
   
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, arweave_tx_id, created_at,
+      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, created_at,
              memory_type, importance, tags_csv, sync_status, sync_error, content_iv, content_encrypted
       FROM memories
       WHERE id = ?
@@ -536,7 +532,7 @@ export async function getMemoriesByIds(userId: string, ids: string[]): Promise<M
   
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, source_type, source_url, file_name, content_hash, arweave_tx_id, created_at,
+      SELECT id, user_id, title, source_type, source_url, file_name, content_hash, created_at,
              memory_type, importance, importance_tier, tags_csv, sync_status, sync_error, content_iv, content_encrypted,
              (
                SELECT COUNT(*)
@@ -571,7 +567,6 @@ export async function getMemoriesByIds(userId: string, ids: string[]): Promise<M
     contentIv: row.content_iv as string | null,
     isEncrypted: Number(row.content_encrypted ?? 0) === 1,
     contentHash: row.content_hash as string,
-    arweaveTxId: row.arweave_tx_id as string | null,
     syncStatus: (row.sync_status as MemorySyncStatus) ?? "pending",
     syncError: row.sync_error as string | null,
     createdAt: row.created_at as string,
@@ -1340,9 +1335,9 @@ export async function insertAgentMemory(params: {
       sql: `
         INSERT INTO memories (
           id, user_id, title, source_type, memory_type, importance, importance_tier, tags_csv,
-          source_url, file_name, content_text, content_iv, content_encrypted, content_hash, arweave_tx_id,
+          source_url, file_name, content_text, content_iv, content_encrypted, content_hash,
           sync_status, sync_error, created_at, namespace_id, session_id, metadata_json, entities, entities_json
-        ) VALUES (?, ?, ?, ?, ?, 5, ?, '', ?, ?, ?, NULL, ?, ?, NULL, 'pending', NULL, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, 5, ?, '', ?, ?, ?, NULL, ?, ?, 'pending', NULL, ?, ?, ?, ?, ?, ?)
       `,
       args: [
         id,
@@ -2225,11 +2220,11 @@ export async function insertMemoryWithMetadata(params: {
     sql: `
       INSERT INTO memories (
         id, user_id, title, source_type, memory_type, importance, tags_csv,
-        source_url, file_name, content_text, content_iv, content_encrypted, content_hash, arweave_tx_id,
+        source_url, file_name, content_text, content_iv, content_encrypted, content_hash,
         sync_status, sync_error, created_at, namespace_id, session_id, metadata_json,
         embedding, embedding_hash, strength, base_strength, halflife_days, entities, entities_json, source_conversations,
         first_mentioned_at, last_mentioned_at, last_accessed_at
-      ) VALUES (?, ?, ?, 'text', ?, ?, '', NULL, NULL, ?, NULL, 0, ?, NULL, 'pending', NULL, ?, ?, ?, ?,
+      ) VALUES (?, ?, ?, 'text', ?, ?, '', NULL, NULL, ?, NULL, 0, ?, 'pending', NULL, ?, ?, ?, ?,
                 ?, ?, 1.0, 1.0, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
@@ -2318,11 +2313,11 @@ export async function insertMemoryWithMetadataAndQuota(params: {
       sql: `
         INSERT INTO memories (
           id, user_id, title, source_type, memory_type, importance, tags_csv,
-          source_url, file_name, content_text, content_iv, content_encrypted, content_hash, arweave_tx_id,
+          source_url, file_name, content_text, content_iv, content_encrypted, content_hash,
           sync_status, sync_error, created_at, namespace_id, session_id, metadata_json,
           embedding, embedding_hash, strength, base_strength, halflife_days, entities, entities_json, source_conversations,
           first_mentioned_at, last_mentioned_at, last_accessed_at
-        ) VALUES (?, ?, ?, 'text', ?, ?, '', NULL, NULL, ?, NULL, 0, ?, NULL, 'pending', NULL, ?, ?, ?, ?,
+        ) VALUES (?, ?, ?, 'text', ?, ?, '', NULL, NULL, ?, NULL, 0, ?, 'pending', NULL, ?, ?, ?, ?,
                   ?, ?, 1.0, 1.0, ?, ?, ?, ?, ?, ?, ?)
       `,
       args: [

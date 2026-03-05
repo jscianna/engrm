@@ -193,7 +193,6 @@ async function persistToDb(params: {
     contentIv: params.iv ?? null,
     isEncrypted,
     contentHash: hashContent(contentHashInput),
-    arweaveTxId: null,
     syncStatus: "pending",
     syncError: null,
     createdAt: new Date().toISOString(),
