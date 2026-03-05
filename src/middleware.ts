@@ -6,15 +6,18 @@ const isProtectedRoute = createRouteMatcher([
   "/api/memories(.*)", 
   "/api/settings(.*)", 
   "/api/dashboard(.*)",
-  "/api/v1/auth(.*)",
   "/api/dream-cycle(.*)",
   "/api/feedback(.*)",
 ]);
-// Routes that use API key auth instead of Clerk
-const isApiKeyAuthRoute = createRouteMatcher(["/api/admin(.*)", "/api/v1(?!/auth)(.*)"]);
 
-// Block bot scanner paths (WordPress, PHP vulns, etc.)
-// Use startsWith to avoid false positives (e.g., UUID starting with "db")
+// Routes that use API key auth instead of Clerk (skip auth.protect)
+const isApiKeyAuthRoute = createRouteMatcher([
+  "/api/admin(.*)", 
+  "/api/v1(.*)",
+  "/api/health(.*)",
+]);
+
+// Block bot scanner paths
 const BLOCKED_PATH_PREFIXES = [
   "/wp-admin", "/wp-login", "/wp-content", "/wp-includes", "/wp-config",
   "/wordpress", "/xmlrpc", "/phpmyadmin", "/administrator", 
@@ -30,12 +33,11 @@ function isBlockedPath(pathname: string): boolean {
 export default clerkMiddleware(async (auth, request) => {
   const pathname = request.nextUrl.pathname;
   
-  // Block scanner bots immediately (return 404, not redirect)
   if (isBlockedPath(pathname)) {
     return new NextResponse(null, { status: 404 });
   }
   
-  // Skip Clerk auth for routes that use API key auth
+  // Skip Clerk auth for API key auth routes
   if (isApiKeyAuthRoute(request)) {
     return NextResponse.next();
   }
@@ -47,11 +49,7 @@ export default clerkMiddleware(async (auth, request) => {
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and static files
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    // Always run for API routes that use Clerk auth
-    "/api/:path*",
-    // Always run for dashboard
     "/dashboard/:path*",
+    "/api/:path*",
   ],
 };
