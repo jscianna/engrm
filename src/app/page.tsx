@@ -93,14 +93,14 @@ export default function Home() {
         <div className="mx-auto max-w-6xl">
           <div className="text-center space-y-6 max-w-3xl mx-auto">
             <Badge className="border-cyan-500/30 bg-cyan-500/10 text-cyan-300">
-              Memory Infrastructure for AI
+              Install once. Remember forever.
             </Badge>
             <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
               The cognitive<br />
               <span className="text-cyan-400">layer.</span>
             </h1>
             <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
-              Memory infrastructure for AI agents. Every conversation builds on the last.
+              Memory that works automatically. Your agent recalls what matters, stores what&apos;s important, and gets smarter over time.
             </p>
             <div className="flex flex-wrap gap-4 justify-center pt-4">
               {hasClerk ? (
@@ -248,9 +248,9 @@ export default function Home() {
       <section className="relative px-6 py-20 md:px-10 bg-zinc-900/30" id="features">
         <div className="mx-auto max-w-6xl">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold sm:text-4xl mb-4">Built for Production</h2>
+            <h2 className="text-3xl font-bold sm:text-4xl mb-4">Works Automatically</h2>
             <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
-              Everything you need to give your agents real memory.
+              No manual API calls. Your agent just remembers.
             </p>
           </div>
 
