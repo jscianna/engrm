@@ -186,15 +186,31 @@ const SECRET_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
   // ============================================================================
   // Explicit credential labels (context patterns)
   // ============================================================================
-  { pattern: /password\s*[:=]\s*["']?[^\s"']{8,}["']?/gi, name: "Password" },
-  { pattern: /passwd\s*[:=]\s*["']?[^\s"']{8,}["']?/gi, name: "Password" },
-  { pattern: /pwd\s*[:=]\s*["']?[^\s"']{8,}["']?/gi, name: "Password" },
-  { pattern: /secret\s*[:=]\s*["']?[^\s"']{16,}["']?/gi, name: "Secret" },
-  { pattern: /api[_-]?key\s*[:=]\s*["']?[^\s"']{16,}["']?/gi, name: "API key" },
-  { pattern: /api[_-]?secret\s*[:=]\s*["']?[^\s"']{16,}["']?/gi, name: "API secret" },
-  { pattern: /auth[_-]?token\s*[:=]\s*["']?[^\s"']{16,}["']?/gi, name: "Auth token" },
-  { pattern: /access[_-]?token\s*[:=]\s*["']?[^\s"']{16,}["']?/gi, name: "Access token" },
-  { pattern: /private[_-]?key\s*[:=]\s*["']?[^\s"']{16,}["']?/gi, name: "Private key" },
+  // Password variations
+  { pattern: /password\s*[:=\-]\s*["']?[^\s"']{6,}["']?/gi, name: "Password" },
+  { pattern: /passwd\s*[:=\-]\s*["']?[^\s"']{6,}["']?/gi, name: "Password" },
+  { pattern: /pwd\s*[:=\-]\s*["']?[^\s"']{6,}["']?/gi, name: "Password" },
+  { pattern: /\bpw\s*[:=\-]\s*["']?[^\s"']{6,}["']?/gi, name: "Password" },
+  { pattern: /\bpass\s*[:=\-]\s*["']?[^\s"']{6,}["']?/gi, name: "Password" },
+  
+  // API key variations (including natural language with dash)
+  { pattern: /api\s*key\s*[:=\-]\s*["']?[^\s"']{10,}["']?/gi, name: "API key" },
+  { pattern: /api[_-]?key\s*[:=\-]\s*["']?[^\s"']{10,}["']?/gi, name: "API key" },
+  { pattern: /apikey\s*[:=\-]\s*["']?[^\s"']{10,}["']?/gi, name: "API key" },
+  
+  // Secret/token variations
+  { pattern: /secret\s*[:=\-]\s*["']?[^\s"']{10,}["']?/gi, name: "Secret" },
+  { pattern: /api[_-]?secret\s*[:=\-]\s*["']?[^\s"']{10,}["']?/gi, name: "API secret" },
+  { pattern: /auth[_-]?token\s*[:=\-]\s*["']?[^\s"']{10,}["']?/gi, name: "Auth token" },
+  { pattern: /access[_-]?token\s*[:=\-]\s*["']?[^\s"']{10,}["']?/gi, name: "Access token" },
+  { pattern: /private[_-]?key\s*[:=\-]\s*["']?[^\s"']{10,}["']?/gi, name: "Private key" },
+  { pattern: /token\s*[:=\-]\s*["']?[^\s"']{16,}["']?/gi, name: "Token" },
+  
+  // Login credential patterns (username/email + password combos)
+  { pattern: /(?:username|user|email|login)\s*[:=\-]\s*[^\s]+\s+(?:password|pw|pwd|pass)\s*[:=\-]\s*["']?[^\s"']{4,}["']?/gi, name: "Login credentials" },
+  
+  // Credential blocks
+  { pattern: /credentials?\s*[:=\-]?\s*\{[^}]*(?:password|secret|key)[^}]*\}/gi, name: "Credential block" },
 ];
 
 export interface SecretDetectionResult {
