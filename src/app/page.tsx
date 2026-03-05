@@ -449,9 +449,9 @@ export default function Home() {
       <section className="relative px-6 py-20 md:px-10 bg-zinc-900/30">
         <div className="mx-auto max-w-4xl">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold sm:text-4xl mb-4">Simple Integration</h2>
+            <h2 className="text-3xl font-bold sm:text-4xl mb-4">Install in 3 Commands</h2>
             <p className="text-zinc-400 text-lg">
-              Get started in minutes with our Python SDK.
+              OpenClaw plugin. Memory works automatically across all your chats.
             </p>
           </div>
 
@@ -460,41 +460,40 @@ export default function Home() {
               <div className="w-3 h-3 rounded-full bg-red-500" />
               <div className="w-3 h-3 rounded-full bg-yellow-500" />
               <div className="w-3 h-3 rounded-full bg-green-500" />
-              <span className="text-sm text-zinc-500 ml-2">agent.py</span>
+              <span className="text-sm text-zinc-500 ml-2">terminal</span>
             </div>
             <pre className="p-6 overflow-x-auto text-sm">
-              <code className="text-zinc-300 font-mono">{`import requests
+              <code className="text-zinc-300 font-mono">{`# Install the Engrm memory plugin
+openclaw plugins install @engrm/memory
 
-API_KEY = "mem_your_api_key"
-BASE = "https://engrm.xyz/api/v1"
+# Set your API key
+openclaw config set plugins.entries.memory-engrm.config.apiKey=mem_xxx
 
-def headers():
-    return {"Authorization": f"Bearer {API_KEY}"}
+# Enable as memory provider
+openclaw config set plugins.slots.memory=memory-engrm
 
-# Start session → get relevant context
-session = requests.post(f"{BASE}/sessions/start", 
-    headers=headers(),
-    json={"firstMessage": "Help me with my project"}
-).json()
-
-print(f"Context loaded: {session['stats']['tokensInjected']} tokens")
-# "Context loaded: 156 tokens"
-
-# Your agent responds with full context awareness...
-# After the conversation:
-
-# Store what you learned
-requests.post(f"{BASE}/simple/remember",
-    headers=headers(), 
-    json={"text": "User prefers REST over GraphQL"}
-)
-
-# End session
-requests.post(f"{BASE}/sessions/{session['sessionId']}/end",
-    headers=headers(),
-    json={"outcome": "success"}
-)`}</code>
+# Done. Your agent now remembers everything.
+# Works across Telegram, Discord, Slack, and all channels.`}</code>
             </pre>
+          </div>
+          
+          <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+            <div className="p-4 rounded-lg bg-zinc-900/50 border border-zinc-800">
+              <div className="text-cyan-400 font-semibold">Auto-Recall</div>
+              <div className="text-zinc-500 text-sm">Context injected at start</div>
+            </div>
+            <div className="p-4 rounded-lg bg-zinc-900/50 border border-zinc-800">
+              <div className="text-cyan-400 font-semibold">Auto-Capture</div>
+              <div className="text-zinc-500 text-sm">Insights stored automatically</div>
+            </div>
+            <div className="p-4 rounded-lg bg-zinc-900/50 border border-zinc-800">
+              <div className="text-cyan-400 font-semibold">Cross-Platform</div>
+              <div className="text-zinc-500 text-sm">Every chat surface</div>
+            </div>
+            <div className="p-4 rounded-lg bg-zinc-900/50 border border-zinc-800">
+              <div className="text-cyan-400 font-semibold">Model Agnostic</div>
+              <div className="text-zinc-500 text-sm">Claude, GPT, Gemini</div>
+            </div>
           </div>
         </div>
       </section>
