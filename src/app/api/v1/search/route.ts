@@ -81,14 +81,14 @@ export async function POST(request: Request) {
       .sort((left, right) => right.score - left.score)
       .slice(0, topK);
 
-    // Increment access counts for retrieved memories
+    // Non-blocking: increment access counts and record hits
     const retrievedIds = results.map((result) => result.id);
-    await incrementAccessCounts(identity.userId, retrievedIds);
-    await recordMemorySearchHits(identity.userId, retrievedIds);
-
-    // Trigger auto-promotion check (async, non-blocking)
-    checkAndPromoteMemories(identity.userId).catch((err) => {
-      console.error("[Search] Auto-promotion check failed:", err);
+    Promise.all([
+      incrementAccessCounts(identity.userId, retrievedIds),
+      recordMemorySearchHits(identity.userId, retrievedIds),
+      checkAndPromoteMemories(identity.userId),
+    ]).catch((err) => {
+      console.error("[Search] Background tasks failed:", err);
     });
 
     return Response.json(results);

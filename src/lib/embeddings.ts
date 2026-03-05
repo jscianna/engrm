@@ -1,12 +1,17 @@
 /**
  * Embeddings with fallback chain:
- * 1. Cache (warm lambda memory)
- * 2. OpenAI text-embedding-3-small (primary)
- * 3. Cohere embed-english-v3.0 (fallback)
- * 4. Zero vector (last resort)
+ * 1. Persistent cache (Upstash Redis) - survives deployments
+ * 2. In-memory cache (warm lambda) - fast for hot queries  
+ * 3. OpenAI text-embedding-3-small (primary)
+ * 4. Cohere embed-english-v3.0 (fallback)
+ * 5. Zero vector (last resort)
+ * 
+ * Speed goal: Make agents feel smarter by being faster.
+ * Repeat queries should be near-instant.
  */
 
 import { getCachedEmbedding, setCachedEmbedding } from "./embedding-cache";
+import { getCachedEmbeddingPersistent, setCachedEmbeddingPersistent } from "./embedding-cache-redis";
 
 const EMBEDDING_DIMENSION = 384; // Standardized output dimension
 
@@ -92,27 +97,38 @@ export async function embedText(input: string): Promise<number[]> {
     return new Array(EMBEDDING_DIMENSION).fill(0);
   }
 
-  // Check cache first (warm lambda memory)
-  const cached = getCachedEmbedding(input);
-  if (cached) {
-    return cached;
+  // 1. Check in-memory cache (fastest - same lambda instance)
+  const memoryCached = getCachedEmbedding(input);
+  if (memoryCached) {
+    return memoryCached;
   }
 
-  // Try OpenAI first
+  // 2. Check persistent cache (Upstash Redis - survives cold starts)
+  const persistentCached = await getCachedEmbeddingPersistent(input);
+  if (persistentCached) {
+    // Warm the in-memory cache too
+    setCachedEmbedding(input, persistentCached);
+    return persistentCached;
+  }
+
+  // 3. Try OpenAI (primary)
   const openaiResult = await embedWithOpenAI(input);
   if (openaiResult) {
+    // Cache in both layers
     setCachedEmbedding(input, openaiResult);
+    setCachedEmbeddingPersistent(input, openaiResult).catch(() => {}); // Non-blocking
     return openaiResult;
   }
 
-  // Fallback to Cohere
+  // 4. Fallback to Cohere
   const cohereResult = await embedWithCohere(input);
   if (cohereResult) {
     setCachedEmbedding(input, cohereResult);
+    setCachedEmbeddingPersistent(input, cohereResult).catch(() => {}); // Non-blocking
     return cohereResult;
   }
 
-  // Last resort: zero vector (search won't work but app won't crash)
+  // 5. Last resort: zero vector (search won't work but app won't crash)
   console.warn("[Embeddings] All providers failed, returning zero vector");
   return new Array(EMBEDDING_DIMENSION).fill(0);
 }
