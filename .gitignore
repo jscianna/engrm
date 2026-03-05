@@ -44,3 +44,4 @@ data/vectra/
 packages/memry-mcp/node_modules/
 
 # Force npm
+extensions/memory-engrm/node_modules/

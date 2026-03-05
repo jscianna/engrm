@@ -215,7 +215,7 @@ const memoryEngramPlugin = {
   kind: "memory" as const,
 
   register(api: OpenClawPluginApi) {
-    const cfg = api.pluginConfig as EngramConfig;
+    const cfg = (api.pluginConfig ?? {}) as unknown as EngramConfig;
     
     if (!cfg.apiKey) {
       api.logger.warn("memory-engrm: No API key configured");
