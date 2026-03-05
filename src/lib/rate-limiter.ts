@@ -10,8 +10,9 @@ import { getDb } from "./turso";
 import { MemryError } from "./errors";
 
 // Beta limits - generous but protective
+// NOTE: Temporarily bumped to 600 for benchmark testing (was 60)
 export const LIMITS = {
-  REQUESTS_PER_MINUTE: 60,
+  REQUESTS_PER_MINUTE: 600,
   REQUESTS_PER_DAY: 10_000,
   MEMORIES_PER_MONTH: 5_000,
   STORAGE_BYTES: 100 * 1024 * 1024, // 100MB
