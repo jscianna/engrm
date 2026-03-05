@@ -57,3 +57,13 @@ logo-engrm*.svg
 
 # Local data
 data/
+
+# Build artifacts
+tsconfig.tsbuildinfo
+.next/
+
+# Internal docs
+generate-pptx.py
+CHATBOT-*.md
+FRONTEND_AUDIT.md
+moa-heuristics-synthesis.md
