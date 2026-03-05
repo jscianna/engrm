@@ -96,8 +96,8 @@ export default function Home() {
               Install once. Remember forever.
             </Badge>
             <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
-              The cognitive<br />
-              <span className="text-cyan-400">layer.</span>
+              Memory that<br />
+              <span className="text-cyan-400">just works.</span>
             </h1>
             <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
               Memory that works automatically. Your agent recalls what matters, stores what&apos;s important, and gets smarter over time.
@@ -464,7 +464,7 @@ export default function Home() {
             </div>
             <pre className="p-6 overflow-x-auto text-sm">
               <code className="text-zinc-300 font-mono">{`# Install the Engrm memory plugin
-openclaw plugins install @engrm/memory
+openclaw plugins install @engrm/openclaw-memory
 
 # Set your API key
 openclaw config set plugins.entries.memory-engrm.config.apiKey=mem_xxx
