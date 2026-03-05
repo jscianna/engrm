@@ -311,30 +311,29 @@ txt(slide, 1.2, 1.5, 10, 1, "Developer experience", size=48, color=WHITE, bold=T
 txt(slide, 1.2, 2.6, 10, 0.6, "Memory should feel automatic. Integration in minutes.", size=20, color=GRAY)
 
 add_card(slide, 1.2, 3.5, 7, 4, DARK_GRAY, YELLOW)
-txt(slide, 1.5, 3.7, 6, 0.5, "Python SDK", size=18, color=YELLOW, bold=True)
-mono(slide, 1.5, 4.3, 6.5, 3, """from engrm import Engrm
+txt(slide, 1.5, 3.7, 6, 0.5, "OpenClaw Plugin", size=18, color=YELLOW, bold=True)
+mono(slide, 1.5, 4.3, 6.5, 3, """# Install the plugin
+openclaw plugins install @engrm/memory
 
-client = Engrm(api_key="mem_...")
+# Configure
+openclaw config set \\
+  plugins.slots.memory=memory-engrm
+openclaw config set \\
+  plugins.entries.memory-engrm.\\
+  config.apiKey=mem_xxx
 
-# Store automatically
-client.store("User loves hiking")
-
-# Recall with context
-memories = client.search("outdoor activities")
-
-# Inject into prompt
-context = client.context()""", size=11, color=WHITE)
+# Done. Memory is automatic.""", size=11, color=WHITE)
 
 add_card(slide, 8.7, 3.5, 6.3, 4, DARK_GRAY)
 txt(slide, 9, 3.7, 5.5, 0.5, "What you get", size=18, color=WHITE, bold=True)
-txt(slide, 9, 4.3, 5.8, 3, """✓ Auto memory classification
-✓ Entity extraction included
-✓ Semantic + keyword search
-✓ Token-optimized context
+txt(slide, 9, 4.3, 5.8, 3, """✓ Auto-recall at session start
+✓ Auto-capture after conversations
+✓ Works across all chat channels
+✓ Survives model switches
+✓ Cloud-native (cross-device)
+✓ Encrypted at rest (AES-256)
 ✓ Memory Browser dashboard
-✓ Usage analytics
-✓ MCP server for Claude
-✓ REST API + TypeScript SDK""", size=13, color=GRAY)
+✓ REST API available""", size=13, color=GRAY)
 
 mono(slide, 14.5, 8.2, 1.2, 0.4, "09", color=YELLOW, align=PP_ALIGN.RIGHT)
 
