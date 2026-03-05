@@ -18,7 +18,9 @@
     "engrm"
   ],
   "openclaw": {
-    "extensions": ["./index.ts"]
+    "extensions": [
+      "./index.ts"
+    ]
   },
   "files": [
     "index.ts",
@@ -28,6 +30,6 @@
     "openclaw": ">=2025.1.0"
   },
   "devDependencies": {
-    "@sinclair/typebox": "^0.32.0"
+    "@sinclair/typebox": "^0.32.35"
   }
 }

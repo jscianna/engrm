@@ -228,7 +228,47 @@ txt(slide, 1.2, 7.2, 14, 0.5, "Encryption is non-negotiable. Removed for perform
 mono(slide, 14.5, 8.2, 1.2, 0.4, "06", color=YELLOW, align=PP_ALIGN.RIGHT)
 
 # ============================================================
-# SLIDE 7: Competitive Landscape
+# SLIDE 7: Model & Platform Agnostic
+# ============================================================
+slide = prs.slides.add_slide(prs.slide_layouts[6])
+add_black_bg(slide)
+
+txt(slide, 1.2, 1.5, 12, 1.2, "Memory outlives\nyour model choice", size=52, color=WHITE, bold=True)
+txt(slide, 1.2, 3.5, 8, 0.6, "One memory layer. Every surface. Any model.", size=20, color=GRAY)
+
+# Left column - Cross-Model
+add_card(slide, 1.2, 4.3, 4.5, 3.2, DARK_GRAY, CYAN)
+txt(slide, 1.5, 4.5, 4, 0.5, "Model Agnostic", size=18, color=CYAN, bold=True)
+txt(slide, 1.5, 5.1, 4, 2.2, """✓ Claude → GPT → Gemini
+✓ Switch models, keep memories
+✓ Not locked to OpenAI
+✓ Works with local models
+✓ Future-proof infrastructure""", size=13, color=WHITE)
+
+# Middle column - Cross-Platform
+add_card(slide, 6, 4.3, 4.5, 3.2, DARK_GRAY, CYAN)
+txt(slide, 6.3, 4.5, 4, 0.5, "Cross-Platform", size=18, color=CYAN, bold=True)
+txt(slide, 6.3, 5.1, 4, 2.2, """✓ Telegram, Discord, Slack
+✓ Web, mobile, CLI
+✓ Same memories everywhere
+✓ Any chat surface
+✓ One API, all channels""", size=13, color=WHITE)
+
+# Right column - Cross-Device
+add_card(slide, 10.8, 4.3, 4.5, 3.2, DARK_GRAY, CYAN)
+txt(slide, 11.1, 4.5, 4, 0.5, "Cross-Device", size=18, color=CYAN, bold=True)
+txt(slide, 11.1, 5.1, 4, 2.2, """✓ Cloud-native storage
+✓ Survives restarts
+✓ Works from any device
+✓ Encrypted in transit & rest
+✓ No local dependencies""", size=13, color=WHITE)
+
+txt(slide, 1.2, 8, 10, 0.5, "ChatGPT memory is locked to OpenAI. Engrm memory is yours.", size=16, color=GRAY)
+
+mono(slide, 14.5, 8.2, 1.2, 0.4, "07", color=CYAN, align=PP_ALIGN.RIGHT)
+
+# ============================================================
+# SLIDE 8: Competitive Landscape
 # ============================================================
 slide = prs.slides.add_slide(prs.slide_layouts[6])
 add_yellow_bg(slide)
@@ -247,9 +287,9 @@ txt(slide, 12.5, 3.7, 2, 0.4, "Engrm", size=14, color=YELLOW, bold=True)
 rows = [
     ("Setup", "Days", "Minutes", "Minutes"),
     ("Integration", "ECL pipeline", "Simple API", "2 endpoints"),
-    ("Infrastructure", "Graph + Vector + SQL", "Hosted", "Managed"),
+    ("Model lock-in", "None", "None", "None ✓"),
     ("Encryption", "Enterprise tier", "Optional", "Default ✓"),
-    ("Self-improving", "Complex tuning", "Limited", "Built-in ✓"),
+    ("Cross-platform", "API only", "API only", "Built-in ✓"),
     ("Privacy model", "Standard", "Standard", "User-only ✓"),
 ]
 for i, (label, cognee, mem0, engrm) in enumerate(rows):
@@ -259,7 +299,7 @@ for i, (label, cognee, mem0, engrm) in enumerate(rows):
     txt(slide, 9.5, y, 2.5, 0.5, mem0, size=12, color=WHITE)
     txt(slide, 12.5, y, 2, 0.5, engrm, size=12, color=YELLOW)
 
-mono(slide, 14.5, 8.2, 1.2, 0.4, "07", color=GRAY, align=PP_ALIGN.RIGHT)
+mono(slide, 14.5, 8.2, 1.2, 0.4, "08", color=GRAY, align=PP_ALIGN.RIGHT)
 
 # ============================================================
 # SLIDE 8: DX & SDK
@@ -296,7 +336,7 @@ txt(slide, 9, 4.3, 5.8, 3, """✓ Auto memory classification
 ✓ MCP server for Claude
 ✓ REST API + TypeScript SDK""", size=13, color=GRAY)
 
-mono(slide, 14.5, 8.2, 1.2, 0.4, "08", color=YELLOW, align=PP_ALIGN.RIGHT)
+mono(slide, 14.5, 8.2, 1.2, 0.4, "09", color=YELLOW, align=PP_ALIGN.RIGHT)
 
 # ============================================================
 # SLIDE 9: Status & Roadmap
@@ -328,7 +368,7 @@ txt(slide, 9, 3.8, 5.5, 3.5, """→ LangChain integration
 → Enterprise SSO + audit logs
 → On-prem deployment option""", size=13, color=GRAY)
 
-mono(slide, 14.5, 8.2, 1.2, 0.4, "09", color=GRAY, align=PP_ALIGN.RIGHT)
+mono(slide, 14.5, 8.2, 1.2, 0.4, "11", color=GRAY, align=PP_ALIGN.RIGHT)
 
 # ============================================================
 # SLIDE 10: Pricing
@@ -352,7 +392,7 @@ for i, (tier, price, features) in enumerate(tiers):
     txt(slide, x + 0.3, 4.3, 4, 0.7, price, size=44, color=YELLOW if is_pro else WHITE, bold=True)
     txt(slide, x + 0.3, 5.2, 4, 2.2, features, size=13, color=WHITE if is_pro else GRAY)
 
-mono(slide, 14.5, 8.2, 1.2, 0.4, "10", color=GRAY, align=PP_ALIGN.RIGHT)
+mono(slide, 14.5, 8.2, 1.2, 0.4, "11", color=GRAY, align=PP_ALIGN.RIGHT)
 
 # ============================================================
 # SLIDE 11: CTA
@@ -369,7 +409,7 @@ txt(slide, 1.4, 7.1, 3.2, 0.5, "Start building →", size=16, color=BLACK, bold=
 
 txt(slide, 1.2, 8, 4, 0.4, "engrm.xyz", size=18, color=YELLOW, bold=True, font="Consolas")
 
-mono(slide, 14.5, 8.2, 1.2, 0.4, "11", color=YELLOW, align=PP_ALIGN.RIGHT)
+mono(slide, 14.5, 8.2, 1.2, 0.4, "12", color=YELLOW, align=PP_ALIGN.RIGHT)
 
 # Save
 output_path = '/Users/clawdaddy/clawd/projects/engrm/Engrm-Pitch-Deck-v3.pptx'
