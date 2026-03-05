@@ -1,7 +1,7 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-const isProtectedRoute = createRouteMatcher(["/dashboard(.*)", "/api/memories(.*)"]);
+const isProtectedRoute = createRouteMatcher(["/dashboard(.*)", "/api/memories(.*)", "/api/settings(.*)", "/api/dashboard(.*)"]);
 const isAdminRoute = createRouteMatcher(["/api/admin(.*)"]);
 
 // Block bot scanner paths (WordPress, PHP vulns, etc.)
@@ -42,5 +42,6 @@ export const config = {
     "/dashboard/:path*",
     "/api/memories/:path*",
     "/api/dashboard/:path*",
+    "/api/settings/:path*",
   ],
 };
