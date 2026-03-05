@@ -45,3 +45,12 @@ packages/memry-mcp/node_modules/
 
 # Force npm
 extensions/memory-engrm/node_modules/
+
+# Private/internal files
+*.pptx
+*.pen
+create_deck*.py
+
+# Logo drafts
+logo-asymmetric*
+logo-engrm*.svg
