@@ -14,9 +14,65 @@ export default function OpenClawGuidePage() {
         integrate Engrm for cross-session memory, context injection, and learning storage.
       </P>
 
-      <H2 id="setup">Setup</H2>
+      <H2 id="automatic">Automatic Integration (Recommended)</H2>
       <P>
-        Add your Engrm API key to your agent's <InlineCode>TOOLS.md</InlineCode>:
+        Install the <InlineCode>engrm-openclaw</InlineCode> hook for automatic 
+        memory recall. No manual API calls needed.
+      </P>
+
+      <CodeBlock language="bash">{`# Install the hook
+openclaw hooks install engrm-openclaw
+openclaw hooks enable memory-engrm
+
+# Configure your API key
+openclaw config set hooks.internal.entries.memory-engrm.config.apiKey "mem_your_key"
+
+# Restart gateway
+openclaw gateway restart`}</CodeBlock>
+
+      <H3>What It Does</H3>
+      <P>
+        The hook automatically fetches relevant memories when:
+      </P>
+      <ul className="list-disc list-inside text-zinc-400 space-y-2 mb-4">
+        <li><strong>Conversation starts:</strong> First message triggers context fetch</li>
+        <li><strong>Trigger keywords:</strong> "remember", "what did we decide", "previously"</li>
+        <li><strong>Project names mentioned:</strong> Configurable trigger words</li>
+        <li><strong>Periodic refresh:</strong> Every 5 minutes for long conversations</li>
+      </ul>
+      <P>
+        Context is written to <InlineCode>ENGRM_CONTEXT.md</InlineCode> in your 
+        workspace for agent reference.
+      </P>
+
+      <H3>Custom Trigger Words</H3>
+      <P>
+        Add project names or keywords to trigger context fetch:
+      </P>
+      <CodeBlock language="json">{`{
+  "hooks": {
+    "internal": {
+      "entries": {
+        "memory-engrm": {
+          "enabled": true,
+          "config": {
+            "apiKey": "mem_your_key",
+            "triggerWords": ["myproject", "acme", "product-name"]
+          }
+        }
+      }
+    }
+  }
+}`}</CodeBlock>
+
+      <Note type="tip">
+        The automatic hook handles context injection. You still need to manually 
+        store new memories using the API below.
+      </Note>
+
+      <H2 id="setup">Manual Setup</H2>
+      <P>
+        If you prefer manual control, add your Engrm API key to your agent's <InlineCode>TOOLS.md</InlineCode>:
       </P>
 
       <CodeBlock language="markdown">{`## Engrm — Agent Memory
