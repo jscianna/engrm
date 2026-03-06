@@ -16,18 +16,18 @@ export default function OpenClawGuidePage() {
 
       <H2 id="plugin">Plugin Installation (Recommended)</H2>
       <P>
-        Install the full-featured <InlineCode>@engrm/openclaw-memory</InlineCode> plugin 
+        Install the full-featured <InlineCode>@engrm/memory</InlineCode> plugin 
         for automatic recall AND capture.
       </P>
 
       <CodeBlock language="bash">{`# Install the plugin
-openclaw plugins install @engrm/openclaw-memory
+openclaw plugins install @engrm/memory
 
-# Configure
-openclaw config set plugins.entries.memory-engrm.config.apiKey "mem_your_key"
+# Configure your API key
+openclaw config set plugins.entries.engrm-memory.config.apiKey "mem_your_key"
 
 # Enable as memory slot (replaces default memory)
-openclaw config set plugins.slots.memory memory-engrm
+openclaw config set plugins.slots.memory engrm-memory
 
 # Restart
 openclaw gateway restart`}</CodeBlock>
@@ -45,10 +45,10 @@ openclaw gateway restart`}</CodeBlock>
       <CodeBlock language="json">{`{
   "plugins": {
     "slots": {
-      "memory": "memory-engrm"
+      "memory": "engrm-memory"
     },
     "entries": {
-      "memory-engrm": {
+      "engrm-memory": {
         "enabled": true,
         "config": {
           "apiKey": "mem_your_key",
