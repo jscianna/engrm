@@ -1,11 +1,11 @@
-# engrm-openclaw
+# @engrm/openclaw-hook
 
 OpenClaw hook for [Engrm](https://engrm.xyz) - automatic memory recall for AI agents.
 
 ## Installation
 
 ```bash
-openclaw hooks install engrm-openclaw
+openclaw hooks install @engrm/openclaw-hook
 openclaw hooks enable memory-engrm
 ```
 

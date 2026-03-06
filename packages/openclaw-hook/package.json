@@ -1,5 +1,5 @@
 {
-  "name": "engrm-openclaw",
+  "name": "@engrm/openclaw-hook",
   "version": "0.1.0",
   "description": "Engrm memory hook for OpenClaw - auto-recall context on conversations",
   "type": "module",

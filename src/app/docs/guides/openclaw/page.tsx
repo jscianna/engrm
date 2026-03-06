@@ -21,7 +21,7 @@ export default function OpenClawGuidePage() {
       </P>
 
       <CodeBlock language="bash">{`# Install the hook
-openclaw hooks install engrm-openclaw
+openclaw hooks install @engrm/openclaw-hook
 openclaw hooks enable memory-engrm
 
 # Configure your API key
