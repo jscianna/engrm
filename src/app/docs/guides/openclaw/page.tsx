@@ -14,51 +14,48 @@ export default function OpenClawGuidePage() {
         integrate Engrm for cross-session memory, context injection, and learning storage.
       </P>
 
-      <H2 id="automatic">Automatic Integration (Recommended)</H2>
+      <H2 id="plugin">Plugin Installation (Recommended)</H2>
       <P>
-        Install the <InlineCode>engrm-openclaw</InlineCode> hook for automatic 
-        memory recall. No manual API calls needed.
+        Install the full-featured <InlineCode>@engrm/openclaw-memory</InlineCode> plugin 
+        for automatic recall AND capture.
       </P>
 
-      <CodeBlock language="bash">{`# Install the hook
-openclaw hooks install @engrm/openclaw-hook
-openclaw hooks enable memory-engrm
+      <CodeBlock language="bash">{`# Install the plugin
+openclaw plugins install @engrm/openclaw-memory
 
-# Configure your API key
-openclaw config set hooks.internal.entries.memory-engrm.config.apiKey "mem_your_key"
+# Configure
+openclaw config set plugins.entries.memory-engrm.config.apiKey "mem_your_key"
 
-# Restart gateway
+# Enable as memory slot (replaces default memory)
+openclaw config set plugins.slots.memory memory-engrm
+
+# Restart
 openclaw gateway restart`}</CodeBlock>
 
-      <H3>What It Does</H3>
-      <P>
-        The hook automatically fetches relevant memories when:
-      </P>
+      <H3>Features</H3>
       <ul className="list-disc list-inside text-zinc-400 space-y-2 mb-4">
-        <li><strong>Conversation starts:</strong> First message triggers context fetch</li>
-        <li><strong>Trigger keywords:</strong> "remember", "what did we decide", "previously"</li>
-        <li><strong>Project names mentioned:</strong> Configurable trigger words</li>
-        <li><strong>Periodic refresh:</strong> Every 5 minutes for long conversations</li>
+        <li><strong>Auto-Recall:</strong> Injects relevant memories into system prompt before each conversation</li>
+        <li><strong>Auto-Capture:</strong> Stores insights automatically after conversations (preferences, decisions, facts)</li>
+        <li><strong>Tools:</strong> <InlineCode>memory_recall</InlineCode>, <InlineCode>memory_store</InlineCode>, <InlineCode>memory_forget</InlineCode></li>
+        <li><strong>Encrypted:</strong> AES-256-GCM at rest</li>
+        <li><strong>Cross-device:</strong> Cloud-native, works everywhere</li>
       </ul>
-      <P>
-        Context is written to <InlineCode>ENGRM_CONTEXT.md</InlineCode> in your 
-        workspace for agent reference.
-      </P>
 
-      <H3>Custom Trigger Words</H3>
-      <P>
-        Add project names or keywords to trigger context fetch:
-      </P>
+      <H3>Configuration Options</H3>
       <CodeBlock language="json">{`{
-  "hooks": {
-    "internal": {
-      "entries": {
-        "memory-engrm": {
-          "enabled": true,
-          "config": {
-            "apiKey": "mem_your_key",
-            "triggerWords": ["myproject", "acme", "product-name"]
-          }
+  "plugins": {
+    "slots": {
+      "memory": "memory-engrm"
+    },
+    "entries": {
+      "memory-engrm": {
+        "enabled": true,
+        "config": {
+          "apiKey": "mem_your_key",
+          "autoRecall": true,
+          "autoCapture": true,
+          "recallLimit": 5,
+          "captureMaxChars": 2000
         }
       }
     }
@@ -66,11 +63,10 @@ openclaw gateway restart`}</CodeBlock>
 }`}</CodeBlock>
 
       <Note type="tip">
-        The automatic hook handles context injection. You still need to manually 
-        store new memories using the API below.
+        With the plugin installed, your agent automatically remembers and recalls — no manual API calls needed.
       </Note>
 
-      <H2 id="setup">Manual Setup</H2>
+      <H2 id="setup">Manual Setup (Alternative)</H2>
       <P>
         If you prefer manual control, add your Engrm API key to your agent's <InlineCode>TOOLS.md</InlineCode>:
       </P>

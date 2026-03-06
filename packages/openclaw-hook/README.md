@@ -1,6 +1,14 @@
-# @engrm/openclaw-hook
+# @engrm/openclaw-hook (DEPRECATED)
 
-OpenClaw hook for [Engrm](https://engrm.xyz) - automatic memory recall for AI agents.
+> ⚠️ **Deprecated**: Use `@engrm/openclaw-memory` instead for full features (auto-recall + auto-capture + tools).
+>
+> ```bash
+> openclaw plugins install @engrm/openclaw-memory
+> ```
+
+---
+
+Lightweight OpenClaw hook for [Engrm](https://engrm.xyz) - recall only, no auto-capture.
 
 ## Installation
 
