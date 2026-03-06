@@ -24,7 +24,7 @@ export async function GET() {
         SELECT 
           id, title, content_text, memory_type, importance_tier,
           access_count, feedback_score, last_accessed_at,
-          promotion_locked, decay_immune, locked_tier, created_at
+          promotion_locked, decay_immune, locked_tier, sensitive, created_at
         FROM memories
         WHERE user_id = ? AND archived_at IS NULL
         ORDER BY created_at DESC
@@ -49,6 +49,7 @@ export async function GET() {
         promotionLocked: Number(r.promotion_locked ?? 0) === 1,
         decayImmune: Number(r.decay_immune ?? 0) === 1,
         lockedTier: (r.locked_tier as MemoryImportanceTier | null) ?? null,
+        sensitive: Number(r.sensitive ?? 0) === 1,
         createdAt: r.created_at as string,
       };
     });

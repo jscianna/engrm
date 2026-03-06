@@ -21,6 +21,7 @@ export type TimelineMemory = {
   promotionLocked: boolean;
   decayImmune: boolean;
   lockedTier: MemoryImportanceTier | null;
+  sensitive: boolean;
   createdAt: string;
 };
 
@@ -82,6 +83,12 @@ function TimelineCard({ memory }: { memory: TimelineMemory }) {
                 <Badge variant="outline" className="text-xs bg-blue-900/30 text-blue-200 border-blue-700">
                   <Shield className="h-3 w-3 mr-1" />
                   Immune
+                </Badge>
+              )}
+              {memory.sensitive && (
+                <Badge variant="outline" className="text-xs bg-rose-900/30 text-rose-200 border-rose-700">
+                  <Lock className="h-3 w-3 mr-1" />
+                  Sensitive
                 </Badge>
               )}
             </div>

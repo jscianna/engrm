@@ -186,17 +186,23 @@ const SECRET_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
   // ============================================================================
   // Explicit credential labels (context patterns)
   // ============================================================================
-  // Password variations
+  // Password variations (colon/equals/dash separators)
   { pattern: /password\s*[:=\-]\s*["']?[^\s"']{6,}["']?/gi, name: "Password" },
   { pattern: /passwd\s*[:=\-]\s*["']?[^\s"']{6,}["']?/gi, name: "Password" },
   { pattern: /pwd\s*[:=\-]\s*["']?[^\s"']{6,}["']?/gi, name: "Password" },
   { pattern: /\bpw\s*[:=\-]\s*["']?[^\s"']{6,}["']?/gi, name: "Password" },
   { pattern: /\bpass\s*[:=\-]\s*["']?[^\s"']{6,}["']?/gi, name: "Password" },
+  // Password with space separator (e.g., "pw mypassword123")
+  { pattern: /\bpw\s+[^\s,;]{8,}/gi, name: "Password (space-separated)" },
+  { pattern: /\bpassword\s+[^\s,;]{8,}/gi, name: "Password (space-separated)" },
   
   // API key variations (including natural language with dash)
   { pattern: /api\s*key\s*[:=\-]\s*["']?[^\s"']{10,}["']?/gi, name: "API key" },
   { pattern: /api[_-]?key\s*[:=\-]\s*["']?[^\s"']{10,}["']?/gi, name: "API key" },
   { pattern: /apikey\s*[:=\-]\s*["']?[^\s"']{10,}["']?/gi, name: "API key" },
+  // API/admin key with space separator (e.g., "admin key abc123")
+  { pattern: /admin\s*key\s+[^\s,;]{8,}/gi, name: "Admin key (space-separated)" },
+  { pattern: /api\s*key\s+[^\s,;]{10,}/gi, name: "API key (space-separated)" },
   
   // Secret/token variations
   { pattern: /secret\s*[:=\-]\s*["']?[^\s"']{10,}["']?/gi, name: "Secret" },
