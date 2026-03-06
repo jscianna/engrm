@@ -1,0 +1,29 @@
+{
+  "name": "engrm-openclaw",
+  "version": "0.1.0",
+  "description": "Engrm memory hook for OpenClaw - auto-recall context on conversations",
+  "type": "module",
+  "main": "dist/handler.js",
+  "files": [
+    "dist/",
+    "hooks/"
+  ],
+  "openclaw": {
+    "hooks": ["./hooks/memory-engrm"]
+  },
+  "scripts": {
+    "build": "esbuild hooks/memory-engrm/handler.ts --outfile=hooks/memory-engrm/handler.js --format=esm --platform=node",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["openclaw", "engrm", "memory", "ai", "hooks"],
+  "author": "Engrm",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jscianna/engrm.git",
+    "directory": "packages/openclaw-hook"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0"
+  }
+}
