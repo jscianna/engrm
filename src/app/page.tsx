@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
+import { motion, useScroll, useTransform } from "framer-motion";
 import {
   ArrowRight,
   Brain,
@@ -11,56 +12,599 @@ import {
   Zap,
   Plug,
   Target,
-  MessageSquare,
   Search,
   Sparkles,
+  Command,
+  GitBranch,
+  Layers,
+  Shield,
+  Terminal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Slider } from "@/components/ui/slider";
+import { Kbd } from "@/components/ui/kbd";
 
-export default function Home() {
-  const hasClerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+// ============================================================================
+// Neural Network Background Visualization
+// ============================================================================
+function NeuralBackground() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationRef = useRef<number>(0);
+  const nodesRef = useRef<Array<{
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    radius: number;
+    pulsePhase: number;
+    connections: number[];
+  }>>([]);
+  const mouseRef = useRef({ x: 0, y: 0 });
 
-  // Token calculator state
-  const [memoriesStored, setMemoriesStored] = useState(100);
-  const [avgMemorySize, setAvgMemorySize] = useState(150);
-  const [sessionsPerDay, setSessionsPerDay] = useState(20);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-  // Calculate token savings
-  const tokensWithoutEngrm = memoriesStored * avgMemorySize * sessionsPerDay;
-  const avgRelevantMemories = Math.min(10, memoriesStored * 0.1);
-  const criticalMemories = Math.min(5, memoriesStored * 0.05);
-  const tokensWithEngrm = (avgRelevantMemories + criticalMemories) * avgMemorySize * sessionsPerDay;
-  const savingsPercent = Math.round((1 - tokensWithEngrm / tokensWithoutEngrm) * 100);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      initNodes();
+    };
+
+    const initNodes = () => {
+      const nodeCount = Math.floor((canvas.width * canvas.height) / 25000);
+      nodesRef.current = Array.from({ length: Math.min(nodeCount, 80) }, () => ({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.3,
+        radius: Math.random() * 2 + 1,
+        pulsePhase: Math.random() * Math.PI * 2,
+        connections: [],
+      }));
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      mouseRef.current = { x: e.clientX, y: e.clientY };
+    };
+
+    const animate = () => {
+      if (!ctx || !canvas) return;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const nodes = nodesRef.current;
+      const time = Date.now() * 0.001;
+      const mouse = mouseRef.current;
+
+      // Update node positions
+      nodes.forEach((node) => {
+        node.x += node.vx;
+        node.y += node.vy;
+
+        // Mouse repulsion
+        const dx = node.x - mouse.x;
+        const dy = node.y - mouse.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 150) {
+          const force = (150 - dist) / 150;
+          node.vx += (dx / dist) * force * 0.02;
+          node.vy += (dy / dist) * force * 0.02;
+        }
+
+        // Dampen velocity
+        node.vx *= 0.99;
+        node.vy *= 0.99;
+
+        // Bounce off edges
+        if (node.x < 0 || node.x > canvas.width) node.vx *= -1;
+        if (node.y < 0 || node.y > canvas.height) node.vy *= -1;
+
+        node.x = Math.max(0, Math.min(canvas.width, node.x));
+        node.y = Math.max(0, Math.min(canvas.height, node.y));
+      });
+
+      // Draw connections
+      nodes.forEach((node, i) => {
+        nodes.slice(i + 1).forEach((other) => {
+          const dx = other.x - node.x;
+          const dy = other.y - node.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist < 200) {
+            const opacity = (1 - dist / 200) * 0.15;
+            ctx.beginPath();
+            ctx.moveTo(node.x, node.y);
+            ctx.lineTo(other.x, other.y);
+            ctx.strokeStyle = `rgba(148, 163, 184, ${opacity})`;
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+          }
+        });
+      });
+
+      // Draw nodes
+      nodes.forEach((node) => {
+        const pulse = Math.sin(time * 2 + node.pulsePhase) * 0.3 + 0.7;
+        const gradient = ctx.createRadialGradient(
+          node.x,
+          node.y,
+          0,
+          node.x,
+          node.y,
+          node.radius * 3
+        );
+        gradient.addColorStop(0, `rgba(226, 232, 240, ${pulse * 0.8})`);
+        gradient.addColorStop(0.5, `rgba(148, 163, 184, ${pulse * 0.3})`);
+        gradient.addColorStop(1, "rgba(148, 163, 184, 0)");
+
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, node.radius * 3, 0, Math.PI * 2);
+        ctx.fillStyle = gradient;
+        ctx.fill();
+
+        // Core dot
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(241, 245, 249, ${pulse})`;
+        ctx.fill();
+      });
+
+      animationRef.current = requestAnimationFrame(animate);
+    };
+
+    resize();
+    window.addEventListener("resize", resize);
+    window.addEventListener("mousemove", handleMouseMove);
+    animate();
+
+    return () => {
+      window.removeEventListener("resize", resize);
+      window.removeEventListener("mousemove", handleMouseMove);
+      cancelAnimationFrame(animationRef.current);
+    };
+  }, []);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      {/* Background glows */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -left-40 top-0 h-[500px] w-[500px] rounded-full bg-cyan-500/20 blur-[120px]" />
-        <div className="absolute -right-40 top-20 h-[400px] w-[400px] rounded-full bg-violet-500/15 blur-[100px]" />
+    <canvas
+      ref={canvasRef}
+      className="pointer-events-none fixed inset-0 z-0 opacity-60"
+    />
+  );
+}
+
+// ============================================================================
+// Shimmer Button
+// ============================================================================
+function ShimmerButton({
+  children,
+  className = "",
+  ...props
+}: React.ComponentProps<typeof Button>) {
+  return (
+    <Button
+      className={`relative overflow-hidden bg-slate-50 text-slate-900 hover:bg-white ${className}`}
+      {...props}
+    >
+      <span className="relative z-10 flex items-center gap-2">{children}</span>
+      <span className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+    </Button>
+  );
+}
+
+// ============================================================================
+// Glow Card (Border Beam Effect)
+// ============================================================================
+function GlowCard({
+  children,
+  className = "",
+  delay = 0,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  delay?: number;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-50px" }}
+      transition={{ duration: 0.5, delay }}
+      whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
+      className={`group relative rounded-xl ${className}`}
+    >
+      {/* Animated border beam */}
+      <div className="pointer-events-none absolute -inset-px rounded-xl overflow-hidden">
+        <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-transparent via-slate-400/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+        <div
+          className="absolute h-px w-1/3 bg-gradient-to-r from-transparent via-slate-300/80 to-transparent animate-[border-beam_4s_linear_infinite]"
+          style={{ animationDelay: `${delay}s` }}
+        />
+      </div>
+      {/* Card content */}
+      <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 backdrop-blur-sm p-6">
+        {children}
+      </div>
+    </motion.div>
+  );
+}
+
+// ============================================================================
+// Command Palette UI Component
+// ============================================================================
+function CommandPalettePreview() {
+  const [focused, setFocused] = useState(false);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.5, delay: 0.2 }}
+      className="relative mx-auto max-w-xl"
+    >
+      {/* Glow effect */}
+      <div className="absolute -inset-4 rounded-2xl bg-gradient-to-r from-slate-500/10 via-slate-400/5 to-slate-500/10 blur-xl" />
+
+      <div
+        className={`relative rounded-xl border ${
+          focused ? "border-slate-600" : "border-slate-800"
+        } bg-slate-900/80 backdrop-blur-md shadow-2xl transition-colors duration-200`}
+      >
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-800">
+          <Search className="h-4 w-4 text-slate-500" />
+          <input
+            type="text"
+            placeholder="Search memories, agents, or commands..."
+            className="flex-1 bg-transparent text-sm text-slate-200 placeholder:text-slate-500 outline-none"
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+          />
+          <div className="flex items-center gap-1">
+            <Kbd className="text-xs">
+              <Command className="h-3 w-3" />
+            </Kbd>
+            <Kbd className="text-xs">K</Kbd>
+          </div>
+        </div>
+        <div className="p-2">
+          {[
+            { icon: Brain, label: "Recent Memories", hint: "3 items" },
+            { icon: Sparkles, label: "Active Sessions", hint: "2 running" },
+            { icon: GitBranch, label: "Memory Graph", hint: "View" },
+          ].map((item, i) => (
+            <div
+              key={item.label}
+              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${
+                i === 0
+                  ? "bg-slate-800/50 text-slate-200"
+                  : "text-slate-400 hover:bg-slate-800/30 hover:text-slate-200"
+              } cursor-pointer transition-colors`}
+            >
+              <item.icon className="h-4 w-4" />
+              <span className="flex-1">{item.label}</span>
+              <span className="text-xs text-slate-600">{item.hint}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ============================================================================
+// Code Preview with Syntax Highlighting
+// ============================================================================
+function CodePreview() {
+  const codeLines = [
+    { line: 1, content: "import", type: "keyword" },
+    { line: 1, content: " { Engrm } ", type: "plain" },
+    { line: 1, content: "from", type: "keyword" },
+    { line: 1, content: " ", type: "plain" },
+    { line: 1, content: "'@engrm/sdk'", type: "string" },
+    { line: 2, content: "", type: "plain" },
+    { line: 3, content: "const", type: "keyword" },
+    { line: 3, content: " engrm = ", type: "plain" },
+    { line: 3, content: "new", type: "keyword" },
+    { line: 3, content: " ", type: "plain" },
+    { line: 3, content: "Engrm", type: "function" },
+    { line: 3, content: "()", type: "plain" },
+    { line: 4, content: "", type: "plain" },
+    { line: 5, content: "// Store a memory", type: "comment" },
+    { line: 6, content: "await", type: "keyword" },
+    { line: 6, content: " engrm.", type: "plain" },
+    { line: 6, content: "remember", type: "function" },
+    { line: 6, content: "(", type: "plain" },
+    { line: 6, content: "'User prefers dark mode'", type: "string" },
+    { line: 6, content: ")", type: "plain" },
+    { line: 7, content: "", type: "plain" },
+    { line: 8, content: "// Recall relevant context", type: "comment" },
+    { line: 9, content: "const", type: "keyword" },
+    { line: 9, content: " context = ", type: "plain" },
+    { line: 9, content: "await", type: "keyword" },
+    { line: 9, content: " engrm.", type: "plain" },
+    { line: 9, content: "recall", type: "function" },
+    { line: 9, content: "(", type: "plain" },
+    { line: 9, content: "'theme settings'", type: "string" },
+    { line: 9, content: ")", type: "plain" },
+    { line: 10, content: "", type: "plain" },
+    { line: 11, content: "// Returns: ['User prefers dark mode']", type: "comment" },
+  ];
+
+  const colorMap: Record<string, string> = {
+    keyword: "text-rose-400",
+    string: "text-emerald-400",
+    function: "text-amber-300",
+    comment: "text-slate-500",
+    plain: "text-slate-300",
+  };
+
+  // Group by line
+  const lines: Array<{ num: number; tokens: typeof codeLines }> = [];
+  codeLines.forEach((token) => {
+    const existing = lines.find((l) => l.num === token.line);
+    if (existing) {
+      existing.tokens.push(token);
+    } else {
+      lines.push({ num: token.line, tokens: [token] });
+    }
+  });
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.5, delay: 0.3 }}
+      className="relative mx-auto max-w-2xl"
+    >
+      {/* Radial glow */}
+      <div className="absolute -inset-8 rounded-3xl bg-gradient-radial from-slate-500/10 via-transparent to-transparent blur-2xl" />
+
+      <div className="relative rounded-xl border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl">
+        {/* Window chrome */}
+        <div className="flex items-center gap-2 px-4 py-3 bg-slate-900/50 border-b border-slate-800">
+          <div className="flex items-center gap-1.5">
+            <div className="h-3 w-3 rounded-full bg-red-500/80" />
+            <div className="h-3 w-3 rounded-full bg-amber-500/80" />
+            <div className="h-3 w-3 rounded-full bg-emerald-500/80" />
+          </div>
+          <div className="flex-1 flex justify-center">
+            <span className="text-xs text-slate-500 font-mono">memory.ts</span>
+          </div>
+          <Terminal className="h-4 w-4 text-slate-600" />
+        </div>
+
+        {/* Code content */}
+        <div className="p-4 font-mono text-sm leading-6">
+          {lines.map((line, lineIdx) => (
+            <motion.div
+              key={lineIdx}
+              initial={{ opacity: 0, x: -10 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.4 + lineIdx * 0.05 }}
+              className="flex"
+            >
+              <span className="w-8 text-slate-600 text-right pr-4 select-none">
+                {line.num}
+              </span>
+              <span>
+                {line.tokens.map((token, tokenIdx) => (
+                  <span key={tokenIdx} className={colorMap[token.type]}>
+                    {token.content}
+                  </span>
+                ))}
+              </span>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ============================================================================
+// Bento Grid Feature Section
+// ============================================================================
+function BentoGrid() {
+  const features = [
+    {
+      icon: Brain,
+      title: "Tiered Intelligence",
+      description:
+        "Critical memories always available. High-importance on demand. Normal retrieved when relevant.",
+      className: "md:col-span-2",
+      gradient: "from-rose-500/20 via-transparent to-transparent",
+    },
+    {
+      icon: Lock,
+      title: "Encrypted by Default",
+      description:
+        "AES-256-GCM encryption at rest. Only you and your agent can read memories.",
+      className: "",
+      gradient: "from-emerald-500/20 via-transparent to-transparent",
+    },
+    {
+      icon: Zap,
+      title: "Simple or Powerful",
+      description:
+        "Use remember() and recall() for quick integration, or the full API for complete control.",
+      className: "",
+      gradient: "from-amber-500/20 via-transparent to-transparent",
+    },
+    {
+      icon: BarChart3,
+      title: "Analytics Dashboard",
+      description:
+        "Built-in analytics show token savings, session success rates, and memory utilization.",
+      className: "",
+      gradient: "from-blue-500/20 via-transparent to-transparent",
+    },
+    {
+      icon: Plug,
+      title: "Model Agnostic",
+      description:
+        "Works with OpenAI, Anthropic, local models, or any LLM. REST API means no lock-in.",
+      className: "",
+      gradient: "from-violet-500/20 via-transparent to-transparent",
+    },
+    {
+      icon: Target,
+      title: "Smart Consolidation",
+      description:
+        "Similar memories merge automatically. No duplicates. Repeated mentions strengthen memories.",
+      className: "md:col-span-2",
+      gradient: "from-cyan-500/20 via-transparent to-transparent",
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {features.map((feature, i) => (
+        <GlowCard key={feature.title} className={feature.className} delay={i * 0.1}>
+          {/* Radial gradient glow */}
+          <div
+            className={`absolute -inset-4 rounded-xl bg-gradient-radial ${feature.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl`}
+          />
+          <div className="relative">
+            <div className="mb-4 inline-flex items-center justify-center rounded-lg bg-slate-800/50 p-2.5">
+              <feature.icon className="h-5 w-5 text-slate-300" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-100 mb-2">
+              {feature.title}
+            </h3>
+            <p className="text-sm text-slate-400 leading-relaxed">
+              {feature.description}
+            </p>
+          </div>
+        </GlowCard>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================================
+// Stats Section
+// ============================================================================
+function Stats() {
+  const stats = [
+    { value: "70%", label: "Token Savings" },
+    { value: "<50ms", label: "Retrieval Time" },
+    { value: "256-bit", label: "Encryption" },
+    { value: "99.9%", label: "Uptime" },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+      {stats.map((stat, i) => (
+        <motion.div
+          key={stat.label}
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: i * 0.1 }}
+          className="text-center"
+        >
+          <div className="text-3xl md:text-4xl font-bold bg-gradient-to-b from-slate-100 to-slate-400 bg-clip-text text-transparent">
+            {stat.value}
+          </div>
+          <div className="text-sm text-slate-500 mt-1">{stat.label}</div>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================================
+// Main Page Component
+// ============================================================================
+export default function Home() {
+  const hasClerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+  const { scrollYProgress } = useScroll();
+  const headerOpacity = useTransform(scrollYProgress, [0, 0.1], [0, 1]);
+
+  const fadeInUp = {
+    initial: { opacity: 0, y: 30 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.6 },
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 overflow-x-hidden">
+      {/* Neural network background */}
+      <NeuralBackground />
+
+      {/* Gradient orbs */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden z-0">
+        <div className="absolute -left-1/4 -top-1/4 h-[800px] w-[800px] rounded-full bg-slate-800/30 blur-[120px]" />
+        <div className="absolute -right-1/4 top-1/4 h-[600px] w-[600px] rounded-full bg-slate-700/20 blur-[100px]" />
       </div>
 
-      {/* Header */}
-      <header className="relative z-50 px-6 py-4 md:px-10">
-        <div className="mx-auto flex max-w-6xl items-center justify-between">
-          <Link href="/" className="text-xl font-bold tracking-tight">
-            Engrm
+      {/* Sticky header */}
+      <motion.header
+        style={{ opacity: headerOpacity }}
+        className="fixed top-0 left-0 right-0 z-50 border-b border-slate-800/50 bg-slate-950/80 backdrop-blur-md"
+      >
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
+          <Link href="/" className="text-lg font-semibold tracking-tight">
+            engrm
           </Link>
           <nav className="flex items-center gap-6">
-            <Link href="/docs" className="text-sm text-zinc-400 hover:text-white transition-colors">
+            <Link
+              href="/docs"
+              className="text-sm text-slate-400 hover:text-slate-100 transition-colors"
+            >
               Docs
             </Link>
-            <Link href="/brain" className="text-sm text-zinc-400 hover:text-white transition-colors">
+            <Link
+              href="/brain"
+              className="text-sm text-slate-400 hover:text-slate-100 transition-colors"
+            >
               Brain
             </Link>
-            <a 
-              href="https://github.com/jscianna/engrm" 
-              target="_blank" 
+            <a
+              href="https://github.com/jscianna/engrm"
+              target="_blank"
               rel="noopener noreferrer"
-              className="text-sm text-zinc-400 hover:text-white transition-colors"
+              className="text-sm text-slate-400 hover:text-slate-100 transition-colors"
+            >
+              GitHub
+            </a>
+          </nav>
+        </div>
+      </motion.header>
+
+      {/* Top nav (visible at top) */}
+      <header className="relative z-40 px-6 py-5">
+        <div className="mx-auto flex max-w-6xl items-center justify-between">
+          <Link
+            href="/"
+            className="text-xl font-semibold tracking-tight text-slate-100"
+          >
+            engrm
+          </Link>
+          <nav className="flex items-center gap-6">
+            <Link
+              href="/docs"
+              className="text-sm text-slate-400 hover:text-slate-100 transition-colors"
+            >
+              Docs
+            </Link>
+            <Link
+              href="/brain"
+              className="text-sm text-slate-400 hover:text-slate-100 transition-colors"
+            >
+              Brain
+            </Link>
+            <a
+              href="https://github.com/jscianna/engrm"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-slate-400 hover:text-slate-100 transition-colors"
             >
               GitHub
             </a>
@@ -68,19 +612,30 @@ export default function Home() {
               <>
                 <SignedOut>
                   <SignInButton mode="modal">
-                    <Button size="sm" className="bg-cyan-500 text-zinc-950 hover:bg-cyan-400">
+                    <Button
+                      size="sm"
+                      className="bg-slate-100 text-slate-900 hover:bg-white"
+                    >
                       Sign In
                     </Button>
                   </SignInButton>
                 </SignedOut>
                 <SignedIn>
-                  <Button asChild size="sm" className="bg-cyan-500 text-zinc-950 hover:bg-cyan-400">
+                  <Button
+                    asChild
+                    size="sm"
+                    className="bg-slate-100 text-slate-900 hover:bg-white"
+                  >
                     <Link href="/dashboard">Dashboard</Link>
                   </Button>
                 </SignedIn>
               </>
             ) : (
-              <Button asChild size="sm" className="bg-cyan-500 text-zinc-950 hover:bg-cyan-400">
+              <Button
+                asChild
+                size="sm"
+                className="bg-slate-100 text-slate-900 hover:bg-white"
+              >
                 <Link href="/dashboard">Dashboard</Link>
               </Button>
             )}
@@ -88,543 +643,318 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="relative px-6 pt-16 pb-20 md:px-10 lg:pt-24 lg:pb-28">
-        <div className="mx-auto max-w-6xl">
-          <div className="text-center space-y-6 max-w-3xl mx-auto">
-            <Badge className="border-cyan-500/30 bg-cyan-500/10 text-cyan-300">
-              Install once. Remember forever.
+      {/* Hero Section */}
+      <section className="relative px-6 pt-20 pb-32 md:pt-32 md:pb-40">
+        <div className="relative z-10 mx-auto max-w-4xl text-center">
+          <motion.div {...fadeInUp}>
+            <Badge
+              variant="outline"
+              className="mb-6 border-slate-700 bg-slate-900/50 text-slate-300 backdrop-blur-sm"
+            >
+              <Sparkles className="mr-1.5 h-3 w-3" />
+              Memory infrastructure for AI agents
             </Badge>
-            <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
-              Memory that<br />
-              <span className="text-cyan-400">just works.</span>
-            </h1>
-            <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
-              Memory that works automatically. Your agent recalls what matters, stores what&apos;s important, and gets smarter over time.
-            </p>
-            <div className="flex flex-wrap gap-4 justify-center pt-4">
-              {hasClerk ? (
-                <>
-                  <SignedOut>
-                    <SignInButton mode="modal">
-                      <Button size="lg" className="bg-cyan-500 text-zinc-950 hover:bg-cyan-400 text-lg px-8">
-                        Get Started
-                        <ArrowRight className="ml-2 h-5 w-5" />
-                      </Button>
-                    </SignInButton>
-                  </SignedOut>
-                  <SignedIn>
-                    <Button asChild size="lg" className="bg-cyan-500 text-zinc-950 hover:bg-cyan-400 text-lg px-8">
-                      <Link href="/dashboard">
-                        Open Dashboard
-                        <ArrowRight className="ml-2 h-5 w-5" />
-                      </Link>
-                    </Button>
-                  </SignedIn>
-                </>
-              ) : (
-                <Button asChild size="lg" className="bg-cyan-500 text-zinc-950 hover:bg-cyan-400 text-lg px-8">
-                  <Link href="/dashboard">
-                    Get Started
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </Link>
-                </Button>
-              )}
-              <Button asChild size="lg" variant="outline" className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-lg px-8">
-                <Link href="/docs">View Docs</Link>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </section>
+          </motion.div>
 
-      {/* Problem / Solution */}
-      <section className="relative px-6 py-16 md:px-10 bg-zinc-900/30">
-        <div className="mx-auto max-w-5xl">
-          <div className="grid md:grid-cols-2 gap-12">
-            {/* The Problem */}
-            <div>
-              <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                <span className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center">
-                  <span className="text-red-400 text-lg">✗</span>
-                </span>
-                The Problem
-              </h2>
-              <div className="space-y-4 text-zinc-400">
-                <p className="flex items-start gap-3">
-                  <span className="text-red-400 mt-1">•</span>
-                  <span><strong className="text-zinc-300">Agents forget.</strong> Every session starts from zero. Users repeat themselves endlessly.</span>
-                </p>
-                <p className="flex items-start gap-3">
-                  <span className="text-red-400 mt-1">•</span>
-                  <span><strong className="text-zinc-300">Context windows overflow.</strong> Loading all history wastes tokens and money.</span>
-                </p>
-                <p className="flex items-start gap-3">
-                  <span className="text-red-400 mt-1">•</span>
-                  <span><strong className="text-zinc-300">No learning.</strong> Conversations don't compound into better experiences.</span>
-                </p>
-              </div>
-            </div>
+          <motion.h1
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.1 }}
+            className="text-5xl font-bold tracking-tight sm:text-6xl lg:text-7xl"
+          >
+            <span className="bg-gradient-to-b from-slate-100 via-slate-200 to-slate-400 bg-clip-text text-transparent">
+              Memory that
+            </span>
+            <br />
+            <span className="bg-gradient-to-b from-slate-100 via-slate-300 to-slate-500 bg-clip-text text-transparent">
+              just works.
+            </span>
+          </motion.h1>
 
-            {/* The Solution */}
-            <div>
-              <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                <span className="w-10 h-10 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center">
-                  <span className="text-cyan-400 text-lg">✓</span>
-                </span>
-                The Solution
-              </h2>
-              <div className="space-y-4 text-zinc-400">
-                <p className="flex items-start gap-3">
-                  <span className="text-cyan-400 mt-1">•</span>
-                  <span><strong className="text-zinc-300">Persistent memory.</strong> Important things stick across sessions. Forever.</span>
-                </p>
-                <p className="flex items-start gap-3">
-                  <span className="text-cyan-400 mt-1">•</span>
-                  <span><strong className="text-zinc-300">Smart retrieval.</strong> Only inject relevant context. Save 70%+ on tokens.</span>
-                </p>
-                <p className="flex items-start gap-3">
-                  <span className="text-cyan-400 mt-1">•</span>
-                  <span><strong className="text-zinc-300">Continuous learning.</strong> Every conversation makes your agent smarter.</span>
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+          <motion.p
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="mx-auto mt-6 max-w-2xl text-lg text-slate-400 leading-relaxed"
+          >
+            Your agent recalls what matters, stores what&apos;s important, and
+            gets smarter over time. No manual context management required.
+          </motion.p>
 
-      {/* How It Works */}
-      <section className="relative px-6 py-20 md:px-10" id="how-it-works">
-        <div className="mx-auto max-w-6xl">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold sm:text-4xl mb-4">How It Works</h2>
-            <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
-              Three simple steps. Memory that grows with every conversation.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {/* Step 1 */}
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center mx-auto mb-6">
-                <MessageSquare className="w-8 h-8 text-cyan-400" />
-              </div>
-              <div className="text-4xl font-bold text-cyan-400 mb-2">1</div>
-              <h3 className="text-xl font-semibold mb-2">Start Session</h3>
-              <p className="text-zinc-400">
-                Call <code className="text-cyan-400 bg-zinc-900 px-1.5 py-0.5 rounded text-sm">/sessions/start</code> with 
-                the first message. Get relevant context injected automatically.
-              </p>
-            </div>
-
-            {/* Step 2 */}
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center mx-auto mb-6">
-                <Search className="w-8 h-8 text-cyan-400" />
-              </div>
-              <div className="text-4xl font-bold text-cyan-400 mb-2">2</div>
-              <h3 className="text-xl font-semibold mb-2">Conversation Flows</h3>
-              <p className="text-zinc-400">
-                Your agent responds with full context. Memories are tracked automatically as the conversation unfolds.
-              </p>
-            </div>
-
-            {/* Step 3 */}
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center mx-auto mb-6">
-                <Sparkles className="w-8 h-8 text-cyan-400" />
-              </div>
-              <div className="text-4xl font-bold text-cyan-400 mb-2">3</div>
-              <h3 className="text-xl font-semibold mb-2">End & Learn</h3>
-              <p className="text-zinc-400">
-                End the session. New learnings are stored, strengthened, and ready for next time.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Key Features */}
-      <section className="relative px-6 py-20 md:px-10 bg-zinc-900/30" id="features">
-        <div className="mx-auto max-w-6xl">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold sm:text-4xl mb-4">Works Automatically</h2>
-            <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
-              No manual API calls. Your agent just remembers.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <Card className="bg-zinc-900/50 border-zinc-800">
-              <CardHeader>
-                <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center mb-4">
-                  <Brain className="w-6 h-6 text-purple-400" />
-                </div>
-                <CardTitle className="text-lg">🧠 Tiered Intelligence</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-zinc-400 text-sm">
-                  Critical memories always available. High-importance on demand. 
-                  Normal retrieved when relevant.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-zinc-900/50 border-zinc-800">
-              <CardHeader>
-                <div className="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center mb-4">
-                  <Lock className="w-6 h-6 text-cyan-400" />
-                </div>
-                <CardTitle className="text-lg">🔒 Encrypted by Default</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-zinc-400 text-sm">
-                  AES-256-GCM encryption at rest. Only you and your agent can read 
-                  the memories. Protected against breaches.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-zinc-900/50 border-zinc-800">
-              <CardHeader>
-                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mb-4">
-                  <BarChart3 className="w-6 h-6 text-emerald-400" />
-                </div>
-                <CardTitle className="text-lg">📊 Prove Your Value</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-zinc-400 text-sm">
-                  Built-in analytics show token savings, session success rates, 
-                  and memory utilization.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-zinc-900/50 border-zinc-800">
-              <CardHeader>
-                <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mb-4">
-                  <Zap className="w-6 h-6 text-amber-400" />
-                </div>
-                <CardTitle className="text-lg">⚡ Simple or Powerful</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-zinc-400 text-sm">
-                  Use <code className="text-cyan-400 text-xs">remember()</code> and <code className="text-cyan-400 text-xs">recall()</code> for 
-                  quick integration, or the full API for complete control.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-zinc-900/50 border-zinc-800">
-              <CardHeader>
-                <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center mb-4">
-                  <Plug className="w-6 h-6 text-blue-400" />
-                </div>
-                <CardTitle className="text-lg">🔌 Model Agnostic</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-zinc-400 text-sm">
-                  Works with OpenAI, Anthropic, local models, or any LLM. 
-                  REST API means no lock-in.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-zinc-900/50 border-zinc-800">
-              <CardHeader>
-                <div className="w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mb-4">
-                  <Target className="w-6 h-6 text-rose-400" />
-                </div>
-                <CardTitle className="text-lg">🎯 Smart Consolidation</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-zinc-400 text-sm">
-                  Similar memories merge automatically. No duplicates. 
-                  Repeated mentions strengthen existing memories.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* Token Savings Calculator */}
-      <section className="relative px-6 py-20 md:px-10" id="calculator">
-        <div className="mx-auto max-w-4xl">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold sm:text-4xl mb-4">Token Savings Calculator</h2>
-            <p className="text-zinc-400 text-lg">
-              See how much you'll save by loading only relevant context.
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-8">
-            <div className="grid md:grid-cols-3 gap-8 mb-8">
-              {/* Memories Stored */}
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-3">
-                  Memories Stored: <span className="text-cyan-400">{memoriesStored}</span>
-                </label>
-                <Slider
-                  value={[memoriesStored]}
-                  onValueChange={([value]) => setMemoriesStored(value)}
-                  min={10}
-                  max={1000}
-                  step={10}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-xs text-zinc-500 mt-1">
-                  <span>10</span>
-                  <span>1000</span>
-                </div>
-              </div>
-
-              {/* Avg Memory Size */}
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-3">
-                  Avg Memory Size: <span className="text-cyan-400">{avgMemorySize} tokens</span>
-                </label>
-                <Slider
-                  value={[avgMemorySize]}
-                  onValueChange={([value]) => setAvgMemorySize(value)}
-                  min={50}
-                  max={500}
-                  step={10}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-xs text-zinc-500 mt-1">
-                  <span>50</span>
-                  <span>500</span>
-                </div>
-              </div>
-
-              {/* Sessions Per Day */}
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-3">
-                  Sessions/Day: <span className="text-cyan-400">{sessionsPerDay}</span>
-                </label>
-                <Slider
-                  value={[sessionsPerDay]}
-                  onValueChange={([value]) => setSessionsPerDay(value)}
-                  min={1}
-                  max={100}
-                  step={1}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-xs text-zinc-500 mt-1">
-                  <span>1</span>
-                  <span>100</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Results */}
-            <div className="grid md:grid-cols-3 gap-6 pt-6 border-t border-zinc-800">
-              <div className="text-center">
-                <p className="text-sm text-zinc-500 mb-1">Without Engrm</p>
-                <p className="text-2xl font-bold text-red-400">
-                  {(tokensWithoutEngrm / 1000).toFixed(0)}k
-                  <span className="text-sm text-zinc-500 font-normal"> tokens/day</span>
-                </p>
-              </div>
-              <div className="text-center">
-                <p className="text-sm text-zinc-500 mb-1">With Engrm</p>
-                <p className="text-2xl font-bold text-emerald-400">
-                  {(tokensWithEngrm / 1000).toFixed(0)}k
-                  <span className="text-sm text-zinc-500 font-normal"> tokens/day</span>
-                </p>
-              </div>
-              <div className="text-center">
-                <p className="text-sm text-zinc-500 mb-1">Savings</p>
-                <p className="text-2xl font-bold text-cyan-400">
-                  {savingsPercent}%
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Code Example */}
-      <section className="relative px-6 py-20 md:px-10 bg-zinc-900/30">
-        <div className="mx-auto max-w-4xl">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold sm:text-4xl mb-4">Install in 3 Commands</h2>
-            <p className="text-zinc-400 text-lg">
-              OpenClaw plugin. Memory works automatically across all your chats.
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-950 overflow-hidden">
-            <div className="px-4 py-3 border-b border-zinc-800 flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-red-500" />
-              <div className="w-3 h-3 rounded-full bg-yellow-500" />
-              <div className="w-3 h-3 rounded-full bg-green-500" />
-              <span className="text-sm text-zinc-500 ml-2">terminal</span>
-            </div>
-            <pre className="p-6 overflow-x-auto text-sm">
-              <code className="text-zinc-300 font-mono">{`# Install the Engrm memory plugin
-openclaw plugins install @engrm/openclaw-memory
-
-# Set your API key
-openclaw config set plugins.entries.memory-engrm.config.apiKey=mem_xxx
-
-# Enable as memory provider
-openclaw config set plugins.slots.memory=memory-engrm
-
-# Done. Your agent now remembers everything.
-# Works across Telegram, Discord, Slack, and all channels.`}</code>
-            </pre>
-          </div>
-          
-          <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-            <div className="p-4 rounded-lg bg-zinc-900/50 border border-zinc-800">
-              <div className="text-cyan-400 font-semibold">Auto-Recall</div>
-              <div className="text-zinc-500 text-sm">Context injected at start</div>
-            </div>
-            <div className="p-4 rounded-lg bg-zinc-900/50 border border-zinc-800">
-              <div className="text-cyan-400 font-semibold">Auto-Capture</div>
-              <div className="text-zinc-500 text-sm">Insights stored automatically</div>
-            </div>
-            <div className="p-4 rounded-lg bg-zinc-900/50 border border-zinc-800">
-              <div className="text-cyan-400 font-semibold">Cross-Platform</div>
-              <div className="text-zinc-500 text-sm">Every chat surface</div>
-            </div>
-            <div className="p-4 rounded-lg bg-zinc-900/50 border border-zinc-800">
-              <div className="text-cyan-400 font-semibold">Model Agnostic</div>
-              <div className="text-zinc-500 text-sm">Claude, GPT, Gemini</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Pricing Preview */}
-      <section className="relative px-6 py-20 md:px-10" id="pricing">
-        <div className="mx-auto max-w-4xl">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold sm:text-4xl mb-4">Simple Pricing</h2>
-            <p className="text-zinc-400 text-lg">
-              Start free, scale when you need to.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-8 max-w-2xl mx-auto">
-            {/* Free */}
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-8">
-              <h3 className="text-xl font-bold mb-2">Free</h3>
-              <p className="text-zinc-400 text-sm mb-6">Perfect for getting started</p>
-              <p className="text-4xl font-bold mb-6">$0</p>
-              <ul className="space-y-3 text-sm text-zinc-400 mb-8">
-                <li className="flex items-center gap-2">
-                  <span className="text-cyan-400">✓</span>
-                  1,000 memories
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-cyan-400">✓</span>
-                  10,000 searches/month
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-cyan-400">✓</span>
-                  Full API access
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-cyan-400">✓</span>
-                  Encryption included
-                </li>
-              </ul>
-              {hasClerk ? (
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+            className="mt-10 flex flex-wrap justify-center gap-4"
+          >
+            {hasClerk ? (
+              <>
                 <SignedOut>
                   <SignInButton mode="modal">
-                    <Button className="w-full" variant="outline">
-                      Get Started Free
-                    </Button>
+                    <ShimmerButton size="lg" className="text-base px-8">
+                      Get Started
+                      <ArrowRight className="h-4 w-4" />
+                    </ShimmerButton>
                   </SignInButton>
                 </SignedOut>
-              ) : (
-                <Button asChild className="w-full" variant="outline">
-                  <Link href="/dashboard">Get Started Free</Link>
-                </Button>
-              )}
-            </div>
+                <SignedIn>
+                  <ShimmerButton size="lg" className="text-base px-8" asChild>
+                    <Link href="/dashboard">
+                      Open Dashboard
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </ShimmerButton>
+                </SignedIn>
+              </>
+            ) : (
+              <ShimmerButton size="lg" className="text-base px-8" asChild>
+                <Link href="/dashboard">
+                  Get Started
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </ShimmerButton>
+            )}
+            <Button
+              asChild
+              size="lg"
+              variant="outline"
+              className="border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+            >
+              <Link href="/docs">View Documentation</Link>
+            </Button>
+          </motion.div>
+        </div>
+      </section>
 
-            {/* Pro */}
-            <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/5 p-8 relative">
-              <Badge className="absolute -top-3 left-8 bg-cyan-500 text-zinc-950">Coming Soon</Badge>
-              <h3 className="text-xl font-bold mb-2">Pro</h3>
-              <p className="text-zinc-400 text-sm mb-6">For production agents</p>
-              <p className="text-4xl font-bold mb-6">$29<span className="text-lg font-normal text-zinc-500">/mo</span></p>
-              <ul className="space-y-3 text-sm text-zinc-400 mb-8">
-                <li className="flex items-center gap-2">
-                  <span className="text-cyan-400">✓</span>
-                  Unlimited memories
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-cyan-400">✓</span>
-                  Unlimited searches
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-cyan-400">✓</span>
-                  Advanced analytics
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-cyan-400">✓</span>
-                  Priority support
-                </li>
-              </ul>
-              <Button className="w-full bg-cyan-500 text-zinc-950 hover:bg-cyan-400" disabled>
-                Coming Soon
-              </Button>
-            </div>
+      {/* Stats Section */}
+      <section className="relative z-10 px-6 py-16">
+        <div className="mx-auto max-w-4xl">
+          <Stats />
+        </div>
+      </section>
+
+      {/* Command Palette Preview */}
+      <section className="relative z-10 px-6 py-20">
+        <div className="mx-auto max-w-6xl">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <h2 className="text-2xl font-semibold text-slate-100 mb-3">
+              Lightning-fast search
+            </h2>
+            <p className="text-slate-400">
+              Find any memory, session, or agent in milliseconds
+            </p>
+          </motion.div>
+          <CommandPalettePreview />
+        </div>
+      </section>
+
+      {/* Code Preview Section */}
+      <section className="relative z-10 px-6 py-20">
+        <div className="mx-auto max-w-6xl">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <h2 className="text-2xl font-semibold text-slate-100 mb-3">
+              Simple, powerful API
+            </h2>
+            <p className="text-slate-400">
+              Two functions to get started. Full control when you need it.
+            </p>
+          </motion.div>
+          <CodePreview />
+        </div>
+      </section>
+
+      {/* Features Bento Grid */}
+      <section className="relative z-10 px-6 py-24" id="features">
+        <div className="mx-auto max-w-5xl">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <h2 className="text-3xl font-semibold text-slate-100 mb-4">
+              Built for production
+            </h2>
+            <p className="text-slate-400 max-w-xl mx-auto">
+              Everything you need to give your agents persistent, intelligent
+              memory.
+            </p>
+          </motion.div>
+          <BentoGrid />
+        </div>
+      </section>
+
+      {/* How it Works */}
+      <section className="relative z-10 px-6 py-24 bg-slate-900/30">
+        <div className="mx-auto max-w-5xl">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <h2 className="text-3xl font-semibold text-slate-100 mb-4">
+              How it works
+            </h2>
+            <p className="text-slate-400">
+              Three steps to intelligent memory
+            </p>
+          </motion.div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {[
+              {
+                step: "01",
+                title: "Start Session",
+                description:
+                  "Initialize with the first message. Relevant memories are automatically retrieved and injected.",
+                icon: Layers,
+              },
+              {
+                step: "02",
+                title: "Conversation Flows",
+                description:
+                  "Your agent responds with full context. New insights are captured as the conversation unfolds.",
+                icon: GitBranch,
+              },
+              {
+                step: "03",
+                title: "End & Learn",
+                description:
+                  "Session ends. Learnings are stored, consolidated, and strengthened for next time.",
+                icon: Shield,
+              },
+            ].map((item, i) => (
+              <motion.div
+                key={item.step}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.15 }}
+                className="relative text-center"
+              >
+                <div className="mb-6 inline-flex h-14 w-14 items-center justify-center rounded-xl border border-slate-800 bg-slate-900/50">
+                  <item.icon className="h-6 w-6 text-slate-300" />
+                </div>
+                <div className="text-5xl font-bold text-slate-800 mb-3">
+                  {item.step}
+                </div>
+                <h3 className="text-lg font-semibold text-slate-100 mb-2">
+                  {item.title}
+                </h3>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  {item.description}
+                </p>
+              </motion.div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* Final CTA */}
-      <section className="relative px-6 py-24 md:px-10 bg-gradient-to-b from-zinc-950 to-zinc-900">
+      <section className="relative z-10 px-6 py-32">
         <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-3xl font-bold sm:text-4xl mb-6">
+          <motion.h2
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-3xl font-semibold text-slate-100 mb-4"
+          >
             Ready to give your agents memory?
-          </h2>
-          <p className="text-zinc-400 text-lg mb-8">
-            Start building intelligent agents that learn from every conversation.
-          </p>
-          <div className="flex flex-wrap gap-4 justify-center">
+          </motion.h2>
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.1 }}
+            className="text-slate-400 mb-10"
+          >
+            Start building intelligent agents that learn from every
+            conversation.
+          </motion.p>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.2 }}
+            className="flex flex-wrap justify-center gap-4"
+          >
             {hasClerk ? (
               <SignedOut>
                 <SignInButton mode="modal">
-                  <Button size="lg" className="bg-cyan-500 text-zinc-950 hover:bg-cyan-400 text-lg px-8">
+                  <ShimmerButton size="lg" className="text-base px-8">
                     Get Started
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </Button>
+                    <ArrowRight className="h-4 w-4" />
+                  </ShimmerButton>
                 </SignInButton>
               </SignedOut>
             ) : (
-              <Button asChild size="lg" className="bg-cyan-500 text-zinc-950 hover:bg-cyan-400 text-lg px-8">
+              <ShimmerButton size="lg" className="text-base px-8" asChild>
                 <Link href="/dashboard">
                   Get Started
-                  <ArrowRight className="ml-2 h-5 w-5" />
+                  <ArrowRight className="h-4 w-4" />
                 </Link>
-              </Button>
+              </ShimmerButton>
             )}
-            <Button asChild size="lg" variant="outline" className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-lg px-8">
+            <Button
+              asChild
+              size="lg"
+              variant="outline"
+              className="border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+            >
               <Link href="/docs">Read the Docs</Link>
             </Button>
-          </div>
+          </motion.div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="relative px-6 py-12 md:px-10 border-t border-zinc-800">
-        <div className="mx-auto max-w-6xl flex flex-col md:flex-row items-center justify-between gap-6">
+      <footer className="relative z-10 border-t border-slate-800/50 px-6 py-12">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 md:flex-row">
           <div className="flex items-center gap-6">
-            <Link href="/" className="text-xl font-bold">Engrm</Link>
-            <span className="text-zinc-600">•</span>
-            <Link href="/docs" className="text-sm text-zinc-400 hover:text-white">Docs</Link>
-            <Link href="/brain" className="text-sm text-zinc-400 hover:text-white">Brain</Link>
-            <a href="https://github.com/jscianna/engrm" className="text-sm text-zinc-400 hover:text-white">GitHub</a>
+            <Link href="/" className="text-lg font-semibold text-slate-100">
+              engrm
+            </Link>
+            <span className="text-slate-700">·</span>
+            <Link
+              href="/docs"
+              className="text-sm text-slate-400 hover:text-slate-100"
+            >
+              Docs
+            </Link>
+            <Link
+              href="/brain"
+              className="text-sm text-slate-400 hover:text-slate-100"
+            >
+              Brain
+            </Link>
+            <a
+              href="https://github.com/jscianna/engrm"
+              className="text-sm text-slate-400 hover:text-slate-100"
+            >
+              GitHub
+            </a>
           </div>
-          <p className="text-sm text-zinc-500">
-            Built by <a href="https://x.com/scianna" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">John Scianna</a>
+          <p className="text-sm text-slate-500">
+            Built by{" "}
+            <a
+              href="https://x.com/scianna"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-slate-400 hover:text-slate-100 transition-colors"
+            >
+              John Scianna
+            </a>
           </p>
         </div>
       </footer>
