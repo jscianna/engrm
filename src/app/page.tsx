@@ -811,11 +811,13 @@ export default function Home() {
       {/* Footer */}
       <footer className="relative z-10 border-t border-[#F3F4F6] px-6 py-12 bg-[#FAFAFA]">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 md:flex-row">
-          <div className="flex items-center gap-6">
-            <Link href="/" className="text-lg font-semibold text-[#111827]">
-              fathippo
-            </Link>
-            <span className="text-[#E5E7EB]">|</span>
+          {/* Logo - centered on mobile */}
+          <Link href="/" className="text-lg font-semibold text-[#111827]">
+            fathippo
+          </Link>
+          
+          {/* Nav links - wrap on mobile */}
+          <div className="flex items-center gap-4 md:gap-6">
             <Link
               href="/docs"
               className="text-sm text-[#6B7280] hover:text-[#111827] font-medium"
@@ -835,6 +837,7 @@ export default function Home() {
               GitHub
             </a>
           </div>
+          
           <p className="text-sm text-[#9CA3AF]">
             Built by{" "}
             <a
