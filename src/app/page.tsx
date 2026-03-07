@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { motion, useScroll, useTransform } from "framer-motion";
@@ -25,185 +25,15 @@ import { Badge } from "@/components/ui/badge";
 import { Kbd } from "@/components/ui/kbd";
 
 // ============================================================================
-// Neural Network Background Visualization (Light Mode)
+// Subtle Gradient Background (Static, non-distracting)
 // ============================================================================
-function NeuralBackground() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationRef = useRef<number>(0);
-  const nodesRef = useRef<
-    Array<{
-      x: number;
-      y: number;
-      vx: number;
-      vy: number;
-      radius: number;
-      pulsePhase: number;
-      connections: number[];
-      color: "blue" | "teal";
-    }>
-  >([]);
-  const mouseRef = useRef({ x: 0, y: 0 });
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      initNodes();
-    };
-
-    const initNodes = () => {
-      const nodeCount = Math.floor((canvas.width * canvas.height) / 30000);
-      nodesRef.current = Array.from({ length: Math.min(nodeCount, 60) }, () => ({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        vx: (Math.random() - 0.5) * 0.2,
-        vy: (Math.random() - 0.5) * 0.2,
-        radius: Math.random() * 3 + 2,
-        pulsePhase: Math.random() * Math.PI * 2,
-        connections: [],
-        color: Math.random() > 0.5 ? "blue" : "teal",
-      }));
-    };
-
-    const handleMouseMove = (e: MouseEvent) => {
-      mouseRef.current = { x: e.clientX, y: e.clientY };
-    };
-
-    const animate = () => {
-      if (!ctx || !canvas) return;
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      const nodes = nodesRef.current;
-      const time = Date.now() * 0.001;
-      const mouse = mouseRef.current;
-
-      // Update node positions
-      nodes.forEach((node) => {
-        node.x += node.vx;
-        node.y += node.vy;
-
-        // Mouse attraction (gentle)
-        const dx = mouse.x - node.x;
-        const dy = mouse.y - node.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 200 && dist > 50) {
-          const force = (200 - dist) / 200;
-          node.vx += (dx / dist) * force * 0.005;
-          node.vy += (dy / dist) * force * 0.005;
-        }
-
-        // Dampen velocity
-        node.vx *= 0.995;
-        node.vy *= 0.995;
-
-        // Bounce off edges with margin
-        if (node.x < 50 || node.x > canvas.width - 50) node.vx *= -1;
-        if (node.y < 50 || node.y > canvas.height - 50) node.vy *= -1;
-
-        node.x = Math.max(50, Math.min(canvas.width - 50, node.x));
-        node.y = Math.max(50, Math.min(canvas.height - 50, node.y));
-      });
-
-      // Draw connections (thin gray lines)
-      nodes.forEach((node, i) => {
-        nodes.slice(i + 1).forEach((other) => {
-          const dx = other.x - node.x;
-          const dy = other.y - node.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-
-          if (dist < 180) {
-            const opacity = (1 - dist / 180) * 0.12;
-            ctx.beginPath();
-            ctx.moveTo(node.x, node.y);
-            ctx.lineTo(other.x, other.y);
-            ctx.strokeStyle = `rgba(156, 163, 175, ${opacity})`;
-            ctx.lineWidth = 1;
-            ctx.stroke();
-          }
-        });
-      });
-
-      // Draw nodes with glow
-      nodes.forEach((node) => {
-        const pulse = Math.sin(time * 1.5 + node.pulsePhase) * 0.4 + 0.6;
-        const isBlue = node.color === "blue";
-
-        // Soft glow
-        const glowGradient = ctx.createRadialGradient(
-          node.x,
-          node.y,
-          0,
-          node.x,
-          node.y,
-          node.radius * 8
-        );
-
-        if (isBlue) {
-          glowGradient.addColorStop(0, `rgba(0, 112, 243, ${pulse * 0.3})`);
-          glowGradient.addColorStop(0.5, `rgba(0, 112, 243, ${pulse * 0.1})`);
-          glowGradient.addColorStop(1, "rgba(0, 112, 243, 0)");
-        } else {
-          glowGradient.addColorStop(0, `rgba(0, 184, 217, ${pulse * 0.3})`);
-          glowGradient.addColorStop(0.5, `rgba(0, 184, 217, ${pulse * 0.1})`);
-          glowGradient.addColorStop(1, "rgba(0, 184, 217, 0)");
-        }
-
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, node.radius * 8, 0, Math.PI * 2);
-        ctx.fillStyle = glowGradient;
-        ctx.fill();
-
-        // Core node
-        const coreGradient = ctx.createRadialGradient(
-          node.x - node.radius * 0.3,
-          node.y - node.radius * 0.3,
-          0,
-          node.x,
-          node.y,
-          node.radius
-        );
-
-        if (isBlue) {
-          coreGradient.addColorStop(0, `rgba(59, 130, 246, ${pulse})`);
-          coreGradient.addColorStop(1, `rgba(0, 112, 243, ${pulse * 0.8})`);
-        } else {
-          coreGradient.addColorStop(0, `rgba(34, 211, 238, ${pulse})`);
-          coreGradient.addColorStop(1, `rgba(0, 184, 217, ${pulse * 0.8})`);
-        }
-
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
-        ctx.fillStyle = coreGradient;
-        ctx.fill();
-      });
-
-      animationRef.current = requestAnimationFrame(animate);
-    };
-
-    resize();
-    window.addEventListener("resize", resize);
-    window.addEventListener("mousemove", handleMouseMove);
-    animate();
-
-    return () => {
-      window.removeEventListener("resize", resize);
-      window.removeEventListener("mousemove", handleMouseMove);
-      cancelAnimationFrame(animationRef.current);
-    };
-  }, []);
-
+function SubtleBackground() {
   return (
-    <canvas
-      ref={canvasRef}
-      className="pointer-events-none fixed inset-0 z-0 opacity-70"
-    />
+    <div className="pointer-events-none fixed inset-0 z-0">
+      {/* Very subtle gradient orbs */}
+      <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-gradient-to-bl from-[#0070F3]/[0.03] to-transparent rounded-full blur-3xl" />
+      <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-gradient-to-tr from-[#00B8D9]/[0.03] to-transparent rounded-full blur-3xl" />
+    </div>
   );
 }
 
@@ -329,62 +159,19 @@ function CommandPalettePreview() {
 }
 
 // ============================================================================
-// Code Preview with Syntax Highlighting (Light Mode)
+// OpenClaw Installation Code Preview
 // ============================================================================
-function CodePreview() {
+function OpenClawCodePreview() {
   const codeLines = [
-    { line: 1, content: "import", type: "keyword" },
-    { line: 1, content: " { Engrm } ", type: "plain" },
-    { line: 1, content: "from", type: "keyword" },
-    { line: 1, content: " ", type: "plain" },
-    { line: 1, content: "'@engrm/sdk'", type: "string" },
-    { line: 2, content: "", type: "plain" },
-    { line: 3, content: "const", type: "keyword" },
-    { line: 3, content: " engrm = ", type: "plain" },
-    { line: 3, content: "new", type: "keyword" },
-    { line: 3, content: " ", type: "plain" },
-    { line: 3, content: "Engrm", type: "function" },
-    { line: 3, content: "()", type: "plain" },
-    { line: 4, content: "", type: "plain" },
-    { line: 5, content: "// Store a memory", type: "comment" },
-    { line: 6, content: "await", type: "keyword" },
-    { line: 6, content: " engrm.", type: "plain" },
-    { line: 6, content: "remember", type: "function" },
-    { line: 6, content: "(", type: "plain" },
-    { line: 6, content: "'User prefers dark mode'", type: "string" },
-    { line: 6, content: ")", type: "plain" },
-    { line: 7, content: "", type: "plain" },
-    { line: 8, content: "// Recall relevant context", type: "comment" },
-    { line: 9, content: "const", type: "keyword" },
-    { line: 9, content: " context = ", type: "plain" },
-    { line: 9, content: "await", type: "keyword" },
-    { line: 9, content: " engrm.", type: "plain" },
-    { line: 9, content: "recall", type: "function" },
-    { line: 9, content: "(", type: "plain" },
-    { line: 9, content: "'theme settings'", type: "string" },
-    { line: 9, content: ")", type: "plain" },
-    { line: 10, content: "", type: "plain" },
-    { line: 11, content: "// Returns: ['User prefers dark mode']", type: "comment" },
+    { content: "# Install", type: "comment" },
+    { content: "openclaw plugins install @engrm/memory", type: "command" },
+    { content: "", type: "empty" },
+    { content: "# Configure", type: "comment" },
+    { content: "openclaw config set plugins.slots.memory=engrm-memory", type: "command" },
+    { content: "openclaw config set plugins.entries.engrm-memory.config.apiKey=mem_xxx", type: "command" },
+    { content: "", type: "empty" },
+    { content: "# Done.", type: "comment" },
   ];
-
-  const colorMap: Record<string, string> = {
-    keyword: "text-[#0070F3]",
-    string: "text-[#00B8D9]",
-    function: "text-[#7C3AED]",
-    comment: "text-gray-400",
-    plain: "text-[#1A1A1A]",
-  };
-
-  // Group by line
-  const lines: Array<{ num: number; tokens: typeof codeLines }> = [];
-  codeLines.forEach((token) => {
-    const existing = lines.find((l) => l.num === token.line);
-    if (existing) {
-      existing.tokens.push(token);
-    } else {
-      lines.push({ num: token.line, tokens: [token] });
-    }
-  });
 
   return (
     <motion.div
@@ -397,48 +184,37 @@ function CodePreview() {
       {/* Subtle radial glow */}
       <div className="absolute -inset-8 rounded-3xl bg-gradient-to-r from-[#0070F3]/5 via-transparent to-[#00B8D9]/5 blur-2xl" />
 
-      <div className="relative rounded-xl bg-[#1A1A1A] overflow-hidden shadow-[0_20px_50px_-12px_rgba(0,0,0,0.25)]">
+      <div className="relative rounded-2xl bg-[#0D1117] overflow-hidden shadow-[0_20px_50px_-12px_rgba(0,0,0,0.25)] border border-[#21262D]">
         {/* Window chrome */}
-        <div className="flex items-center gap-2 px-4 py-3 bg-[#2D2D2D] border-b border-[#3D3D3D]">
+        <div className="flex items-center gap-2 px-4 py-3 bg-[#161B22] border-b border-[#21262D]">
           <div className="flex items-center gap-1.5">
             <div className="h-3 w-3 rounded-full bg-[#FF5F57]" />
             <div className="h-3 w-3 rounded-full bg-[#FEBC2E]" />
             <div className="h-3 w-3 rounded-full bg-[#28C840]" />
           </div>
           <div className="flex-1 flex justify-center">
-            <span className="text-xs text-gray-400 font-mono">memory.ts</span>
+            <span className="text-xs text-gray-500 font-mono">Terminal</span>
           </div>
-          <Terminal className="h-4 w-4 text-gray-500" />
+          <Terminal className="h-4 w-4 text-gray-600" />
         </div>
 
         {/* Code content */}
-        <div className="p-4 font-mono text-sm leading-6 bg-[#1A1A1A]">
-          {lines.map((line, lineIdx) => (
+        <div className="p-6 font-mono text-sm leading-8 bg-[#0D1117]">
+          {codeLines.map((line, idx) => (
             <motion.div
-              key={lineIdx}
+              key={idx}
               initial={{ opacity: 0, x: -10 }}
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
-              transition={{ delay: 0.4 + lineIdx * 0.05 }}
-              className="flex"
+              transition={{ delay: 0.4 + idx * 0.08 }}
             >
-              <span className="w-8 text-gray-600 text-right pr-4 select-none">
-                {line.num}
-              </span>
-              <span>
-                {line.tokens.map((token, tokenIdx) => (
-                  <span
-                    key={tokenIdx}
-                    className={
-                      token.type === "plain"
-                        ? "text-gray-300"
-                        : colorMap[token.type]
-                    }
-                  >
-                    {token.content}
-                  </span>
-                ))}
-              </span>
+              {line.type === "comment" && (
+                <span className="text-gray-500">{line.content}</span>
+              )}
+              {line.type === "command" && (
+                <span className="text-[#00B8D9]">{line.content}</span>
+              )}
+              {line.type === "empty" && <span>&nbsp;</span>}
             </motion.div>
           ))}
         </div>
@@ -591,8 +367,8 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-white text-[#1A1A1A] overflow-x-hidden">
-      {/* Neural network background */}
-      <NeuralBackground />
+      {/* Subtle gradient background */}
+      <SubtleBackground />
 
       {/* Sticky header */}
       <motion.header
@@ -804,7 +580,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Code Preview Section */}
+      {/* Built for OpenClaw Section */}
       <section className="relative z-10 px-6 py-20">
         <div className="mx-auto max-w-6xl">
           <motion.div
@@ -813,14 +589,20 @@ export default function Home() {
             viewport={{ once: true }}
             className="text-center mb-12"
           >
+            <Badge
+              variant="outline"
+              className="mb-4 border-[#00B8D9]/30 bg-[#00B8D9]/5 text-[#00B8D9]"
+            >
+              Native Integration
+            </Badge>
             <h2 className="text-2xl font-semibold text-[#1A1A1A] mb-3">
-              Simple, powerful API
+              Built for OpenClaw
             </h2>
-            <p className="text-gray-500">
-              Two functions to get started. Full control when you need it.
+            <p className="text-gray-500 max-w-xl mx-auto">
+              Consistent memory across all your agents and chats. Install in seconds, configure once, remember forever.
             </p>
           </motion.div>
-          <CodePreview />
+          <OpenClawCodePreview />
         </div>
       </section>
 
