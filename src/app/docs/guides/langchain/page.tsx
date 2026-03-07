@@ -31,7 +31,7 @@ class EngramMemory(BaseChatMemory):
     """LangChain memory backed by Engrm"""
     
     api_key: str
-    base_url: str = "https://engrm.xyz/api/v1"
+    base_url: str = "https://fathippo.ai/api/v1"
     session_id: str = None
     namespace: str = None
     memory_key: str = "history"
@@ -190,7 +190,7 @@ ENGRM_API_KEY = "mem_your_key"
 def remember_tool(text: str) -> str:
     """Store a memory about the user"""
     response = requests.post(
-        "https://engrm.xyz/api/v1/simple/remember",
+        "https://fathippo.ai/api/v1/simple/remember",
         headers={"Authorization": f"Bearer {ENGRM_API_KEY}"},
         json={"text": text}
     ).json()
@@ -199,7 +199,7 @@ def remember_tool(text: str) -> str:
 def recall_tool(query: str) -> str:
     """Search for relevant memories"""
     response = requests.post(
-        "https://engrm.xyz/api/v1/simple/recall",
+        "https://fathippo.ai/api/v1/simple/recall",
         headers={"Authorization": f"Bearer {ENGRM_API_KEY}"},
         json={"query": query, "limit": 5}
     ).json()
@@ -256,7 +256,7 @@ class EngramRetriever(BaseRetriever):
     """LangChain retriever backed by Engrm"""
     
     api_key: str
-    base_url: str = "https://engrm.xyz/api/v1"
+    base_url: str = "https://fathippo.ai/api/v1"
     top_k: int = 5
     
     def _get_relevant_documents(self, query: str) -> List[Document]:

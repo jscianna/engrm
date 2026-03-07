@@ -1,7 +1,7 @@
 {
-  "name": "@engrm/openclaw-hook",
+  "name": "@fathippo/openclaw-hook",
   "version": "0.1.0",
-  "description": "Engrm memory hook for OpenClaw - auto-recall context on conversations",
+  "description": "FatHippo memory hook for OpenClaw - auto-recall context on conversations",
   "type": "module",
   "main": "dist/handler.js",
   "files": [
@@ -9,18 +9,18 @@
     "hooks/"
   ],
   "openclaw": {
-    "hooks": ["./hooks/memory-engrm"]
+    "hooks": ["./hooks/memory-fathippo"]
   },
   "scripts": {
-    "build": "esbuild hooks/memory-engrm/handler.ts --outfile=hooks/memory-engrm/handler.js --format=esm --platform=node",
+    "build": "esbuild hooks/memory-fathippo/handler.ts --outfile=hooks/memory-fathippo/handler.js --format=esm --platform=node",
     "prepublishOnly": "npm run build"
   },
-  "keywords": ["openclaw", "engrm", "memory", "ai", "hooks"],
-  "author": "Engrm",
+  "keywords": ["openclaw", "fathippo", "memory", "ai", "hooks"],
+  "author": "FatHippo",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jscianna/engrm.git",
+    "url": "https://github.com/jscianna/fathippo.git",
     "directory": "packages/openclaw-hook"
   },
   "devDependencies": {

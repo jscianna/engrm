@@ -130,7 +130,7 @@ export default function ConceptsPage() {
       </P>
 
       <CodeBlock language="bash">{`# Store in a specific namespace
-curl -X POST "https://engrm.xyz/api/v1/memories" \\
+curl -X POST "https://fathippo.ai/api/v1/memories" \\
   -H "Authorization: Bearer mem_..." \\
   -H "Content-Type: application/json" \\
   -d '{"content": "Project uses PostgreSQL", "namespace": "project-alpha"}'`}</CodeBlock>

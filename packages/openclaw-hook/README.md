@@ -1,31 +1,31 @@
-# @engrm/openclaw-hook (DEPRECATED)
+# @fathippo/openclaw-hook (DEPRECATED)
 
-> ⚠️ **Deprecated**: Use `@engrm/openclaw-memory` instead for full features (auto-recall + auto-capture + tools).
+> ⚠️ **Deprecated**: Use `@fathippo/openclaw-memory` instead for full features (auto-recall + auto-capture + tools).
 >
 > ```bash
-> openclaw plugins install @engrm/openclaw-memory
+> openclaw plugins install @fathippo/openclaw-memory
 > ```
 
 ---
 
-Lightweight OpenClaw hook for [Engrm](https://engrm.xyz) - recall only, no auto-capture.
+Lightweight OpenClaw hook for [FatHippo](https://fathippo.ai) - recall only, no auto-capture.
 
 ## Installation
 
 ```bash
-openclaw hooks install @engrm/openclaw-hook
-openclaw hooks enable memory-engrm
+openclaw hooks install @fathippo/openclaw-hook
+openclaw hooks enable memory-fathippo
 ```
 
 ## Configuration
 
-Add your Engrm API key:
+Add your FatHippo API key:
 
 ```bash
-openclaw config set hooks.internal.entries.memory-engrm.config.apiKey "mem_your_key"
+openclaw config set hooks.internal.entries.memory-fathippo.config.apiKey "mem_your_key"
 ```
 
-Get your API key at [engrm.xyz/dashboard](https://engrm.xyz/dashboard).
+Get your API key at [fathippo.ai/dashboard](https://fathippo.ai/dashboard).
 
 ### Optional: Custom Trigger Words
 
@@ -36,7 +36,7 @@ Add project names or keywords that should trigger context fetch:
   "hooks": {
     "internal": {
       "entries": {
-        "memory-engrm": {
+        "memory-fathippo": {
           "enabled": true,
           "config": {
             "apiKey": "mem_your_key",
@@ -51,7 +51,7 @@ Add project names or keywords that should trigger context fetch:
 
 ## How It Works
 
-The hook automatically fetches relevant memories from Engrm when:
+The hook automatically fetches relevant memories from FatHippo when:
 
 1. **Conversation starts** - First message triggers context fetch
 2. **Trigger keywords appear** - "remember", "what did we decide", "previously", etc.

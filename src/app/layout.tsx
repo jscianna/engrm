@@ -10,22 +10,22 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Engrm | Memory Infrastructure for AI Agents",
+  title: "FatHippo | Memory for AI Agents",
   description:
-    "Persistent, encrypted memory for AI agents. Your agent recalls what matters, stores what's important, and gets smarter over time.",
+    "Persistent, encrypted memory for AI agents. Your agent stores what matters, recalls it when needed, and saves tokens every session.",
   openGraph: {
-    title: "Engrm | Memory Infrastructure for AI Agents",
+    title: "FatHippo | Memory for AI Agents",
     description:
-      "Persistent, encrypted memory for AI agents. Your agent recalls what matters, stores what's important, and gets smarter over time.",
-    url: "https://engrm.xyz",
-    siteName: "Engrm",
+      "Persistent, encrypted memory for AI agents. Your agent stores what matters, recalls it when needed, and saves tokens every session.",
+    url: "https://fathippo.ai",
+    siteName: "FatHippo",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Engrm | Memory Infrastructure for AI Agents",
+    title: "FatHippo | Memory for AI Agents",
     description:
-      "Persistent, encrypted memory for AI agents. Your agent recalls what matters, stores what's important, and gets smarter over time.",
+      "Persistent, encrypted memory for AI agents. Your agent stores what matters, recalls it when needed, and saves tokens every session.",
   },
 };
 

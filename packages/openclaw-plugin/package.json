@@ -1,14 +1,14 @@
 {
-  "name": "@engrm/memory",
+  "name": "@fathippo/memory",
   "version": "0.1.0",
   "main": "index.ts",
-  "description": "OpenClaw memory plugin powered by Engrm - cloud-native encrypted memory with auto-recall and auto-capture",
-  "author": "Engrm",
+  "description": "OpenClaw memory plugin powered by FatHippo - cloud-native encrypted memory with auto-recall and auto-capture",
+  "author": "FatHippo",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jscianna/engrm.git",
-    "directory": "extensions/memory-engrm"
+    "url": "https://github.com/jscianna/fathippo.git",
+    "directory": "extensions/memory-fathippo"
   },
   "keywords": [
     "openclaw",
@@ -16,7 +16,7 @@
     "memory",
     "ai",
     "agent",
-    "engrm"
+    "fathippo"
   ],
   "openclaw": {
     "extensions": [

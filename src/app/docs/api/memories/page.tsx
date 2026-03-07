@@ -38,7 +38,7 @@ export default function MemoriesApiPage() {
       <P className="text-sm text-zinc-500">* Either content or ciphertext+iv required</P>
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/memories" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/memories" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -108,7 +108,7 @@ export default function MemoriesApiPage() {
       />
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl "https://engrm.xyz/api/v1/memories?limit=10&namespace=project-alpha" \\
+      <CodeBlock language="bash">{`curl "https://fathippo.ai/api/v1/memories?limit=10&namespace=project-alpha" \\
   -H "Authorization: Bearer mem_your_api_key"`}</CodeBlock>
 
       <H3>Response</H3>
@@ -133,7 +133,7 @@ export default function MemoriesApiPage() {
       <P>Retrieve a single memory by ID.</P>
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl "https://engrm.xyz/api/v1/memories/mem_abc123" \\
+      <CodeBlock language="bash">{`curl "https://fathippo.ai/api/v1/memories/mem_abc123" \\
   -H "Authorization: Bearer mem_your_api_key"`}</CodeBlock>
 
       <H3>Response</H3>
@@ -158,7 +158,7 @@ export default function MemoriesApiPage() {
       <P>Permanently delete a memory.</P>
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl -X DELETE "https://engrm.xyz/api/v1/memories/mem_abc123" \\
+      <CodeBlock language="bash">{`curl -X DELETE "https://fathippo.ai/api/v1/memories/mem_abc123" \\
   -H "Authorization: Bearer mem_your_api_key"`}</CodeBlock>
 
       <H3>Response (200 OK)</H3>

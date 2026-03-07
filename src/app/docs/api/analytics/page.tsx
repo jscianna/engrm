@@ -21,7 +21,7 @@ export default function AnalyticsApiPage() {
       </P>
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl "https://engrm.xyz/api/v1/analytics/summary" \\
+      <CodeBlock language="bash">{`curl "https://fathippo.ai/api/v1/analytics/summary" \\
   -H "Authorization: Bearer mem_your_api_key"`}</CodeBlock>
 
       <H3>Response</H3>
@@ -62,7 +62,7 @@ export default function AnalyticsApiPage() {
       />
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/analytics" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/analytics" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{"period": "30d", "includeTimeSeries": true}'`}</CodeBlock>
@@ -169,7 +169,7 @@ Savings: 94.7%`}</CodeBlock>
         Use the misses endpoint to identify gaps in your memory coverage:
       </P>
       <CodeBlock language="bash">{`# Get recent misses
-curl "https://engrm.xyz/api/v1/memories/misses?limit=20" \\
+curl "https://fathippo.ai/api/v1/memories/misses?limit=20" \\
   -H "Authorization: Bearer mem_your_api_key"`}</CodeBlock>
 
       <P>

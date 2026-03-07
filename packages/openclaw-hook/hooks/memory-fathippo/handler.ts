@@ -1,5 +1,5 @@
 /**
- * Engrm Memory Hook for OpenClaw
+ * FatHippo Memory Hook for OpenClaw
  * 
  * Smart context recall - only fetches when likely useful:
  * 1. First message of conversation (session start)
@@ -23,7 +23,7 @@ interface HookEvent {
       hooks?: {
         internal?: {
           entries?: {
-            "memory-engrm"?: {
+            "memory-fathippo"?: {
               config?: {
                 apiKey?: string;
                 triggerWords?: string[];
@@ -37,7 +37,7 @@ interface HookEvent {
   };
 }
 
-const ENGRM_API_URL = "https://www.engrm.xyz/api/v1";
+const FATHIPPO_API_URL = "https://www.fathippo.ai/api/v1";
 
 // Timing
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -98,12 +98,12 @@ function shouldFetchContext(content: string, conversationId: string, triggerPatt
   return false;
 }
 
-async function fetchEngrmContext(message: string, apiKey: string): Promise<string | null> {
+async function fetchFatHippoContext(message: string, apiKey: string): Promise<string | null> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   
   try {
-    const response = await fetch(`${ENGRM_API_URL}/simple/context`, {
+    const response = await fetch(`${FATHIPPO_API_URL}/simple/context`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
@@ -116,7 +116,7 @@ async function fetchEngrmContext(message: string, apiKey: string): Promise<strin
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.error(`[engrm] Context API error: ${response.status}`);
+      console.error(`[fathippo] Context API error: ${response.status}`);
       return null;
     }
 
@@ -124,9 +124,9 @@ async function fetchEngrmContext(message: string, apiKey: string): Promise<strin
   } catch (err) {
     clearTimeout(timeoutId);
     if (err instanceof Error && err.name === "AbortError") {
-      console.error("[engrm] Context fetch timed out");
+      console.error("[fathippo] Context fetch timed out");
     } else {
-      console.error(`[engrm] Context fetch failed:`, err instanceof Error ? err.message : err);
+      console.error(`[fathippo] Context fetch failed:`, err instanceof Error ? err.message : err);
     }
     return null;
   }
@@ -141,11 +141,11 @@ const handler = async (event: HookEvent) => {
   if (!content) return;
   
   // Get API key from config
-  const hookConfig = event.context.cfg?.hooks?.internal?.entries?.["memory-engrm"]?.config;
-  const apiKey = hookConfig?.apiKey || process.env.ENGRM_API_KEY;
+  const hookConfig = event.context.cfg?.hooks?.internal?.entries?.["memory-fathippo"]?.config;
+  const apiKey = hookConfig?.apiKey || process.env.FATHIPPO_API_KEY;
   
   if (!apiKey) {
-    console.error("[engrm] API key not configured. Run: openclaw config set hooks.internal.entries.memory-engrm.config.apiKey YOUR_KEY");
+    console.error("[fathippo] API key not configured. Run: openclaw config set hooks.internal.entries.memory-fathippo.config.apiKey YOUR_KEY");
     return;
   }
 
@@ -158,8 +158,8 @@ const handler = async (event: HookEvent) => {
     return;
   }
 
-  console.log(`[engrm] Fetching context for: "${content.slice(0, 50)}..."`);
-  const context = await fetchEngrmContext(content, apiKey);
+  console.log(`[fathippo] Fetching context for: "${content.slice(0, 50)}..."`);
+  const context = await fetchFatHippoContext(content, apiKey);
 
   conversationState.set(conversationId, {
     lastFetch: Date.now(),
@@ -173,9 +173,9 @@ const handler = async (event: HookEvent) => {
       
       // Write to workspace or home
       const workspaceDir = event.context.workspaceDir || process.env.HOME || "/tmp";
-      const contextFile = path.join(workspaceDir, "ENGRM_CONTEXT.md");
+      const contextFile = path.join(workspaceDir, "FATHIPPO_CONTEXT.md");
       
-      const contextMd = `# Engrm Memory Context
+      const contextMd = `# FatHippo Memory Context
 
 _Last updated: ${new Date().toISOString()}_
 _Triggered by: "${content.slice(0, 100)}${content.length > 100 ? '...' : ''}"_
@@ -185,12 +185,12 @@ _Triggered by: "${content.slice(0, 100)}${content.length > 100 ? '...' : ''}"_
 ${context}
 `;
       await fs.writeFile(contextFile, contextMd, "utf-8");
-      console.log(`[engrm] Context written to ${contextFile}`);
+      console.log(`[fathippo] Context written to ${contextFile}`);
     } catch (err) {
-      console.error(`[engrm] Failed to write context:`, err instanceof Error ? err.message : err);
+      console.error(`[fathippo] Failed to write context:`, err instanceof Error ? err.message : err);
     }
   } else {
-    console.log("[engrm] No relevant context found");
+    console.log("[fathippo] No relevant context found");
   }
 };
 

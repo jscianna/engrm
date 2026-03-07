@@ -1,11 +1,11 @@
 {
-  "name": "engrm-mcp",
+  "name": "fathippo-mcp",
   "version": "0.1.0",
-  "description": "Zero-knowledge MCP server for Engrm - client-side embeddings, no query leaves your device",
+  "description": "Zero-knowledge MCP server for FatHippo - client-side embeddings, no query leaves your device",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "engrm-mcp": "dist/cli.js"
+    "fathippo-mcp": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",

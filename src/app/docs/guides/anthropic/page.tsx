@@ -28,7 +28,7 @@ import anthropic
 
 # Configuration
 ENGRM_API_KEY = os.environ.get("ENGRM_API_KEY", "mem_your_key")
-ENGRM_URL = "https://engrm.xyz/api/v1"
+ENGRM_URL = "https://fathippo.ai/api/v1"
 
 client = anthropic.Anthropic()
 
@@ -79,7 +79,7 @@ from typing import Optional
 from dataclasses import dataclass, field
 
 ENGRM_API_KEY = "mem_your_key"
-ENGRM_URL = "https://engrm.xyz/api/v1"
+ENGRM_URL = "https://fathippo.ai/api/v1"
 
 client = anthropic.Anthropic()
 
@@ -270,7 +270,7 @@ def handle_tool(name: str, input: dict) -> str:
     
     if name == "remember":
         response = requests.post(
-            "https://engrm.xyz/api/v1/simple/remember",
+            "https://fathippo.ai/api/v1/simple/remember",
             headers=headers,
             json={"text": input["text"]}
         ).json()
@@ -278,7 +278,7 @@ def handle_tool(name: str, input: dict) -> str:
     
     elif name == "recall":
         response = requests.post(
-            "https://engrm.xyz/api/v1/simple/recall",
+            "https://fathippo.ai/api/v1/simple/recall",
             headers=headers,
             json={"query": input["query"], "limit": 5}
         ).json()
