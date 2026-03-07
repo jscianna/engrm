@@ -1,5 +1,5 @@
 /**
- * Engrm API client for zero-knowledge operations
+ * FatHippo API client for zero-knowledge operations
  * Only sends: vectors (not text) + encrypted blobs
  */
 
@@ -28,11 +28,11 @@ export interface ZkSearchResult {
 }
 
 function getConfig(): MemryConfig {
-  const apiKey = process.env.ENGRM_API_KEY;
-  const apiUrl = process.env.ENGRM_API_URL || "https://engrm.xyz";
+  const apiKey = process.env.FATHIPPO_API_KEY;
+  const apiUrl = process.env.FATHIPPO_API_URL || "https://fathippo.ai";
   
   if (!apiKey) {
-    throw new Error("ENGRM_API_KEY not set");
+    throw new Error("FATHIPPO_API_KEY not set");
   }
   
   return { apiKey, apiUrl: apiUrl.replace(/\/$/, "") };
@@ -40,14 +40,14 @@ function getConfig(): MemryConfig {
 
 /**
  * Get auto-namespace from environment
- * Priority: ENGRM_NAMESPACE > ENGRM_CHAT_ID > ENGRM_SESSION_ID > undefined
+ * Priority: FATHIPPO_NAMESPACE > FATHIPPO_CHAT_ID > FATHIPPO_SESSION_ID > undefined
  * 
- * For OpenClaw: set ENGRM_NAMESPACE=${chat_id} or ENGRM_NAMESPACE=${conversation_label}
+ * For OpenClaw: set FATHIPPO_NAMESPACE=${chat_id} or FATHIPPO_NAMESPACE=${conversation_label}
  */
 export function getRawNamespace(): string | undefined {
-  return process.env.ENGRM_NAMESPACE 
-    || process.env.ENGRM_CHAT_ID 
-    || process.env.ENGRM_SESSION_ID
+  return process.env.FATHIPPO_NAMESPACE 
+    || process.env.FATHIPPO_CHAT_ID 
+    || process.env.FATHIPPO_SESSION_ID
     || undefined;
 }
 
@@ -73,7 +73,7 @@ export function getNamespace(): string | undefined {
   const raw = getRawNamespace();
   if (!raw) return undefined;
   
-  const vaultPassword = process.env.ENGRM_VAULT_PASSWORD;
+  const vaultPassword = process.env.FATHIPPO_VAULT_PASSWORD;
   if (!vaultPassword) return raw; // Fallback to raw if no password (shouldn't happen)
   
   return hashNamespace(raw, vaultPassword);

@@ -28,7 +28,7 @@ from openai import OpenAI
 
 # Configuration
 ENGRM_API_KEY = os.environ.get("ENGRM_API_KEY", "mem_your_key")
-ENGRM_URL = "https://engrm.xyz/api/v1"
+ENGRM_URL = "https://fathippo.ai/api/v1"
 
 client = OpenAI()
 
@@ -80,7 +80,7 @@ from openai import OpenAI
 from typing import Optional
 
 ENGRM_API_KEY = "mem_your_key"
-ENGRM_URL = "https://engrm.xyz/api/v1"
+ENGRM_URL = "https://fathippo.ai/api/v1"
 
 client = OpenAI()
 

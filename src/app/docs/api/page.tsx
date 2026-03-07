@@ -10,7 +10,7 @@ export default function ApiOverviewPage() {
     <>
       <H1>API Reference</H1>
       <P>
-        All API requests use <InlineCode>https://engrm.xyz/api/v1</InlineCode> as the base URL
+        All API requests use <InlineCode>https://fathippo.ai/api/v1</InlineCode> as the base URL
         and require authentication via Bearer token.
       </P>
 

@@ -1,17 +1,17 @@
-# engrm-mcp
+# fathippo-mcp
 
-Zero-knowledge MCP server for Engrm. Your queries and memories never leave your device unencrypted.
+Zero-knowledge MCP server for FatHippo. Your queries and memories never leave your device unencrypted.
 
 ## Privacy Guarantees
 
 - **Client-side embeddings**: Queries are embedded locally using transformers.js. The server only receives vectors, never your search text.
 - **Client-side encryption**: Memories are encrypted with AES-256-GCM before upload. The server only stores ciphertext.
-- **Zero-knowledge**: The Engrm server cannot read your memories or know what you're searching for.
+- **Zero-knowledge**: The FatHippo server cannot read your memories or know what you're searching for.
 
 ## Installation
 
 ```bash
-npm install -g engrm-mcp
+npm install -g fathippo-mcp
 ```
 
 ## Configuration
@@ -19,28 +19,28 @@ npm install -g engrm-mcp
 ### Environment Variables
 
 ```bash
-Engrm_API_KEY=mem_xxx           # Required: Your Engrm API key
-Engrm_VAULT_PASSWORD=xxx        # Required: Password for client-side encryption
-Engrm_API_URL=https://...       # Optional: API URL (defaults to engrm-sand.vercel.app)
+FatHippo_API_KEY=mem_xxx           # Required: Your FatHippo API key
+FatHippo_VAULT_PASSWORD=xxx        # Required: Password for client-side encryption
+FatHippo_API_URL=https://...       # Optional: API URL (defaults to fathippo.ai)
 
 # Auto-namespace (optional) - isolates memories per chat/project
-Engrm_NAMESPACE=my-project      # Or use Engrm_CHAT_ID / Engrm_SESSION_ID
+FatHippo_NAMESPACE=my-project      # Or use FatHippo_CHAT_ID / FatHippo_SESSION_ID
 ```
 
 ### Auto-Namespace for Chat Isolation
 
-Memories can be automatically isolated by chat context. Set `Engrm_NAMESPACE` and all store/search operations will be scoped to that namespace:
+Memories can be automatically isolated by chat context. Set `FatHippo_NAMESPACE` and all store/search operations will be scoped to that namespace:
 
 ```bash
 # Different chats → different namespaces → isolated memories
-Engrm_NAMESPACE="deals-chat"      # Memories only visible in deals chat
-Engrm_NAMESPACE="gnkscan-project" # Memories only visible in gnkscan context
+FatHippo_NAMESPACE="deals-chat"      # Memories only visible in deals chat
+FatHippo_NAMESPACE="gnkscan-project" # Memories only visible in gnkscan context
 ```
 
 For OpenClaw, you can set this dynamically per session:
 ```bash
-Engrm_NAMESPACE="${chat_id}"       # Use Telegram/Discord chat ID
-Engrm_NAMESPACE="${conversation_label}"  # Use conversation label
+FatHippo_NAMESPACE="${chat_id}"       # Use Telegram/Discord chat ID
+FatHippo_NAMESPACE="${conversation_label}"  # Use conversation label
 ```
 
 Use `global: true` in search/context tools to search across ALL namespaces.
@@ -52,11 +52,11 @@ Add to `~/.config/claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claud
 ```json
 {
   "mcpServers": {
-    "engrm": {
-      "command": "engrm-mcp",
+    "fathippo": {
+      "command": "fathippo-mcp",
       "env": {
-        "Engrm_API_KEY": "mem_xxx",
-        "Engrm_VAULT_PASSWORD": "your-secure-password"
+        "FatHippo_API_KEY": "mem_xxx",
+        "FatHippo_VAULT_PASSWORD": "your-secure-password"
       }
     }
   }
@@ -71,11 +71,11 @@ Configure similarly using your client's MCP server settings.
 
 | Tool | Description |
 |------|-------------|
-| `engrm_store` | Store a memory (encrypted locally, vector computed locally) |
-| `engrm_search` | Semantic search (query embedded locally, server only sees vector) |
-| `engrm_context` | Get relevant context for current conversation |
-| `engrm_list` | List recent memories |
-| `engrm_delete` | Delete a memory by ID |
+| `fathippo_store` | Store a memory (encrypted locally, vector computed locally) |
+| `fathippo_search` | Semantic search (query embedded locally, server only sees vector) |
+| `fathippo_context` | Get relevant context for current conversation |
+| `fathippo_list` | List recent memories |
+| `fathippo_delete` | Delete a memory by ID |
 
 ## How It Works
 
@@ -86,7 +86,7 @@ Configure similarly using your client's MCP server settings.
 │  Claude Desktop                                              │
 │       │                                                      │
 │       ▼                                                      │
-│  engrm-mcp                                                   │
+│  fathippo-mcp                                                   │
 │       │                                                      │
 │       ├──► Embed query locally (transformers.js)             │
 │       │    "meeting preferences" → [0.12, -0.34, ...]        │
@@ -99,7 +99,7 @@ Configure similarly using your client's MCP server settings.
         │  Only vectors + encrypted blobs
         ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    Engrm Server (Blind)                      │
+│                    FatHippo Server (Blind)                      │
 ├─────────────────────────────────────────────────────────────┤
 │  • Receives vector [0.12, -0.34, ...] (can't know meaning)   │
 │  • Stores encrypted blob (can't decrypt)                     │

@@ -1,5 +1,5 @@
 /**
- * Engrm MCP Server - Zero-Knowledge Memory for AI Agents
+ * FatHippo MCP Server - Zero-Knowledge Memory for AI Agents
  * 
  * Privacy guarantees:
  * - Embeddings generated locally (queries never leave device)

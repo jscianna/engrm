@@ -16,18 +16,18 @@ export default function OpenClawGuidePage() {
 
       <H2 id="plugin">Plugin Installation (Recommended)</H2>
       <P>
-        Install the full-featured <InlineCode>@engrm/memory</InlineCode> plugin 
+        Install the full-featured <InlineCode>@fathippo/memory</InlineCode> plugin 
         for automatic recall AND capture.
       </P>
 
       <CodeBlock language="bash">{`# Install the plugin
-openclaw plugins install @engrm/memory
+openclaw plugins install @fathippo/memory
 
 # Configure your API key
-openclaw config set plugins.entries.engrm-memory.config.apiKey "mem_your_key"
+openclaw config set plugins.entries.fathippo-memory.config.apiKey "mem_your_key"
 
 # Enable as memory slot (replaces default memory)
-openclaw config set plugins.slots.memory engrm-memory
+openclaw config set plugins.slots.memory fathippo-memory
 
 # Restart
 openclaw gateway restart`}</CodeBlock>
@@ -45,10 +45,10 @@ openclaw gateway restart`}</CodeBlock>
       <CodeBlock language="json">{`{
   "plugins": {
     "slots": {
-      "memory": "engrm-memory"
+      "memory": "fathippo-memory"
     },
     "entries": {
-      "engrm-memory": {
+      "fathippo-memory": {
         "enabled": true,
         "config": {
           "apiKey": "mem_your_key",
@@ -72,19 +72,19 @@ openclaw gateway restart`}</CodeBlock>
       </P>
 
       <CodeBlock language="markdown">{`## Engrm — Agent Memory
-**URL:** https://www.engrm.xyz
+**URL:** https://www.fathippo.ai
 **API Key:** mem_your_api_key
 
 **Usage:**
 \`\`\`bash
 # Store a memory
-curl -X POST "https://www.engrm.xyz/api/v1/simple/remember" \\
+curl -X POST "https://www.fathippo.ai/api/v1/simple/remember" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{"text": "Memory content here"}'
 
 # Search memories
-curl -X POST "https://www.engrm.xyz/api/v1/simple/recall" \\
+curl -X POST "https://www.fathippo.ai/api/v1/simple/recall" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{"query": "search query", "limit": 5}'
@@ -92,7 +92,7 @@ curl -X POST "https://www.engrm.xyz/api/v1/simple/recall" \\
 
       <H2 id="skill">Create an Engrm Skill</H2>
       <P>
-        Create a skill file at <InlineCode>skills/engrm/SKILL.md</InlineCode>:
+        Create a skill file at <InlineCode>skills/fathippo/SKILL.md</InlineCode>:
       </P>
 
       <CodeBlock language="markdown">{`# Engrm Memory Skill
@@ -117,7 +117,7 @@ Persistent memory for cross-session context.
 
 ### Store Memory
 \`\`\`bash
-curl -X POST "https://www.engrm.xyz/api/v1/simple/remember" \\
+curl -X POST "https://www.fathippo.ai/api/v1/simple/remember" \\
   -H "Authorization: Bearer $ENGRM_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"text": "What to remember"}'
@@ -125,7 +125,7 @@ curl -X POST "https://www.engrm.xyz/api/v1/simple/remember" \\
 
 ### Search Memories
 \`\`\`bash
-curl -X POST "https://www.engrm.xyz/api/v1/simple/recall" \\
+curl -X POST "https://www.fathippo.ai/api/v1/simple/recall" \\
   -H "Authorization: Bearer $ENGRM_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"query": "what to search for", "limit": 5}'
@@ -133,7 +133,7 @@ curl -X POST "https://www.engrm.xyz/api/v1/simple/recall" \\
 
 ### Get Session Context
 \`\`\`bash
-curl -X POST "https://www.engrm.xyz/api/v1/simple/context" \\
+curl -X POST "https://www.fathippo.ai/api/v1/simple/context" \\
   -H "Authorization: Bearer $ENGRM_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"message": "current user message"}'
@@ -163,11 +163,11 @@ MEMORY.md can go stale. Before answering questions about:
 - **User preferences** that might have evolved
 - **Anything that might have changed**
 
-→ **Query Engrm first.** Load the \`engrm\` skill and search before responding.
+→ **Query FatHippo first.** Load the \`fathippo\` skill and search before responding.
 
 This catches decisions made in other sessions and prevents confidently stating outdated info.
 
-### What to Store in Engrm
+### What to Store in FatHippo
 - Decisions and their rationale
 - User preferences discovered during conversation
 - Project architecture and status changes
@@ -205,7 +205,7 @@ Before reaching out to your human about something:
 
       <H3>1. Session Start</H3>
       <CodeBlock language="bash">{`# When starting a new conversation, get context
-curl -X POST "https://www.engrm.xyz/api/v1/simple/context" \\
+curl -X POST "https://www.fathippo.ai/api/v1/simple/context" \\
   -H "Authorization: Bearer $ENGRM_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"message": "User just asked about the API project"}'
@@ -214,7 +214,7 @@ curl -X POST "https://www.engrm.xyz/api/v1/simple/context" \\
 
       <H3>2. During Conversation</H3>
       <CodeBlock language="bash">{`# When user asks about something that might be in memory
-curl -X POST "https://www.engrm.xyz/api/v1/simple/recall" \\
+curl -X POST "https://www.fathippo.ai/api/v1/simple/recall" \\
   -H "Authorization: Bearer $ENGRM_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"query": "database choice for project alpha"}'
@@ -223,7 +223,7 @@ curl -X POST "https://www.engrm.xyz/api/v1/simple/recall" \\
 
       <H3>3. After Important Exchanges</H3>
       <CodeBlock language="bash">{`# When user makes a decision or reveals a preference
-curl -X POST "https://www.engrm.xyz/api/v1/simple/remember" \\
+curl -X POST "https://www.fathippo.ai/api/v1/simple/remember" \\
   -H "Authorization: Bearer $ENGRM_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"text": "User decided to use PostgreSQL for Project Alpha because of team familiarity with SQL"}'`}</CodeBlock>
@@ -255,7 +255,7 @@ confirming preference for SQL databases over NoSQL"]`}</CodeBlock>
         Use namespaces to separate memory by project or context:
       </P>
       <CodeBlock language="bash">{`# Store in project namespace
-curl -X POST "https://www.engrm.xyz/api/v1/memories" \\
+curl -X POST "https://www.fathippo.ai/api/v1/memories" \\
   -H "Authorization: Bearer $ENGRM_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -268,7 +268,7 @@ curl -X POST "https://www.engrm.xyz/api/v1/memories" \\
         For analytics on conversation patterns:
       </P>
       <CodeBlock language="bash">{`# Start session
-SESSION=$(curl -s -X POST "https://www.engrm.xyz/api/v1/sessions/start" \\
+SESSION=$(curl -s -X POST "https://www.fathippo.ai/api/v1/sessions/start" \\
   -H "Authorization: Bearer $ENGRM_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"firstMessage": "Help with API design"}' | jq -r '.sessionId')
@@ -276,7 +276,7 @@ SESSION=$(curl -s -X POST "https://www.engrm.xyz/api/v1/sessions/start" \\
 # ... conversation happens ...
 
 # End session
-curl -X POST "https://www.engrm.xyz/api/v1/sessions/$SESSION/end" \\
+curl -X POST "https://www.fathippo.ai/api/v1/sessions/$SESSION/end" \\
   -H "Authorization: Bearer $ENGRM_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"outcome": "success"}'`}</CodeBlock>

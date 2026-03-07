@@ -155,7 +155,7 @@ export function Footer() {
     <footer className="border-t border-zinc-800 pt-8 mt-16">
       <p className="text-zinc-500 text-sm">
         Built by <a href="https://x.com/scianna" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">John Scianna</a>.
-        Open source on <a href="https://github.com/jscianna/engrm" className="text-cyan-400 hover:underline">GitHub</a>.
+        Open source on <a href="https://github.com/jscianna/fathippo" className="text-cyan-400 hover:underline">GitHub</a>.
       </p>
     </footer>
   );

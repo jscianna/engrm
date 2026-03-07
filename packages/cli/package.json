@@ -1,17 +1,17 @@
 {
-  "name": "engrm",
+  "name": "fathippo",
   "version": "0.1.0",
-  "description": "CLI for Engrm - The cognitive layer for AI agents",
+  "description": "CLI for FatHippo - The cognitive layer for AI agents",
   "type": "module",
   "bin": {
-    "engrm": "./bin/engrm.js"
+    "fathippo": "./bin/fathippo.js"
   },
   "scripts": {
     "build": "echo 'No build needed'",
-    "test": "node bin/engrm.js --help"
+    "test": "node bin/fathippo.js --help"
   },
   "keywords": ["ai", "memory", "agents", "llm", "context"],
-  "author": "Engrm",
+  "author": "FatHippo",
   "license": "MIT",
   "dependencies": {
     "chalk": "^5.3.0",

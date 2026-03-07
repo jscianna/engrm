@@ -1,22 +1,22 @@
 {
-  "id": "engrm-memory",
-  "name": "Engrm Memory",
+  "id": "fathippo-memory",
+  "name": "FatHippo Memory",
   "description": "Cloud-native encrypted memory with auto-recall, auto-capture, and tiered intelligence",
   "kind": "memory",
   "version": "0.1.0",
-  "author": "Engrm",
-  "repository": "https://github.com/jscianna/engrm",
+  "author": "FatHippo",
+  "repository": "https://github.com/jscianna/fathippo",
   "configSchema": {
     "type": "object",
     "properties": {
       "apiKey": {
         "type": "string",
-        "description": "Engrm API key (mem_xxx)"
+        "description": "FatHippo API key (mem_xxx)"
       },
       "baseUrl": {
         "type": "string",
-        "default": "https://www.engrm.xyz/api/v1",
-        "description": "Engrm API base URL"
+        "default": "https://www.fathippo.ai/api/v1",
+        "description": "FatHippo API base URL"
       },
       "autoRecall": {
         "type": "boolean",

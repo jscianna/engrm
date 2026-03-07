@@ -85,9 +85,9 @@ function FloatingCard({
         transform: stackOffset ? `translateY(${stackOffset}px)` : undefined,
         zIndex: stackOffset ? 10 - stackOffset : 10
       }}
-      className={`group relative ${className}`}
+      className={`group relative h-full ${className}`}
     >
-      <div className="relative rounded-2xl bg-white p-6 border border-[#E5E7EB] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.08),0_8px_32px_rgba(0,0,0,0.06)] hover:border-[#D1D5DB] transition-all duration-300">
+      <div className="relative rounded-2xl bg-white p-6 border border-[#E5E7EB] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.08),0_8px_32px_rgba(0,0,0,0.06)] hover:border-[#D1D5DB] transition-all duration-300 h-full">
         {children}
       </div>
     </motion.div>
@@ -117,7 +117,7 @@ function CommandPalettePreview() {
           <Search className="h-4 w-4 text-[#9CA3AF]" />
           <input
             type="text"
-            placeholder="Search memories, agents, or commands..."
+            placeholder="What did we decide about..."
             className="flex-1 bg-transparent text-sm text-[#111827] placeholder:text-[#9CA3AF] outline-none"
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
@@ -131,9 +131,9 @@ function CommandPalettePreview() {
         </div>
         <div className="p-2">
           {[
-            { icon: Brain, label: "Recent Memories", hint: "3 items" },
-            { icon: Sparkles, label: "Active Sessions", hint: "2 running" },
-            { icon: GitBranch, label: "Memory Graph", hint: "View" },
+            { icon: Brain, label: "What did we decide about pricing?", hint: "semantic" },
+            { icon: Sparkles, label: "Remember: ship MVP by Friday", hint: "storing..." },
+            { icon: GitBranch, label: "MEMORY.md savings", hint: "−847 tokens" },
           ].map((item, i) => (
             <div
               key={item.label}
@@ -158,16 +158,17 @@ function CommandPalettePreview() {
 // OpenClaw Installation Code Preview
 // ============================================================================
 function OpenClawCodePreview() {
-  const codeLines = [
-    { content: "# Install", type: "comment" },
-    { content: "openclaw plugins install @engrm/memory", type: "command" },
-    { content: "", type: "empty" },
-    { content: "# Configure", type: "comment" },
-    { content: "openclaw config set plugins.slots.memory=engrm-memory", type: "command" },
-    { content: "openclaw config set plugins.entries.engrm-memory.config.apiKey=mem_xxx", type: "command" },
-    { content: "", type: "empty" },
-    { content: "# Done.", type: "comment" },
-  ];
+  // Syntax highlighting colors (VS Code-like)
+  const colors = {
+    comment: "text-[#6A737D]",      // gray
+    command: "text-[#B392F0]",       // purple - main command
+    subcommand: "text-[#79B8FF]",    // blue - plugins, config
+    action: "text-[#85E89D]",        // green - install, set
+    package: "text-[#FFAB70]",       // orange - @fathippo/memory
+    key: "text-[#79B8FF]",           // blue - config keys
+    value: "text-[#9ECBFF]",         // light blue - values
+    equals: "text-[#E1E4E8]",        // white - operators
+  };
 
   return (
     <motion.div
@@ -177,39 +178,70 @@ function OpenClawCodePreview() {
       transition={{ duration: 0.5, delay: 0.3 }}
       className="relative mx-auto max-w-2xl"
     >
-      <div className="relative rounded-2xl bg-[#0A0A0B] overflow-hidden shadow-[0_24px_48px_-12px_rgba(0,0,0,0.18)] border border-[#1F1F23]">
+      <div className="relative rounded-2xl bg-[#0D1117] overflow-hidden shadow-[0_24px_48px_-12px_rgba(0,0,0,0.18)] border border-[#30363D]">
         {/* Window chrome */}
-        <div className="flex items-center gap-2 px-4 py-3 bg-[#111113] border-b border-[#1F1F23]">
+        <div className="flex items-center gap-2 px-4 py-3 bg-[#161B22] border-b border-[#30363D]">
           <div className="flex items-center gap-2">
             <div className="h-3 w-3 rounded-full bg-[#FF5F57]" />
             <div className="h-3 w-3 rounded-full bg-[#FEBC2E]" />
             <div className="h-3 w-3 rounded-full bg-[#28C840]" />
           </div>
           <div className="flex-1 flex justify-center">
-            <span className="text-[11px] text-[#52525B] font-medium tracking-wide">Terminal</span>
+            <span className="text-[11px] text-[#8B949E] font-medium tracking-wide">Terminal</span>
           </div>
-          <Terminal className="h-3.5 w-3.5 text-[#52525B]" />
+          <Terminal className="h-3.5 w-3.5 text-[#8B949E]" />
         </div>
 
         {/* Code content */}
-        <div className="p-6 font-mono text-[13px] leading-7 bg-[#0A0A0B]">
-          {codeLines.map((line, idx) => (
-            <motion.div
-              key={idx}
-              initial={{ opacity: 0, x: -8 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.4 + idx * 0.06, ease: "easeOut" }}
-            >
-              {line.type === "comment" && (
-                <span className="text-[#52525B]">{line.content}</span>
-              )}
-              {line.type === "command" && (
-                <span className="text-[#22D3EE]">{line.content}</span>
-              )}
-              {line.type === "empty" && <span>&nbsp;</span>}
-            </motion.div>
-          ))}
+        <div className="p-6 font-mono text-base leading-8 bg-[#0D1117]">
+          {/* Line 1: Comment */}
+          <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.4 }}>
+            <span className={colors.comment}># Install</span>
+          </motion.div>
+          
+          {/* Line 2: Install command */}
+          <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.46 }}>
+            <span className={colors.command}>openclaw</span>{" "}
+            <span className={colors.subcommand}>plugins</span>{" "}
+            <span className={colors.action}>install</span>{" "}
+            <span className={colors.package}>@fathippo/memory</span>
+          </motion.div>
+          
+          {/* Empty line */}
+          <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ delay: 0.52 }}>&nbsp;</motion.div>
+          
+          {/* Line 3: Comment */}
+          <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.58 }}>
+            <span className={colors.comment}># Configure</span>
+          </motion.div>
+          
+          {/* Line 4: Config slot */}
+          <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.64 }}>
+            <span className={colors.command}>openclaw</span>{" "}
+            <span className={colors.subcommand}>config</span>{" "}
+            <span className={colors.action}>set</span>{" "}
+            <span className={colors.key}>plugins.slots.memory</span>
+            <span className={colors.equals}>=</span>
+            <span className={colors.value}>fathippo-memory</span>
+          </motion.div>
+          
+          {/* Line 5: Config apiKey */}
+          <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.7 }}>
+            <span className={colors.command}>openclaw</span>{" "}
+            <span className={colors.subcommand}>config</span>{" "}
+            <span className={colors.action}>set</span>{" "}
+            <span className={colors.key}>plugins.entries.fathippo-memory.config.apiKey</span>
+            <span className={colors.equals}>=</span>
+            <span className={colors.value}>mem_xxx</span>
+          </motion.div>
+          
+          {/* Empty line */}
+          <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ delay: 0.76 }}>&nbsp;</motion.div>
+          
+          {/* Line 6: Done comment */}
+          <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.82 }}>
+            <span className={colors.comment}># Done.</span>
+          </motion.div>
         </div>
       </div>
     </motion.div>
@@ -222,69 +254,61 @@ function OpenClawCodePreview() {
 function BentoGrid() {
   const features = [
     {
-      icon: Brain,
-      title: "Tiered Intelligence",
+      icon: Zap,
+      title: "Smaller Context, Smarter Agent",
       description:
-        "Critical memories always available. High-importance on demand. Normal retrieved when relevant.",
-      className: "md:col-span-2",
+        "Only relevant memories load. Your 50KB MEMORY.md becomes surgical 2KB injections. Fewer tokens, faster responses.",
       iconColor: "text-[#0070F3]",
       iconBg: "bg-[#0070F3]/[0.08]",
     },
     {
       icon: Lock,
-      title: "Encrypted by Default",
+      title: "Your Memories Stay Yours",
       description:
-        "AES-256-GCM encryption at rest. Only you and your agent can read memories.",
-      className: "",
+        "AES-256-GCM encryption at rest. Not even we can read your data. Your agent's memory is private.",
       iconColor: "text-[#00B8D9]",
       iconBg: "bg-[#00B8D9]/[0.08]",
     },
     {
-      icon: Zap,
-      title: "Simple or Powerful",
+      icon: Brain,
+      title: "Tiered Importance",
       description:
-        "Use remember() and recall() for quick integration, or the full API for complete control.",
-      className: "",
+        "Critical memories always injected. Important ones on-demand. The rest only when relevant. You control the tiers.",
       iconColor: "text-[#8B5CF6]",
       iconBg: "bg-[#8B5CF6]/[0.08]",
     },
     {
-      icon: BarChart3,
-      title: "Analytics Dashboard",
+      icon: Target,
+      title: "Auto-Consolidation",
       description:
-        "Built-in analytics show token savings, session success rates, and memory utilization.",
-      className: "",
+        "Duplicate decisions merge. Stale context prunes. Repeated mentions strengthen. Your memory stays lean.",
       iconColor: "text-[#0070F3]",
       iconBg: "bg-[#0070F3]/[0.08]",
     },
     {
       icon: Plug,
-      title: "Model Agnostic",
+      title: "Works Everywhere",
       description:
-        "Works with OpenAI, Anthropic, local models, or any LLM. REST API means no lock-in.",
-      className: "",
+        "OpenClaw plugin or REST API. Telegram, Discord, CLI—same memories across all your surfaces.",
       iconColor: "text-[#00B8D9]",
       iconBg: "bg-[#00B8D9]/[0.08]",
     },
     {
-      icon: Target,
-      title: "Smart Consolidation",
+      icon: BarChart3,
+      title: "See the Savings",
       description:
-        "Similar memories merge automatically. No duplicates. Repeated mentions strengthen memories.",
-      className: "md:col-span-2",
+        "Dashboard shows tokens saved, memories accessed, and context efficiency. Know your ROI.",
       iconColor: "text-[#8B5CF6]",
       iconBg: "bg-[#8B5CF6]/[0.08]",
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 auto-rows-fr">
       {features.map((feature, i) => (
         <FloatingCard 
           key={feature.title} 
-          className={feature.className} 
           delay={i * 0.08}
-          stackOffset={i % 2 === 1 ? 6 : 0}
         >
           <div className="relative">
             <div className={`mb-4 inline-flex items-center justify-center rounded-xl ${feature.iconBg} p-3`}>
@@ -304,44 +328,13 @@ function BentoGrid() {
 }
 
 // ============================================================================
-// Stats Section
-// ============================================================================
-function Stats() {
-  const stats = [
-    { value: "70%", label: "Token Savings" },
-    { value: "<50ms", label: "Retrieval Time" },
-    { value: "256-bit", label: "Encryption" },
-    { value: "99.9%", label: "Uptime" },
-  ];
-
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-      {stats.map((stat, i) => (
-        <motion.div
-          key={stat.label}
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ delay: i * 0.1, ease: "easeOut" }}
-          className="text-center"
-        >
-          <div className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#0070F3] to-[#00B8D9] bg-clip-text text-transparent tracking-tight">
-            {stat.value}
-          </div>
-          <div className="text-sm text-[#6B7280] mt-1.5 font-medium">{stat.label}</div>
-        </motion.div>
-      ))}
-    </div>
-  );
-}
-
-// ============================================================================
 // Main Page Component
 // ============================================================================
 export default function Home() {
   const hasClerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
   const { scrollYProgress } = useScroll();
   const headerOpacity = useTransform(scrollYProgress, [0, 0.08], [0, 1]);
+  const headerPointerEvents = useTransform(scrollYProgress, (v) => v > 0.02 ? "auto" : "none");
 
   const fadeInUp = {
     initial: { opacity: 0, y: 24 },
@@ -351,14 +344,20 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-white text-[#111827] overflow-x-hidden antialiased">
+      {/* Hippo mascot - bottom right, full visible, feet on bottom, butt on right */}
+      <img 
+        src="/hippo.png"
+        alt=""
+        className="fixed bottom-0 right-0 w-[888px] h-auto pointer-events-none z-0 opacity-[0.05] translate-x-[18%] translate-y-[28%]"
+      />
       {/* Sticky header */}
       <motion.header
-        style={{ opacity: headerOpacity }}
+        style={{ opacity: headerOpacity, pointerEvents: headerPointerEvents }}
         className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-xl border-b border-[#F3F4F6]"
       >
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
           <Link href="/" className="text-lg font-semibold tracking-tight text-[#111827]">
-            engrm
+            fathippo
           </Link>
           <nav className="flex items-center gap-6">
             <Link
@@ -374,7 +373,7 @@ export default function Home() {
               Brain
             </Link>
             <a
-              href="https://github.com/jscianna/engrm"
+              href="https://github.com/jscianna/fathippo"
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm text-[#6B7280] hover:text-[#111827] transition-colors font-medium"
@@ -392,7 +391,7 @@ export default function Home() {
             href="/"
             className="text-xl font-semibold tracking-tight text-[#111827]"
           >
-            engrm
+            fathippo
           </Link>
           <nav className="flex items-center gap-6">
             <Link
@@ -408,7 +407,7 @@ export default function Home() {
               Brain
             </Link>
             <a
-              href="https://github.com/jscianna/engrm"
+              href="https://github.com/jscianna/fathippo"
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm text-[#6B7280] hover:text-[#111827] transition-colors font-medium"
@@ -452,7 +451,7 @@ export default function Home() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative px-6 pt-20 pb-28 md:pt-28 md:pb-36">
+      <section className="relative px-6 pt-8 pb-16 md:pt-12 md:pb-24">
         <div className="relative z-10 mx-auto max-w-4xl text-center">
           <motion.div {...fadeInUp}>
             <Badge
@@ -460,7 +459,7 @@ export default function Home() {
               className="mb-6 border-[#E5E7EB] bg-white text-[#6B7280] font-medium"
             >
               <Sparkles className="mr-1.5 h-3 w-3 text-[#0070F3]" />
-              Memory infrastructure for AI agents
+              The memory plugin for OpenClaw
             </Badge>
           </motion.div>
 
@@ -481,8 +480,8 @@ export default function Home() {
             transition={{ duration: 0.6, delay: 0.2, ease: [0.21, 0.47, 0.32, 0.98] }}
             className="mx-auto mt-6 max-w-xl text-lg text-[#6B7280] leading-relaxed"
           >
-            Your agent recalls what matters, stores what&apos;s important, and
-            gets smarter over time. No manual context management required.
+            Stop managing bloated MEMORY.md files. Your agent stores what matters,
+            recalls it when needed, and saves tokens every session.
           </motion.p>
 
           <motion.div
@@ -530,13 +529,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Stats Section */}
-      <section className="relative z-10 px-6 py-16">
-        <div className="mx-auto max-w-3xl">
-          <Stats />
-        </div>
-      </section>
-
       {/* Command Palette Preview */}
       <section className="relative z-10 px-6 py-20">
         <div className="mx-auto max-w-6xl">
@@ -546,61 +538,14 @@ export default function Home() {
             viewport={{ once: true }}
             className="text-center mb-12"
           >
-            <h2 className="text-2xl font-semibold text-[#111827] mb-3 tracking-tight">
-              Lightning-fast search
+            <h2 className="text-3xl font-semibold text-[#111827] mb-3 tracking-tight">
+              Your agent just knows
             </h2>
-            <p className="text-[#6B7280]">
-              Find any memory, session, or agent in milliseconds
+            <p className="text-lg text-[#6B7280] max-w-xl mx-auto">
+              Install the plugin. Your agent automatically searches, stores, and retrieves—shrinking your MEMORY.md and saving tokens.
             </p>
           </motion.div>
           <CommandPalettePreview />
-        </div>
-      </section>
-
-      {/* Built for OpenClaw Section */}
-      <section className="relative z-10 px-6 py-20">
-        <div className="mx-auto max-w-6xl">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-12"
-          >
-            <Badge
-              variant="outline"
-              className="mb-4 border-[#00B8D9]/20 bg-[#00B8D9]/[0.04] text-[#0891B2] font-medium"
-            >
-              Native Integration
-            </Badge>
-            <h2 className="text-2xl font-semibold text-[#111827] mb-3 tracking-tight">
-              Built for OpenClaw
-            </h2>
-            <p className="text-[#6B7280] max-w-lg mx-auto">
-              Consistent memory across all your agents and chats. Install in seconds, configure once, remember forever.
-            </p>
-          </motion.div>
-          <OpenClawCodePreview />
-        </div>
-      </section>
-
-      {/* Features Bento Grid */}
-      <section className="relative z-10 px-6 py-24" id="features">
-        <div className="mx-auto max-w-5xl">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-3xl font-semibold text-[#111827] mb-4 tracking-tight">
-              Built for production
-            </h2>
-            <p className="text-[#6B7280] max-w-lg mx-auto">
-              Everything you need to give your agents persistent, intelligent
-              memory.
-            </p>
-          </motion.div>
-          <BentoGrid />
         </div>
       </section>
 
@@ -613,10 +558,10 @@ export default function Home() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="text-3xl font-semibold text-[#111827] mb-4 tracking-tight">
+            <h2 className="text-4xl font-semibold text-[#111827] mb-4 tracking-tight">
               How it works
             </h2>
-            <p className="text-[#6B7280]">
+            <p className="text-lg text-[#6B7280]">
               Three steps to intelligent memory
             </p>
           </motion.div>
@@ -625,27 +570,27 @@ export default function Home() {
             {[
               {
                 step: "01",
-                title: "Start Session",
+                title: "Chat Starts",
                 description:
-                  "Initialize with the first message. Relevant memories are automatically retrieved and injected.",
+                  "Your agent wakes up with context. Relevant memories are injected before the first reply—no MEMORY.md loading required.",
                 icon: Layers,
                 color: "text-[#0070F3]",
                 bgColor: "bg-[#0070F3]/[0.08]",
               },
               {
                 step: "02",
-                title: "Conversation Flows",
+                title: "You Talk",
                 description:
-                  "Your agent responds with full context. New insights are captured as the conversation unfolds.",
+                  "Mid-conversation context surfaces automatically. Your agent captures new insights without you asking.",
                 icon: GitBranch,
                 color: "text-[#00B8D9]",
                 bgColor: "bg-[#00B8D9]/[0.08]",
               },
               {
                 step: "03",
-                title: "End & Learn",
+                title: "Session Ends",
                 description:
-                  "Session ends. Learnings are stored, consolidated, and strengthened for next time.",
+                  "Learnings stored, duplicates merged, weak memories pruned. Next session starts smarter.",
                 icon: Shield,
                 color: "text-[#8B5CF6]",
                 bgColor: "bg-[#8B5CF6]/[0.08]",
@@ -677,6 +622,52 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Built for OpenClaw Section */}
+      <section className="relative z-10 px-6 py-20">
+        <div className="mx-auto max-w-6xl">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <Badge
+              variant="outline"
+              className="mb-4 border-[#00B8D9]/20 bg-[#00B8D9]/[0.04] text-[#0891B2] font-medium"
+            >
+              Native Integration
+            </Badge>
+            <h2 className="text-3xl font-semibold text-[#111827] mb-3 tracking-tight">
+              Built for OpenClaw
+            </h2>
+            <p className="text-lg text-[#6B7280] max-w-lg mx-auto">
+              Consistent memory across all your agents and chats. Install in seconds, configure once, remember forever.
+            </p>
+          </motion.div>
+          <OpenClawCodePreview />
+        </div>
+      </section>
+
+      {/* Features Bento Grid */}
+      <section className="relative z-10 px-6 py-24" id="features">
+        <div className="mx-auto max-w-5xl">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <h2 className="text-4xl font-semibold text-[#111827] mb-4 tracking-tight">
+              Built for production
+            </h2>
+            <p className="text-lg text-[#6B7280] max-w-lg mx-auto">
+              Real agents shipping today. Not a demo.
+            </p>
+          </motion.div>
+          <BentoGrid />
+        </div>
+      </section>
+
       {/* Final CTA */}
       <section className="relative z-10 px-6 py-32">
         <div className="mx-auto max-w-2xl text-center">
@@ -686,7 +677,7 @@ export default function Home() {
             viewport={{ once: true }}
             className="text-3xl font-semibold text-[#111827] mb-4 tracking-tight"
           >
-            Ready to give your agents memory?
+            Ditch the bloated MEMORY.md
           </motion.h2>
           <motion.p
             initial={{ opacity: 0, y: 20 }}
@@ -695,8 +686,7 @@ export default function Home() {
             transition={{ delay: 0.1 }}
             className="text-[#6B7280] mb-10"
           >
-            Start building intelligent agents that learn from every
-            conversation.
+            Three commands. Your agent remembers everything, loads only what&apos;s relevant, and costs less to run.
           </motion.p>
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -739,7 +729,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 md:flex-row">
           <div className="flex items-center gap-6">
             <Link href="/" className="text-lg font-semibold text-[#111827]">
-              engrm
+              fathippo
             </Link>
             <span className="text-[#E5E7EB]">|</span>
             <Link
@@ -755,7 +745,7 @@ export default function Home() {
               Brain
             </Link>
             <a
-              href="https://github.com/jscianna/engrm"
+              href="https://github.com/jscianna/fathippo"
               className="text-sm text-[#6B7280] hover:text-[#111827] font-medium"
             >
               GitHub

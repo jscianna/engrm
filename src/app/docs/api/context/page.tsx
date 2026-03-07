@@ -33,7 +33,7 @@ export default function ContextApiPage() {
       />
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/context" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/context" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{"message": "Help me schedule a meeting", "highLimit": 3}'`}</CodeBlock>
@@ -86,7 +86,7 @@ export default function ContextApiPage() {
       </P>
 
       <H3>Example with Synthesis</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/context" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/context" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{"message": "Update me on the project", "synthesize": true}'`}</CodeBlock>
@@ -137,7 +137,7 @@ export default function ContextApiPage() {
       />
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/context/refresh" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/context/refresh" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -172,7 +172,7 @@ export default function ContextApiPage() {
 def get_system_prompt(user_message: str) -> str:
     # Get context from Engrm
     context = requests.post(
-        "https://engrm.xyz/api/v1/context",
+        "https://fathippo.ai/api/v1/context",
         headers={"Authorization": f"Bearer {API_KEY}"},
         json={"message": user_message}
     ).json()

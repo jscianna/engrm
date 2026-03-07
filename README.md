@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="https://engrm.xyz/logo.png" alt="Engrm" width="120" />
+  <img src="https://fathippo.ai/logo.png" alt="FatHippo" width="120" />
 </p>
 
-<h1 align="center">Engrm</h1>
+<h1 align="center">FatHippo</h1>
 
 <p align="center">
   <strong>Memory that just works.</strong><br/>
@@ -10,23 +10,23 @@
 </p>
 
 <p align="center">
-  <a href="https://engrm.xyz">Website</a> •
-  <a href="https://engrm.xyz/docs">Documentation</a> •
-  <a href="https://www.npmjs.com/package/@engrm/openclaw-memory">OpenClaw Plugin</a>
+  <a href="https://fathippo.ai">Website</a> •
+  <a href="https://fathippo.ai/docs">Documentation</a> •
+  <a href="https://www.npmjs.com/package/@fathippo/openclaw-memory">OpenClaw Plugin</a>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License" />
   <img src="https://img.shields.io/badge/typescript-5.0+-blue.svg" alt="TypeScript" />
   <img src="https://img.shields.io/badge/next.js-16+-black.svg" alt="Next.js" />
-  <img src="https://img.shields.io/npm/v/@engrm/openclaw-memory.svg" alt="npm" />
+  <img src="https://img.shields.io/npm/v/@fathippo/openclaw-memory.svg" alt="npm" />
 </p>
 
 ---
 
-## What is Engrm?
+## What is FatHippo?
 
-Every AI agent wakes up with amnesia. Engrm fixes that.
+Every AI agent wakes up with amnesia. FatHippo fixes that.
 
 - **Persistent** — Memories survive sessions, restarts, and model switches
 - **Encrypted** — AES-256-GCM encryption at rest with per-user keys
@@ -42,13 +42,13 @@ The fastest way to add memory to your AI agent:
 
 ```bash
 # Install the plugin
-openclaw plugins install @engrm/openclaw-memory
+openclaw plugins install @fathippo/openclaw-memory
 
 # Set your API key
-openclaw config set plugins.entries.memory-engrm.config.apiKey=mem_xxx
+openclaw config set plugins.entries.memory-fathippo.config.apiKey=mem_xxx
 
 # Enable as memory provider
-openclaw config set plugins.slots.memory=memory-engrm
+openclaw config set plugins.slots.memory=memory-fathippo
 
 # Done. Memory is now automatic.
 ```
@@ -68,7 +68,7 @@ For custom integrations:
 ### Store a Memory
 
 ```bash
-curl -X POST https://engrm.xyz/api/v1/simple/remember \
+curl -X POST https://fathippo.ai/api/v1/simple/remember \
   -H "Authorization: Bearer mem_xxx" \
   -H "Content-Type: application/json" \
   -d '{"text": "User prefers dark mode"}'
@@ -77,7 +77,7 @@ curl -X POST https://engrm.xyz/api/v1/simple/remember \
 ### Get Context
 
 ```bash
-curl -X POST https://engrm.xyz/api/v1/simple/context \
+curl -X POST https://fathippo.ai/api/v1/simple/context \
   -H "Authorization: Bearer mem_xxx" \
   -H "Content-Type: application/json" \
   -d '{"message": "What are my preferences?"}'
@@ -86,7 +86,7 @@ curl -X POST https://engrm.xyz/api/v1/simple/context \
 ### Search Memories
 
 ```bash
-curl -X POST https://engrm.xyz/api/v1/search \
+curl -X POST https://fathippo.ai/api/v1/search \
   -H "Authorization: Bearer mem_xxx" \
   -H "Content-Type: application/json" \
   -d '{"query": "user preferences", "topK": 5}'
@@ -118,7 +118,7 @@ curl -X POST https://engrm.xyz/api/v1/search \
 └────────────────────────────┼────────────────────────────────────┘
                              │ HTTPS
 ┌────────────────────────────▼────────────────────────────────────┐
-│                        Engrm API                                │
+│                        FatHippo API                                │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │              Server-Side Encryption Layer                │   │
 │  │         AES-256-GCM with per-user derived keys           │   │
@@ -152,7 +152,7 @@ curl -X POST https://engrm.xyz/api/v1/search \
 
 - ✅ Database breach = encrypted blobs only
 - ✅ Per-user key derivation (no shared keys)
-- ✅ Engrm employees cannot read your data
+- ✅ FatHippo employees cannot read your data
 - ⚠️ LLM-based features (entity extraction) use external providers*
 
 *Confidential compute roadmap in progress for fully private inference.
@@ -167,7 +167,7 @@ curl -X POST https://engrm.xyz/api/v1/search \
 
 ## Memory Tiers
 
-Engrm uses intelligent memory tiering:
+FatHippo uses intelligent memory tiering:
 
 | Tier | Behavior |
 |------|----------|
@@ -192,8 +192,8 @@ Memories auto-promote based on access patterns (5+ accesses → high, 15+ → cr
 
 ```bash
 # Clone the repository
-git clone https://github.com/jscianna/engrm.git
-cd engrm
+git clone https://github.com/jscianna/fathippo.git
+cd fathippo
 
 # Install dependencies
 npm install
@@ -284,8 +284,8 @@ Apache 2.0 — see [LICENSE](LICENSE) for details.
 
 ## Links
 
-- **Website:** [engrm.xyz](https://engrm.xyz)
-- **npm:** [@engrm/openclaw-memory](https://www.npmjs.com/package/@engrm/openclaw-memory)
+- **Website:** [fathippo.ai](https://fathippo.ai)
+- **npm:** [@fathippo/openclaw-memory](https://www.npmjs.com/package/@fathippo/openclaw-memory)
 - **Twitter:** [@scianna](https://x.com/scianna)
 
 ---

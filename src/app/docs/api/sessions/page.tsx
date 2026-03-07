@@ -32,7 +32,7 @@ export default function SessionsApiPage() {
       />
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/sessions/start" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/sessions/start" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -92,7 +92,7 @@ export default function SessionsApiPage() {
       />
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/sessions/sess_xyz789/turn" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/sessions/sess_xyz789/turn" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -151,7 +151,7 @@ export default function SessionsApiPage() {
       />
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/sessions/sess_xyz789/end" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/sessions/sess_xyz789/end" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -174,7 +174,7 @@ export default function SessionsApiPage() {
       <P>List recent sessions with basic stats.</P>
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl "https://engrm.xyz/api/v1/sessions?limit=10" \\
+      <CodeBlock language="bash">{`curl "https://fathippo.ai/api/v1/sessions?limit=10" \\
   -H "Authorization: Bearer mem_your_api_key"`}</CodeBlock>
 
       <H3>Response</H3>

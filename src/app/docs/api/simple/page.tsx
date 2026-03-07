@@ -35,7 +35,7 @@ export default function SimpleApiPage() {
       />
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/simple/remember" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/simple/remember" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{"text": "User prefers TypeScript over JavaScript"}'`}</CodeBlock>
@@ -86,7 +86,7 @@ export default function SimpleApiPage() {
       />
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/simple/recall" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/simple/recall" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{"query": "user language preferences", "limit": 3}'`}</CodeBlock>
@@ -123,7 +123,7 @@ export default function SimpleApiPage() {
       />
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/simple/context" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/simple/context" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{"message": "Help me write some code"}'`}</CodeBlock>
@@ -144,7 +144,7 @@ export default function SimpleApiPage() {
 from openai import OpenAI
 
 API_KEY = "mem_your_api_key"
-BASE_URL = "https://engrm.xyz/api/v1/simple"
+BASE_URL = "https://fathippo.ai/api/v1/simple"
 
 client = OpenAI()
 

@@ -31,7 +31,7 @@ export default function IntelligenceApiPage() {
       />
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/memories/mem_abc123/reinforce" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/memories/mem_abc123/reinforce" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{"value": 1, "reason": "This preference was accurate"}'`}</CodeBlock>
@@ -68,7 +68,7 @@ export default function IntelligenceApiPage() {
       />
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/memories/mem_abc123/lock" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/memories/mem_abc123/lock" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{"tier": "critical"}'`}</CodeBlock>
@@ -99,7 +99,7 @@ export default function IntelligenceApiPage() {
       />
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/memories/miss" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/memories/miss" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -159,7 +159,7 @@ export default function IntelligenceApiPage() {
       />
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/extract" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/extract" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -216,7 +216,7 @@ export default function IntelligenceApiPage() {
       />
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/explain" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/explain" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{"query": "What timezone is the user in?"}'`}</CodeBlock>

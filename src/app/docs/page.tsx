@@ -16,7 +16,7 @@ export default function QuickStartPage() {
 
       <H2 id="step-1">1. Get Your API Key</H2>
       <P>
-        Sign up at <a href="https://engrm.xyz" className="text-cyan-400 hover:underline">engrm.xyz</a> and 
+        Sign up at <a href="https://fathippo.ai" className="text-cyan-400 hover:underline">fathippo.ai</a> and 
         go to <strong>Dashboard → Settings → API Keys</strong>.
         Create a new key for your agent.
       </P>
@@ -29,7 +29,7 @@ export default function QuickStartPage() {
         The simplest way to store a memory is the <InlineCode>/v1/simple/remember</InlineCode> endpoint.
         It handles classification, embedding, and consolidation automatically.
       </P>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/simple/remember" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/simple/remember" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{"text": "User prefers dark mode and concise responses"}'`}</CodeBlock>
@@ -50,7 +50,7 @@ export default function QuickStartPage() {
         Use <InlineCode>/v1/simple/recall</InlineCode> to search and retrieve memories.
         It returns just the text content—perfect for injection into prompts.
       </P>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/simple/recall" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/simple/recall" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{"query": "user preferences", "limit": 5}'`}</CodeBlock>
@@ -70,7 +70,7 @@ export default function QuickStartPage() {
         For a complete session workflow, use <InlineCode>/v1/simple/context</InlineCode> to get
         an injectable context string for your AI's system prompt.
       </P>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/simple/context" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/simple/context" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{"message": "Help me design an API"}'`}</CodeBlock>
@@ -93,13 +93,13 @@ export default function QuickStartPage() {
       </P>
 
       <H3>Start a Session</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/sessions/start" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/sessions/start" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{"firstMessage": "Help me design an API"}'`}</CodeBlock>
 
       <H3>Record Turns (Optional)</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/sessions/{sessionId}/turn" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/sessions/{sessionId}/turn" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -112,7 +112,7 @@ export default function QuickStartPage() {
   }'`}</CodeBlock>
 
       <H3>End Session</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/sessions/{sessionId}/end" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/sessions/{sessionId}/end" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{"outcome": "success"}'`}</CodeBlock>
@@ -122,7 +122,7 @@ export default function QuickStartPage() {
       <CodeBlock language="python">{`import requests
 
 API_KEY = "mem_your_api_key"
-BASE_URL = "https://engrm.xyz/api/v1"
+BASE_URL = "https://fathippo.ai/api/v1"
 headers = {
     "Authorization": f"Bearer {API_KEY}",
     "Content-Type": "application/json"

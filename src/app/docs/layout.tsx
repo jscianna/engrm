@@ -53,7 +53,7 @@ export default function DocsLayout({
           </Link>
           <div className="flex items-center gap-4">
             <a
-              href="https://github.com/jscianna/engrm"
+              href="https://github.com/jscianna/fathippo"
               target="_blank"
               rel="noopener noreferrer"
               className="text-zinc-400 hover:text-white transition-colors text-sm"

@@ -111,7 +111,7 @@ export async function getAnalytics(params: AnalyticsParams): Promise<AnalyticsRe
     const totalAccesses = Number(row?.total_accesses ?? 0);
 
     // Estimate tokens saved: each access would have needed full context
-    // With engrm, we only inject relevant memories (estimated ~10% of total)
+    // With fathippo, we only inject relevant memories (estimated ~10% of total)
     const tokensWithoutEngrm = Math.round(totalAccesses * AVG_CONTEXT_WITHOUT_MEMORY);
     const avgMemoryTokens = Math.round((totalChars * TOKENS_PER_CHAR) / Math.max(1, Number(row?.memory_count ?? 1)));
     const tokensWithEngrm = Math.round(totalAccesses * avgMemoryTokens * 3); // Assume 3 memories per context

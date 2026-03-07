@@ -33,7 +33,7 @@ export default function SearchApiPage() {
       />
 
       <H3>Example Request</H3>
-      <CodeBlock language="bash">{`curl -X POST "https://engrm.xyz/api/v1/search" \\
+      <CodeBlock language="bash">{`curl -X POST "https://fathippo.ai/api/v1/search" \\
   -H "Authorization: Bearer mem_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{"query": "What database does the user prefer?", "topK": 5}'`}</CodeBlock>

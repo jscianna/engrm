@@ -1,10 +1,10 @@
-# @engrm/memory
+# @fathippo/memory
 
 Cloud-native encrypted memory for OpenClaw agents. Install once, remember forever.
 
-## Why Engrm?
+## Why FatHippo?
 
-| Feature | memory-core | memory-lancedb | **@engrm/memory** |
+| Feature | memory-core | memory-lancedb | **@fathippo/memory** |
 |---------|-------------|----------------|-------------------|
 | Storage | Local files | Local DB | **Cloud (Turso)** |
 | Encryption | ❌ | ❌ | **AES-256-GCM** |
@@ -17,13 +17,13 @@ Cloud-native encrypted memory for OpenClaw agents. Install once, remember foreve
 
 ```bash
 # Install
-openclaw plugins install @engrm/memory
+openclaw plugins install @fathippo/memory
 
 # Configure your API key
-openclaw config set plugins.entries.engrm-memory.config.apiKey "mem_your_key"
+openclaw config set plugins.entries.fathippo-memory.config.apiKey "mem_your_key"
 
 # Enable as memory slot
-openclaw config set plugins.slots.memory engrm-memory
+openclaw config set plugins.slots.memory fathippo-memory
 
 # Restart
 openclaw gateway restart
@@ -35,12 +35,12 @@ openclaw gateway restart
 # ~/.openclaw/config.yaml
 plugins:
   slots:
-    memory: engrm-memory
+    memory: fathippo-memory
   entries:
-    engrm-memory:
+    fathippo-memory:
       enabled: true
       config:
-        apiKey: mem_xxx  # Your Engrm API key
+        apiKey: mem_xxx  # Your FatHippo API key
         autoRecall: true  # Inject memories automatically
         autoCapture: true # Store insights automatically
 ```
@@ -48,7 +48,7 @@ plugins:
 ## How It Works
 
 ### Auto-Recall (before_agent_start)
-When a conversation starts, Engrm automatically:
+When a conversation starts, FatHippo automatically:
 1. Analyzes the user's first message
 2. Retrieves relevant memories (critical + matched)
 3. Injects them into the system prompt
@@ -56,7 +56,7 @@ When a conversation starts, Engrm automatically:
 Your agent knows the user's preferences, past decisions, and context — automatically.
 
 ### Auto-Capture (agent_end)
-After each conversation, Engrm automatically:
+After each conversation, FatHippo automatically:
 1. Scans user messages for important content
 2. Detects preferences, decisions, facts, entities
 3. Stores them (with duplicate detection)
@@ -79,7 +79,7 @@ No manual "remember this" needed.
 
 ## Get Started
 
-1. Create account at [engrm.xyz](https://engrm.xyz)
+1. Create account at [fathippo.ai](https://fathippo.ai)
 2. Get your API key from the dashboard
 3. Install the plugin
 4. Configure and restart OpenClaw
@@ -88,6 +88,6 @@ Your agent now has permanent memory.
 
 ## Links
 
-- **Website**: https://engrm.xyz
-- **Docs**: https://engrm.xyz/docs/guides/openclaw
-- **GitHub**: https://github.com/jscianna/engrm
+- **Website**: https://fathippo.ai
+- **Docs**: https://fathippo.ai/docs/guides/openclaw
+- **GitHub**: https://github.com/jscianna/fathippo
