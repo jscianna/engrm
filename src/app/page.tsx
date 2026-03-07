@@ -19,6 +19,8 @@ import {
   Layers,
   Shield,
   Terminal,
+  Menu,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -332,6 +334,7 @@ function BentoGrid() {
 // ============================================================================
 export default function Home() {
   const hasClerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { scrollYProgress } = useScroll();
   const headerOpacity = useTransform(scrollYProgress, [0, 0.08], [0, 1]);
   const headerPointerEvents = useTransform(scrollYProgress, (v) => v > 0.02 ? "auto" : "none");
@@ -359,7 +362,7 @@ export default function Home() {
           <Link href="/" className="text-lg font-semibold tracking-tight text-[#111827]">
             fathippo
           </Link>
-          <nav className="flex items-center gap-6">
+          <nav className="hidden md:flex items-center gap-6">
             <Link
               href="/docs"
               className="text-sm text-[#6B7280] hover:text-[#111827] transition-colors font-medium"
@@ -381,6 +384,14 @@ export default function Home() {
               GitHub
             </a>
           </nav>
+          {/* Mobile hamburger for sticky header */}
+          <button
+            className="md:hidden p-2 -mr-2 text-[#6B7280] hover:text-[#111827]"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle menu"
+          >
+            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
         </div>
       </motion.header>
 
@@ -393,7 +404,9 @@ export default function Home() {
           >
             fathippo
           </Link>
-          <nav className="flex items-center gap-6">
+          
+          {/* Desktop nav */}
+          <nav className="hidden md:flex items-center gap-6">
             <Link
               href="/docs"
               className="text-sm text-[#6B7280] hover:text-[#111827] transition-colors font-medium"
@@ -447,7 +460,78 @@ export default function Home() {
               </Button>
             )}
           </nav>
+
+          {/* Mobile hamburger */}
+          <button
+            className="md:hidden p-2 -mr-2 text-[#6B7280] hover:text-[#111827]"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle menu"
+          >
+            {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          </button>
         </div>
+
+        {/* Mobile menu dropdown */}
+        {mobileMenuOpen && (
+          <div className="md:hidden absolute top-full left-0 right-0 bg-white border-b border-[#F3F4F6] shadow-lg z-50">
+            <nav className="flex flex-col px-6 py-4 gap-4">
+              <Link
+                href="/docs"
+                className="text-base text-[#6B7280] hover:text-[#111827] transition-colors font-medium py-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Docs
+              </Link>
+              <Link
+                href="/brain"
+                className="text-base text-[#6B7280] hover:text-[#111827] transition-colors font-medium py-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Brain
+              </Link>
+              <a
+                href="https://github.com/jscianna/fathippo"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-base text-[#6B7280] hover:text-[#111827] transition-colors font-medium py-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                GitHub
+              </a>
+              <div className="border-t border-[#F3F4F6] pt-4 mt-2">
+                {hasClerk ? (
+                  <>
+                    <SignedOut>
+                      <SignInButton mode="modal">
+                        <Button
+                          variant="outline"
+                          className="w-full border-[#E5E7EB] text-[#111827] hover:bg-[#F9FAFB] font-medium"
+                        >
+                          Sign In
+                        </Button>
+                      </SignInButton>
+                    </SignedOut>
+                    <SignedIn>
+                      <Button
+                        asChild
+                        className="w-full bg-[#111827] text-white hover:bg-[#1F2937] font-medium"
+                      >
+                        <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>Dashboard</Link>
+                      </Button>
+                    </SignedIn>
+                  </>
+                ) : (
+                  <Button
+                    asChild
+                    className="w-full bg-[#111827] text-white hover:bg-[#1F2937] font-medium"
+                  >
+                    <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>Dashboard</Link>
+                  </Button>
+                )}
+              </div>
+            </nav>
+          </div>
+        )}
       </header>
 
       {/* Hero Section */}
