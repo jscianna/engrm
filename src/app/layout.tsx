@@ -42,6 +42,13 @@ export default function RootLayout({
 }>) {
   const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
+  // Validate that the key exists and starts with the expected prefix
+  const isValidClerkKey =
+    publishableKey &&
+    (publishableKey.startsWith("pk_live_") ||
+      publishableKey.startsWith("pk_test_")) &&
+    publishableKey.length > 20;
+
   const app = (
     <html lang="en" className={`dark ${inter.variable}`}>
       <body className="font-sans antialiased tracking-tight">
@@ -51,7 +58,7 @@ export default function RootLayout({
     </html>
   );
 
-  if (!publishableKey) {
+  if (!isValidClerkKey) {
     return app;
   }
 
