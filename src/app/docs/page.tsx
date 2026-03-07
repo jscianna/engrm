@@ -1,8 +1,8 @@
 import { CodeBlock, Note, H1, H2, H3, P, InlineCode, Footer } from "./components";
 
 export const metadata = {
-  title: "Quick Start | Engrm Docs",
-  description: "Get started with Engrm in 5 minutes. Give your AI agents persistent memory.",
+  title: "Quick Start | FatHippo Docs",
+  description: "Get started with FatHippo in 5 minutes. Give your AI agents persistent memory.",
 };
 
 export default function QuickStartPage() {

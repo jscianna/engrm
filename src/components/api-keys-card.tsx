@@ -144,7 +144,7 @@ export function ApiKeysCard() {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-zinc-400">
-          Create API keys for AI agents to access your memories via the Engrm API.
+          Create API keys for AI agents to access your memories via the FatHippo API.
         </p>
 
         {/* New key display (shown once after creation) */}

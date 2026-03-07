@@ -1,5 +1,5 @@
 /**
- * Consistent error handling for Engrm API
+ * Consistent error handling for FatHippo API
  * All errors have codes, HTTP status, and user-friendly messages
  */
 
@@ -163,7 +163,7 @@ export function errorResponse(error: unknown): Response {
   }
 
   // Log unexpected errors
-  console.error("[Engrm] Unexpected error:", error);
+  console.error("[FatHippo] Unexpected error:", error);
 
   const fallback = new MemryError("INTERNAL_ERROR");
   return Response.json(fallback.toJSON(), { status: fallback.status });

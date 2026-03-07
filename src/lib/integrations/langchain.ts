@@ -1,19 +1,19 @@
-type EngrmFetch = typeof fetch;
+type FatHippoFetch = typeof fetch;
 
-export type EngrmLangChainMemoryOptions = {
+export type FatHippoLangChainMemoryOptions = {
   baseUrl: string;
   apiKey: string;
   namespace?: string;
-  fetchImpl?: EngrmFetch;
+  fetchImpl?: FatHippoFetch;
 };
 
-export class EngrmLangChainMemory {
+export class FatHippoLangChainMemory {
   private readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly namespace?: string;
-  private readonly fetchImpl: EngrmFetch;
+  private readonly fetchImpl: FatHippoFetch;
 
-  constructor(options: EngrmLangChainMemoryOptions) {
+  constructor(options: FatHippoLangChainMemoryOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.apiKey = options.apiKey;
     this.namespace = options.namespace;
@@ -40,7 +40,7 @@ export class EngrmLangChainMemory {
     });
 
     if (!response.ok) {
-      throw new Error(`Engrm search failed with ${response.status}`);
+      throw new Error(`FatHippo search failed with ${response.status}`);
     }
 
     return response.json();
@@ -61,7 +61,7 @@ export class EngrmLangChainMemory {
     });
 
     if (!response.ok) {
-      throw new Error(`Engrm store failed with ${response.status}`);
+      throw new Error(`FatHippo store failed with ${response.status}`);
     }
 
     return response.json();

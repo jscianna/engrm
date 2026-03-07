@@ -29,7 +29,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <header className="relative hidden items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-900/85 px-4 py-3 backdrop-blur md:flex">
           <Link href="/dashboard" className="flex items-center gap-2 text-sm font-semibold tracking-wide">
             <Brain className="h-4 w-4 text-cyan-300" />
-            Engrm
+            FatHippo
           </Link>
           <div className="flex items-center gap-2">
             {links.map((link) => {
@@ -65,7 +65,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <header className="relative flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/85 px-4 py-3 backdrop-blur md:hidden">
           <Link href="/dashboard" className="flex items-center gap-2 text-sm font-semibold tracking-wide">
             <Brain className="h-4 w-4 text-cyan-300" />
-            Engrm
+            FatHippo
           </Link>
           <UserButton afterSignOutUrl="/" />
         </header>

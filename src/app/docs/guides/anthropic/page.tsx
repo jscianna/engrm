@@ -1,8 +1,8 @@
 import { CodeBlock, Note, H1, H2, H3, P, InlineCode, Footer } from "../../components";
 
 export const metadata = {
-  title: "Anthropic Integration | Engrm Docs",
-  description: "Add persistent memory to Claude models with Engrm.",
+  title: "Anthropic Integration | FatHippo Docs",
+  description: "Add persistent memory to Claude models with FatHippo.",
 };
 
 export default function AnthropicGuidePage() {
@@ -11,7 +11,7 @@ export default function AnthropicGuidePage() {
       <H1>Anthropic Integration</H1>
       <P>
         Add persistent memory to Claude-powered agents. This guide shows how to 
-        integrate Engrm with Claude 3.5 Sonnet, Claude 3 Opus, and other Anthropic models.
+        integrate FatHippo with Claude 3.5 Sonnet, Claude 3 Opus, and other Anthropic models.
       </P>
 
       <H2 id="install">Installation</H2>
@@ -33,7 +33,7 @@ ENGRM_URL = "https://fathippo.ai/api/v1"
 client = anthropic.Anthropic()
 
 def get_context(user_message: str) -> str:
-    """Get relevant context from Engrm"""
+    """Get relevant context from FatHippo"""
     response = requests.post(
         f"{ENGRM_URL}/simple/context",
         headers={"Authorization": f"Bearer {ENGRM_API_KEY}"},

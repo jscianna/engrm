@@ -141,7 +141,7 @@ export function FeedbackWidget() {
             </form>
 
             <p className="mt-4 text-center text-xs text-zinc-500">
-              Your feedback helps us improve Engrm
+              Your feedback helps us improve FatHippo
             </p>
           </div>
         </div>

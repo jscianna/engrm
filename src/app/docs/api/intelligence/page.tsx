@@ -1,7 +1,7 @@
 import { CodeBlock, Note, Table, Endpoint, H1, H2, H3, P, InlineCode, Footer } from "../../components";
 
 export const metadata = {
-  title: "Intelligence API | Engrm Docs",
+  title: "Intelligence API | FatHippo Docs",
   description: "Feedback, extraction, and debugging endpoints for smarter memory management.",
 };
 

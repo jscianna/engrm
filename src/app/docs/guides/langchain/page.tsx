@@ -1,8 +1,8 @@
 import { CodeBlock, Note, H1, H2, H3, P, InlineCode, Footer } from "../../components";
 
 export const metadata = {
-  title: "LangChain Integration | Engrm Docs",
-  description: "Add Engrm memory to LangChain agents and chains.",
+  title: "LangChain Integration | FatHippo Docs",
+  description: "Add FatHippo memory to LangChain agents and chains.",
 };
 
 export default function LangChainGuidePage() {
@@ -10,7 +10,7 @@ export default function LangChainGuidePage() {
     <>
       <H1>LangChain Integration</H1>
       <P>
-        Integrate Engrm with LangChain for persistent memory in your chains and agents.
+        Integrate FatHippo with LangChain for persistent memory in your chains and agents.
         Works with any LLM backend (OpenAI, Anthropic, local models).
       </P>
 
@@ -19,7 +19,7 @@ export default function LangChainGuidePage() {
 
       <H2 id="custom-memory">Custom Memory Class</H2>
       <P>
-        Create a LangChain-compatible memory class backed by Engrm:
+        Create a LangChain-compatible memory class backed by FatHippo:
       </P>
 
       <CodeBlock language="python">{`import requests
@@ -28,7 +28,7 @@ from langchain.memory.chat_memory import BaseChatMemory
 from langchain.schema import BaseMessage, HumanMessage, AIMessage
 
 class EngramMemory(BaseChatMemory):
-    """LangChain memory backed by Engrm"""
+    """LangChain memory backed by FatHippo"""
     
     api_key: str
     base_url: str = "https://fathippo.ai/api/v1"
@@ -44,7 +44,7 @@ class EngramMemory(BaseChatMemory):
         return {"Authorization": f"Bearer {self.api_key}"}
     
     def start_session(self, first_message: str = "") -> str:
-        """Start an Engrm session"""
+        """Start an FatHippo session"""
         payload = {"firstMessage": first_message}
         if self.namespace:
             payload["namespace"] = self.namespace
@@ -59,7 +59,7 @@ class EngramMemory(BaseChatMemory):
         return self.session_id
     
     def load_memory_variables(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """Load context from Engrm"""
+        """Load context from FatHippo"""
         user_input = inputs.get("input", inputs.get("question", ""))
         
         response = requests.post(
@@ -74,7 +74,7 @@ class EngramMemory(BaseChatMemory):
         }
     
     def save_context(self, inputs: Dict[str, Any], outputs: Dict[str, str]) -> None:
-        """Save conversation turn to Engrm"""
+        """Save conversation turn to FatHippo"""
         input_str = inputs.get("input", inputs.get("question", ""))
         output_str = outputs.get("output", outputs.get("response", ""))
         
@@ -94,7 +94,7 @@ class EngramMemory(BaseChatMemory):
             )
     
     def remember(self, text: str) -> str:
-        """Store a memory in Engrm"""
+        """Store a memory in FatHippo"""
         response = requests.post(
             f"{self.base_url}/simple/remember",
             headers=self._get_headers(),
@@ -103,7 +103,7 @@ class EngramMemory(BaseChatMemory):
         return response.get("id", "")
     
     def recall(self, query: str, limit: int = 5) -> List[str]:
-        """Search memories in Engrm"""
+        """Search memories in FatHippo"""
         response = requests.post(
             f"{self.base_url}/simple/recall",
             headers=self._get_headers(),
@@ -137,7 +137,7 @@ memory = EngramMemory(
     namespace="langchain-demo"
 )
 
-# Custom prompt with Engrm context
+# Custom prompt with FatHippo context
 template = """You are a helpful assistant with persistent memory.
 
 ## Remembered Context
@@ -176,7 +176,7 @@ memory.clear()`}</CodeBlock>
 
       <H2 id="agent-tools">Agent with Memory Tools</H2>
       <P>
-        Create tools for LangChain agents to use Engrm:
+        Create tools for LangChain agents to use FatHippo:
       </P>
 
       <CodeBlock language="python">{`from langchain.agents import AgentExecutor, create_openai_tools_agent
@@ -245,7 +245,7 @@ print(result["output"])`}</CodeBlock>
 
       <H2 id="retriever">Custom Retriever</H2>
       <P>
-        Use Engrm as a LangChain retriever for RAG chains:
+        Use FatHippo as a LangChain retriever for RAG chains:
       </P>
 
       <CodeBlock language="python">{`from langchain.schema import BaseRetriever, Document
@@ -253,7 +253,7 @@ from typing import List
 import requests
 
 class EngramRetriever(BaseRetriever):
-    """LangChain retriever backed by Engrm"""
+    """LangChain retriever backed by FatHippo"""
     
     api_key: str
     base_url: str = "https://fathippo.ai/api/v1"
@@ -307,7 +307,7 @@ print(result["result"])`}</CodeBlock>
           <strong>Start sessions:</strong> Track conversations for better analytics
         </li>
         <li>
-          <strong>Combine with other memory:</strong> Use Engrm for long-term, ConversationBufferMemory for short-term
+          <strong>Combine with other memory:</strong> Use FatHippo for long-term, ConversationBufferMemory for short-term
         </li>
         <li>
           <strong>Agent tools:</strong> Let the LLM decide when to remember/recall

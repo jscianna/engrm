@@ -1,7 +1,7 @@
 import { CodeBlock, Note, Table, Endpoint, H1, H2, H3, P, InlineCode, Footer } from "../../components";
 
 export const metadata = {
-  title: "Context API | Engrm Docs",
+  title: "Context API | FatHippo Docs",
   description: "Get tiered context for AI prompt injection.",
 };
 
@@ -81,7 +81,7 @@ export default function ContextApiPage() {
       <H2 id="synthesis">Working Tier Synthesis</H2>
       <P>
         When <InlineCode>synthesize: true</InlineCode> and you have 5+ high-tier memories,
-        Engrm groups related memories by entity overlap and creates synthetic summaries.
+        FatHippo groups related memories by entity overlap and creates synthetic summaries.
         This reduces token usage while preserving context.
       </P>
 
@@ -170,7 +170,7 @@ export default function ContextApiPage() {
       <CodeBlock language="python">{`import requests
 
 def get_system_prompt(user_message: str) -> str:
-    # Get context from Engrm
+    # Get context from FatHippo
     context = requests.post(
         "https://fathippo.ai/api/v1/context",
         headers={"Authorization": f"Bearer {API_KEY}"},

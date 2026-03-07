@@ -1,7 +1,7 @@
 import { CodeBlock, Note, Table, Endpoint, H1, H2, H3, P, InlineCode, Footer } from "../../components";
 
 export const metadata = {
-  title: "Analytics API | Engrm Docs",
+  title: "Analytics API | FatHippo Docs",
   description: "Track memory usage, session metrics, and token savings.",
 };
 
@@ -11,7 +11,7 @@ export default function AnalyticsApiPage() {
       <H1>Analytics API</H1>
       <P>
         Track your memory usage, session performance, and token savings.
-        Use analytics to understand the value Engrm provides.
+        Use analytics to understand the value FatHippo provides.
       </P>
 
       <H2 id="summary">Quick Summary</H2>
@@ -39,8 +39,8 @@ export default function AnalyticsApiPage() {
   "totalSearches": 1247,
   "searchesLast7Days": 189,
   "tokensEstimated": {
-    "withoutEngrm": 45000,
-    "withEngrm": 12000,
+    "withoutFatHippo": 45000,
+    "withFatHippo": 12000,
     "savings": 0.73
   }
 }`}</CodeBlock>
@@ -111,8 +111,8 @@ export default function AnalyticsApiPage() {
     ]
   },
   "tokens": {
-    "estimatedWithoutEngrm": 45000,
-    "estimatedWithEngrm": 12000,
+    "estimatedWithoutFatHippo": 45000,
+    "estimatedWithFatHippo": 12000,
     "savingsPercent": 73,
     "costSavingsEstimate": 1.65
   },
@@ -140,14 +140,14 @@ export default function AnalyticsApiPage() {
 
       <H2 id="token-savings">Token Savings Calculation</H2>
       <P>
-        Engrm estimates token savings by comparing:
+        FatHippo estimates token savings by comparing:
       </P>
       <ul className="list-disc list-inside text-zinc-400 space-y-2 mb-4">
-        <li><strong>Without Engrm:</strong> Loading all memories into every session</li>
-        <li><strong>With Engrm:</strong> Loading only critical + relevant memories</li>
+        <li><strong>Without FatHippo:</strong> Loading all memories into every session</li>
+        <li><strong>With FatHippo:</strong> Loading only critical + relevant memories</li>
       </ul>
 
-      <CodeBlock language="text">{`Savings = 1 - (tokensWithEngrm / tokensWithoutEngrm)
+      <CodeBlock language="text">{`Savings = 1 - (tokensWithFatHippo / tokensWithoutFatHippo)
 
 Example:
 - Total memory tokens: 15,000
@@ -155,8 +155,8 @@ Example:
 - Average high tier per session: 300 tokens
 - Sessions this month: 50
 
-Without Engrm: 15,000 × 50 = 750,000 tokens
-With Engrm: (500 + 300) × 50 = 40,000 tokens
+Without FatHippo: 15,000 × 50 = 750,000 tokens
+With FatHippo: (500 + 300) × 50 = 40,000 tokens
 Savings: 94.7%`}</CodeBlock>
 
       <Note type="tip">
