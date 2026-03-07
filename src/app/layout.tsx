@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { ClerkProvider } from "@clerk/nextjs";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
@@ -40,11 +41,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`dark ${inter.variable}`}>
-      <body className="font-sans antialiased tracking-tight">
-        {children}
-        <Toaster richColors theme="dark" />
-      </body>
-    </html>
+    <ClerkProvider>
+      <html lang="en" className={`dark ${inter.variable}`}>
+        <body className="font-sans antialiased tracking-tight">
+          {children}
+          <Toaster richColors theme="dark" />
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }
