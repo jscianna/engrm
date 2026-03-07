@@ -383,6 +383,38 @@ export default function Home() {
             >
               GitHub
             </a>
+            {hasClerk ? (
+              <>
+                <SignedOut>
+                  <SignInButton mode="modal">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-[#E5E7EB] text-[#111827] hover:bg-[#F9FAFB] font-medium"
+                    >
+                      Sign In
+                    </Button>
+                  </SignInButton>
+                </SignedOut>
+                <SignedIn>
+                  <Button
+                    asChild
+                    size="sm"
+                    className="bg-[#111827] text-white hover:bg-[#1F2937] font-medium"
+                  >
+                    <Link href="/dashboard">Dashboard</Link>
+                  </Button>
+                </SignedIn>
+              </>
+            ) : (
+              <Button
+                asChild
+                size="sm"
+                className="bg-[#111827] text-white hover:bg-[#1F2937] font-medium"
+              >
+                <Link href="/dashboard">Dashboard</Link>
+              </Button>
+            )}
           </nav>
           {/* Mobile hamburger for sticky header */}
           <button
