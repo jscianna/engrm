@@ -30,8 +30,22 @@ import { Kbd } from "@/components/ui/kbd";
 function GradientButton({
   children,
   className = "",
+  asChild,
   ...props
-}: React.ComponentProps<typeof Button>) {
+}: React.ComponentProps<typeof Button> & { asChild?: boolean }) {
+  // When used with asChild (e.g., wrapping Link), render simpler structure
+  if (asChild) {
+    return (
+      <Button
+        asChild
+        className={`relative overflow-hidden bg-gradient-to-r from-[#0070F3] to-[#00B8D9] text-white font-medium hover:from-[#0060D3] hover:to-[#00A8C9] shadow-[0_4px_14px_0_rgba(0,112,243,0.39)] hover:shadow-[0_6px_20px_rgba(0,118,255,0.4)] transition-all duration-300 ${className}`}
+        {...props}
+      >
+        {children}
+      </Button>
+    );
+  }
+  
   return (
     <Button
       className={`relative overflow-hidden bg-gradient-to-r from-[#0070F3] to-[#00B8D9] text-white font-medium hover:from-[#0060D3] hover:to-[#00A8C9] shadow-[0_4px_14px_0_rgba(0,112,243,0.39)] hover:shadow-[0_6px_20px_rgba(0,118,255,0.4)] transition-all duration-300 ${className}`}
