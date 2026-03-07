@@ -30,7 +30,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0f172a",
+  themeColor: "#ffffff",
   width: "device-width",
   initialScale: 1,
 };
@@ -44,7 +44,7 @@ export default function RootLayout({
 
   return (
     <ClerkProvider publishableKey={clerkKey}>
-      <html lang="en" className={`dark ${inter.variable}`}>
+      <html lang="en" className={inter.variable}>
         <body className="font-sans antialiased tracking-tight">
           {children}
           <Toaster richColors theme="dark" />
