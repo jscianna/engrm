@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://fathippo.ai/logo.png" alt="FatHippo" width="120" />
+  <img src="https://raw.githubusercontent.com/jscianna/fathippo/main/public/hippo.png" alt="FatHippo" width="140" />
 </p>
 
 <h1 align="center">FatHippo</h1>
