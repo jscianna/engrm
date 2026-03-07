@@ -1,8 +1,8 @@
 import { CodeBlock, Note, Table, H1, H2, H3, P, InlineCode, Footer } from "../components";
 
 export const metadata = {
-  title: "Core Concepts | Engrm Docs",
-  description: "Understand memory tiers, decay, reinforcement, namespaces, and encryption in Engrm.",
+  title: "Core Concepts | FatHippo Docs",
+  description: "Understand memory tiers, decay, reinforcement, namespaces, and encryption in FatHippo.",
 };
 
 export default function ConceptsPage() {
@@ -10,14 +10,14 @@ export default function ConceptsPage() {
     <>
       <H1>Core Concepts</H1>
       <P>
-        Engrm is designed to work like human memory—important things stick, 
+        FatHippo is designed to work like human memory—important things stick, 
         irrelevant things fade, and frequently accessed memories get stronger.
         Here's how it works.
       </P>
 
       <H2 id="memory-tiers">Memory Tiers</H2>
       <P>
-        Not all memories are equal. Engrm uses a tiered system to prioritize what 
+        Not all memories are equal. FatHippo uses a tiered system to prioritize what 
         gets injected into context windows.
       </P>
 
@@ -50,7 +50,7 @@ export default function ConceptsPage() {
 
       <H2 id="memory-types">Memory Types</H2>
       <P>
-        Engrm auto-classifies memories into types, each with different decay rates:
+        FatHippo auto-classifies memories into types, each with different decay rates:
       </P>
 
       <Table
@@ -149,7 +149,7 @@ curl -X POST "https://fathippo.ai/api/v1/memories" \\
 
       <H2 id="sessions">Sessions</H2>
       <P>
-        Sessions track conversations over time. They help Engrm understand:
+        Sessions track conversations over time. They help FatHippo understand:
       </P>
       <ul className="list-disc list-inside text-zinc-400 space-y-2 mb-4">
         <li>Which memories were used in which conversations</li>
@@ -182,7 +182,7 @@ curl -X POST "https://fathippo.ai/api/v1/memories" \\
       <H3>How It Works</H3>
       <ul className="list-disc list-inside text-zinc-400 space-y-2 mb-4">
         <li>You send plaintext content to the API</li>
-        <li>Engrm generates embeddings for semantic search</li>
+        <li>FatHippo generates embeddings for semantic search</li>
         <li>Content is encrypted with your user-specific key</li>
         <li>Encrypted content is stored in the database</li>
         <li>On retrieval, content is decrypted server-side</li>
@@ -207,7 +207,7 @@ curl -X POST "https://fathippo.ai/api/v1/memories" \\
       <H2 id="consolidation">Smart Consolidation</H2>
       <P>
         When you store a memory similar to one that already exists (cosine similarity &gt; 0.85),
-        Engrm suggests consolidation instead of creating duplicates.
+        FatHippo suggests consolidation instead of creating duplicates.
       </P>
 
       <CodeBlock language="json">{`// Response when similar memory exists

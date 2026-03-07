@@ -97,8 +97,8 @@ export async function POST(request: Request) {
     // If sensitive memories were filtered, add header so agent can inform user
     const headers: Record<string, string> = {};
     if (sensitiveResults.length > 0) {
-      headers["X-Engrm-Sensitive-Omitted"] = String(sensitiveResults.length);
-      headers["X-Engrm-Sensitive-Hint"] = `${sensitiveResults.length} memory(ies) containing credentials were found but excluded for security. View them in your Engrm dashboard.`;
+      headers["X-FatHippo-Sensitive-Omitted"] = String(sensitiveResults.length);
+      headers["X-FatHippo-Sensitive-Hint"] = `${sensitiveResults.length} memory(ies) containing credentials were found but excluded for security. View them in your FatHippo dashboard.`;
     }
 
     return Response.json(safeResults, { headers });

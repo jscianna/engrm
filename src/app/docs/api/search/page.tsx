@@ -1,7 +1,7 @@
 import { CodeBlock, Note, Table, Endpoint, H1, H2, H3, P, InlineCode, Footer } from "../../components";
 
 export const metadata = {
-  title: "Search API | Engrm Docs",
+  title: "Search API | FatHippo Docs",
   description: "Semantic search across your memories with relevance scoring.",
 };
 

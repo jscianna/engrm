@@ -1,7 +1,7 @@
 import { CodeBlock, Note, H1, H2, H3, P, InlineCode, Footer } from "../../components";
 
 export const metadata = {
-  title: "OpenAI Integration | Engrm Docs",
+  title: "OpenAI Integration | FatHippo Docs",
   description: "Add persistent memory to GPT-4, GPT-4o, and other OpenAI models.",
 };
 
@@ -11,7 +11,7 @@ export default function OpenAIGuidePage() {
       <H1>OpenAI Integration</H1>
       <P>
         Add persistent memory to your OpenAI-powered agents. This guide shows how to 
-        integrate Engrm with GPT-4o, GPT-4, and other OpenAI models.
+        integrate FatHippo with GPT-4o, GPT-4, and other OpenAI models.
       </P>
 
       <H2 id="install">Installation</H2>
@@ -33,7 +33,7 @@ ENGRM_URL = "https://fathippo.ai/api/v1"
 client = OpenAI()
 
 def get_context(user_message: str) -> str:
-    """Get relevant context from Engrm"""
+    """Get relevant context from FatHippo"""
     response = requests.post(
         f"{ENGRM_URL}/simple/context",
         headers={"Authorization": f"Bearer {ENGRM_API_KEY}"},
@@ -258,7 +258,7 @@ extract_and_store([
       </ul>
 
       <Note type="tip">
-        OpenAI's function calling works great with Engrm. Create functions for 
+        OpenAI's function calling works great with FatHippo. Create functions for 
         <InlineCode>remember</InlineCode> and <InlineCode>recall</InlineCode> so the model 
         can decide when to store and retrieve memories.
       </Note>

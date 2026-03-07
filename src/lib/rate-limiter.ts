@@ -1,5 +1,5 @@
 /**
- * Rate limiting for Engrm API
+ * Rate limiting for FatHippo API
  * Uses atomic operations to prevent race conditions
  * Self-cleaning with probabilistic TTL cleanup
  */

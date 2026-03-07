@@ -1,12 +1,12 @@
-type EngrmFetch = typeof fetch;
+type FatHippoFetch = typeof fetch;
 
-export type EngrmOpenAIAgentsOptions = {
+export type FatHippoOpenAIAgentsOptions = {
   baseUrl: string;
   apiKey: string;
-  fetchImpl?: EngrmFetch;
+  fetchImpl?: FatHippoFetch;
 };
 
-export function createEngrmOpenAIAgentsMemory(options: EngrmOpenAIAgentsOptions) {
+export function createFatHippoOpenAIAgentsMemory(options: FatHippoOpenAIAgentsOptions) {
   const baseUrl = options.baseUrl.replace(/\/$/, "");
   const fetchImpl = options.fetchImpl ?? fetch;
 
@@ -21,7 +21,7 @@ export function createEngrmOpenAIAgentsMemory(options: EngrmOpenAIAgentsOptions)
     });
 
     if (!response.ok) {
-      throw new Error(`Engrm request failed with ${response.status}`);
+      throw new Error(`FatHippo request failed with ${response.status}`);
     }
 
     return response.json();

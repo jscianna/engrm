@@ -1,5 +1,5 @@
 /**
- * Secret detection and redaction for Engrm memories
+ * Secret detection and redaction for FatHippo memories
  * 
  * Detects common credential patterns and prevents them from
  * being exposed to LLM context while still allowing storage.
@@ -90,9 +90,9 @@ const SECRET_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
   { pattern: /libsql:\/\/[^\s]{20,}/gi, name: "Turso/LibSQL connection string" },
   
   // ============================================================================
-  // Engrm / Custom
+  // FatHippo / Custom
   // ============================================================================
-  { pattern: /\bmem_[a-zA-Z0-9]{30,}/g, name: "Engrm API key" },
+  { pattern: /\bmem_[a-zA-Z0-9]{30,}/g, name: "FatHippo API key" },
   
   // ============================================================================
   // Vercel / Netlify / Hosting

@@ -1,7 +1,7 @@
 import { CodeBlock, Note, Table, Endpoint, H1, H2, H3, P, InlineCode, Footer } from "../../components";
 
 export const metadata = {
-  title: "Sessions API | Engrm Docs",
+  title: "Sessions API | FatHippo Docs",
   description: "Track conversations with session-based memory management.",
 };
 

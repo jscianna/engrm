@@ -169,7 +169,7 @@ export function MemoryForm() {
 
             <Button type="submit" disabled={loading} className="w-full bg-cyan-400 text-zinc-950 hover:bg-cyan-300">
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              Save to Engrm
+              Save to FatHippo
             </Button>
           </form>
         </CardContent>

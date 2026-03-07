@@ -22,8 +22,8 @@ export type AnalyticsParams = {
 };
 
 export type TokenSavingsData = {
-  withEngrm: number;
-  withoutEngrm: number;
+  withFatHippo: number;
+  withoutFatHippo: number;
   savedPercent: number;
 };
 
@@ -112,16 +112,16 @@ export async function getAnalytics(params: AnalyticsParams): Promise<AnalyticsRe
 
     // Estimate tokens saved: each access would have needed full context
     // With fathippo, we only inject relevant memories (estimated ~10% of total)
-    const tokensWithoutEngrm = Math.round(totalAccesses * AVG_CONTEXT_WITHOUT_MEMORY);
+    const tokensWithoutFatHippo = Math.round(totalAccesses * AVG_CONTEXT_WITHOUT_MEMORY);
     const avgMemoryTokens = Math.round((totalChars * TOKENS_PER_CHAR) / Math.max(1, Number(row?.memory_count ?? 1)));
-    const tokensWithEngrm = Math.round(totalAccesses * avgMemoryTokens * 3); // Assume 3 memories per context
-    const savedPercent = tokensWithoutEngrm > 0 
-      ? Math.round((1 - tokensWithEngrm / tokensWithoutEngrm) * 100) 
+    const tokensWithFatHippo = Math.round(totalAccesses * avgMemoryTokens * 3); // Assume 3 memories per context
+    const savedPercent = tokensWithoutFatHippo > 0 
+      ? Math.round((1 - tokensWithFatHippo / tokensWithoutFatHippo) * 100) 
       : 0;
 
     result.tokenSavings = {
-      withEngrm: tokensWithEngrm,
-      withoutEngrm: tokensWithoutEngrm,
+      withFatHippo: tokensWithFatHippo,
+      withoutFatHippo: tokensWithoutFatHippo,
       savedPercent: Math.max(0, savedPercent),
     };
   }

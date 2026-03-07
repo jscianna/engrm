@@ -1,8 +1,8 @@
 import { CodeBlock, Note, Table, Endpoint, H1, H2, H3, P, InlineCode, Footer } from "../../components";
 
 export const metadata = {
-  title: "Memories API | Engrm Docs",
-  description: "Store, retrieve, and manage memories with the Engrm API.",
+  title: "Memories API | FatHippo Docs",
+  description: "Store, retrieve, and manage memories with the FatHippo API.",
 };
 
 export default function MemoriesApiPage() {
@@ -174,7 +174,7 @@ export default function MemoriesApiPage() {
 
       <H2 id="memory-types">Memory Types</H2>
       <P>
-        Engrm auto-classifies memories into types. You can override this with 
+        FatHippo auto-classifies memories into types. You can override this with 
         the <InlineCode>memoryType</InlineCode> field:
       </P>
       <Table

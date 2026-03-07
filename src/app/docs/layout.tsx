@@ -48,7 +48,7 @@ export default function DocsLayout({
       <header className="fixed top-0 left-0 right-0 z-50 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <span className="text-xl font-bold">Engrm</span>
+            <span className="text-xl font-bold">FatHippo</span>
             <span className="text-zinc-500 text-sm">docs</span>
           </Link>
           <div className="flex items-center gap-4">
