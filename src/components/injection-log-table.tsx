@@ -1,13 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, ExternalLink, Loader2 } from "lucide-react";
 import type { MemoryAnalyticsDashboard } from "@/lib/memory-analytics";
 import { Button } from "@/components/ui/button";
 
 type InjectionEvent = MemoryAnalyticsDashboard["injectionLog"]["events"][number];
 type SortField = "createdAt" | "resultCount" | "memoryCount" | "conversationId";
 type SortDirection = "asc" | "desc";
+type MemoryTitle = { id: string; title: string };
 
 const PAGE_SIZE = 10;
 
@@ -29,6 +30,38 @@ export function InjectionLogTable({
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [titleCache, setTitleCache] = useState<Record<string, MemoryTitle[]>>({});
+  const [loadingTitles, setLoadingTitles] = useState<string | null>(null);
+
+  const fetchTitles = useCallback(async (eventId: string, memoryIds: string[]) => {
+    if (titleCache[eventId]) return;
+    
+    setLoadingTitles(eventId);
+    try {
+      const res = await fetch("/api/v1/memories/titles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: memoryIds }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTitleCache((prev) => ({ ...prev, [eventId]: data.memories }));
+      }
+    } catch {
+      // Silent fail - will show IDs instead
+    }
+    setLoadingTitles(null);
+  }, [titleCache]);
+
+  // Fetch titles when expanding
+  useEffect(() => {
+    if (expandedId && !titleCache[expandedId]) {
+      const event = events.find((e) => e.id === expandedId);
+      if (event) {
+        fetchTitles(expandedId, event.memoryIds);
+      }
+    }
+  }, [expandedId, events, fetchTitles, titleCache]);
 
   const sortedEvents = useMemo(() => {
     const copy = [...events];
@@ -153,22 +186,32 @@ export function InjectionLogTable({
                     <tr key={`${event.id}-expanded`} className="bg-zinc-900/30">
                       <td colSpan={4} className="px-4 py-3">
                         <div className="pl-6 space-y-2">
-                          <p className="text-xs text-zinc-500 uppercase tracking-wide">
+                          <p className="text-xs text-zinc-500 uppercase tracking-wide flex items-center gap-2">
                             Memories Injected ({event.memoryIds.length})
+                            {loadingTitles === event.id && (
+                              <Loader2 className="h-3 w-3 animate-spin text-cyan-400" />
+                            )}
                           </p>
                           <div className="grid gap-1 max-h-48 overflow-y-auto">
-                            {event.memoryIds.map((memoryId, idx) => (
-                              <a
-                                key={memoryId}
-                                href={`/dashboard/memories/${memoryId}`}
-                                className="flex items-center gap-2 text-sm text-cyan-400 hover:text-cyan-300 font-mono group"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <span className="text-zinc-600 text-xs w-4">{idx + 1}.</span>
-                                <span className="truncate">{memoryId}</span>
-                                <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                              </a>
-                            ))}
+                            {event.memoryIds.map((memoryId, idx) => {
+                              const titleInfo = titleCache[event.id]?.find((t) => t.id === memoryId);
+                              return (
+                                <a
+                                  key={memoryId}
+                                  href={`/dashboard/memories/${memoryId}`}
+                                  className="flex items-center gap-2 text-sm hover:text-cyan-300 group"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <span className="text-zinc-600 text-xs w-4">{idx + 1}.</span>
+                                  {titleInfo ? (
+                                    <span className="truncate text-zinc-200">{titleInfo.title}</span>
+                                  ) : (
+                                    <span className="truncate text-cyan-400 font-mono text-xs">{memoryId}</span>
+                                  )}
+                                  <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-cyan-400" />
+                                </a>
+                              );
+                            })}
                           </div>
                         </div>
                       </td>
