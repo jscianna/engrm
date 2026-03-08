@@ -3,6 +3,7 @@ import { countEntityOverlap, extractEntities } from "@/lib/entities";
 import { semanticSearchVectors } from "@/lib/qdrant";
 import { bm25Search, rrfFusion, ensureFtsInitialized } from "@/lib/fts";
 import { getAgentMemoriesByIds, recordMemorySearchHits, incrementAccessCounts, checkAndPromoteMemories } from "@/lib/db";
+import { recordInjectionEvent } from "@/lib/memory-analytics";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject, normalizeIsoTimestamp, normalizeLimit, resolveNamespaceIdOrError } from "@/lib/api-v1";
@@ -136,12 +137,19 @@ export async function POST(request: Request) {
     const sensitiveResults = allResults.filter((result) => result.memory.sensitive);
     const safeResults = allResults.filter((result) => !result.memory.sensitive).slice(0, topK);
 
-    // Non-blocking: increment access counts and record hits
+    // Non-blocking: increment access counts, record hits, and log injection event
     const retrievedIds = safeResults.map((result) => result.id);
     Promise.all([
       incrementAccessCounts(identity.userId, retrievedIds),
       recordMemorySearchHits(identity.userId, retrievedIds),
       checkAndPromoteMemories(identity.userId),
+      retrievedIds.length > 0
+        ? recordInjectionEvent({
+            userId: identity.userId,
+            memoryIds: retrievedIds,
+            resultCount: retrievedIds.length,
+          })
+        : Promise.resolve(),
     ]).catch((err) => {
       console.error("[Search] Background tasks failed:", err);
     });

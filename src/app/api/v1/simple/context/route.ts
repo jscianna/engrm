@@ -14,6 +14,7 @@ import {
   getAgentMemoriesByIds,
   incrementAccessCounts,
 } from "@/lib/db";
+import { recordInjectionEvent } from "@/lib/memory-analytics";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
@@ -136,6 +137,19 @@ export async function POST(request: Request) {
     }
 
     const context = lines.join("\n");
+
+    // Record injection event for analytics (non-blocking)
+    const allInjectedIds = [
+      ...criticalMemories.map((m) => m.id),
+      ...dedupedRelevant.map((m) => m.id),
+    ];
+    if (allInjectedIds.length > 0) {
+      recordInjectionEvent({
+        userId: identity.userId,
+        memoryIds: allInjectedIds,
+        resultCount: allInjectedIds.length,
+      }).catch(() => {});
+    }
 
     // Return as plain text with content-type header
     return new Response(context || "No relevant context found.", {
