@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { MemoryGraph } from "@/components/memory-graph";
+import { MemoryGraph, type FullGraphNode, type FullGraphEdge } from "@/components/memory-graph";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { MemoryGraphEdge, MemoryGraphNode, MemoryRelationshipType } from "@/lib/types";
+import type { MemoryRelationshipType } from "@/lib/types";
 
 const ALL_RELATIONSHIP_TYPES: MemoryRelationshipType[] = [
   "similar",
@@ -19,19 +19,20 @@ const ALL_RELATIONSHIP_TYPES: MemoryRelationshipType[] = [
 export default function GraphPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [nodes, setNodes] = useState<MemoryGraphNode[]>([]);
-  const [edges, setEdges] = useState<MemoryGraphEdge[]>([]);
+  const [nodes, setNodes] = useState<FullGraphNode[]>([]);
+  const [edges, setEdges] = useState<FullGraphEdge[]>([]);
   const activeTypes = ALL_RELATIONSHIP_TYPES;
 
   useEffect(() => {
     async function loadGraph() {
       try {
         setLoading(true);
-        const response = await fetch("/api/memories/graph?limit=200");
+        // Use full=true to include syntheses and graph_edges
+        const response = await fetch("/api/memories/graph?limit=200&full=true");
         const payload = (await response.json()) as {
           error?: string;
-          nodes?: MemoryGraphNode[];
-          edges?: MemoryGraphEdge[];
+          nodes?: FullGraphNode[];
+          edges?: FullGraphEdge[];
         };
 
         if (!response.ok) {

@@ -4,15 +4,34 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { forceCenter, forceLink, forceManyBody, forceSimulation, type SimulationNodeDatum } from "d3-force";
 import { ExternalLink, Loader2, X } from "lucide-react";
 import Link from "next/link";
-import type { MemoryGraphEdge, MemoryGraphNode, MemoryRecord, MemoryRelationshipType } from "@/lib/types";
+import type { MemoryRecord, MemoryRelationshipType, MemoryKind } from "@/lib/types";
 
-type GraphNode = MemoryGraphNode & SimulationNodeDatum;
+// Full graph types (includes syntheses)
+export type FullGraphNode = {
+  id: string;
+  title: string;
+  nodeType: "memory" | "synthesis";
+  memoryType?: MemoryKind;
+  importance?: number;
+  abstractionLevel?: number;
+  sourceCount?: number;
+};
+
+export type FullGraphEdge = {
+  id: string;
+  source: string;
+  target: string;
+  edgeType: string;
+  weight: number;
+};
+
+type GraphNode = FullGraphNode & SimulationNodeDatum;
 
 type GraphLink = {
   id: string;
   source: string;
   target: string;
-  relationshipType: MemoryRelationshipType;
+  edgeType: string;
   weight: number;
 };
 
@@ -36,17 +55,21 @@ const MEMORY_TYPE_COLORS: Record<string, string> = {
   reflected: "#6b7280",    // gray
   session_summary: "#6b7280", // gray
   compacted: "#6b7280",    // gray
+  // Synthesis nodes (hub nodes in decentralized graph)
+  synthesis: "#ec4899",    // pink - stands out as hub
 };
 
 // Edge colors by relationship type
-const RELATION_COLORS: Record<MemoryRelationshipType, string> = {
+const RELATION_COLORS: Record<string, string> = {
   similar: "#6b7280",      // gray
   same_entity: "#e5e7eb",  // white
   updates: "#eab308",      // gold
   contradicts: "#ef4444",  // red
   extends: "#22c55e",      // green
-  derives_from: "#818cf8", // indigo
+  derives_from: "#ec4899", // pink (matches synthesis nodes)
   references: "#a1a1aa",   // gray
+  relates_to: "#6b7280",   // gray
+  abstracts: "#c084fc",    // purple
 };
 
 // Labels for the legend
@@ -58,7 +81,7 @@ const MEMORY_TYPE_LABELS: Record<string, string> = {
   fact: "Fact",
 };
 
-const RELATION_LABELS: Record<MemoryRelationshipType, string> = {
+const RELATION_LABELS: Record<string, string> = {
   similar: "Similar",
   same_entity: "Same Entity",
   updates: "Updates",
@@ -66,10 +89,25 @@ const RELATION_LABELS: Record<MemoryRelationshipType, string> = {
   extends: "Extends",
   derives_from: "Derives From",
   references: "References",
+  relates_to: "Relates To",
+  abstracts: "Abstracts",
 };
 
-function nodeRadius(node: MemoryGraphNode): number {
-  return 6 + Math.max(0, Math.min(10, node.importance)) * 1.1;
+function nodeRadius(node: FullGraphNode): number {
+  // Synthesis nodes are larger (hub nodes)
+  if (node.nodeType === "synthesis") {
+    const sourceBonus = Math.min(node.sourceCount ?? 0, 10) * 0.8;
+    return 14 + sourceBonus; // base 14px + up to 8px for source count
+  }
+  // Memory nodes sized by importance
+  return 6 + Math.max(0, Math.min(10, node.importance ?? 5)) * 1.1;
+}
+
+function nodeColor(node: FullGraphNode): string {
+  if (node.nodeType === "synthesis") {
+    return MEMORY_TYPE_COLORS.synthesis;
+  }
+  return MEMORY_TYPE_COLORS[node.memoryType ?? "fact"] ?? "#22c55e";
 }
 
 function MemoryDetailCard({
@@ -191,9 +229,9 @@ export function MemoryGraph({
   edges,
   activeTypes,
 }: {
-  nodes: MemoryGraphNode[];
-  edges: MemoryGraphEdge[];
-  activeTypes: MemoryRelationshipType[];
+  nodes: FullGraphNode[];
+  edges: FullGraphEdge[];
+  activeTypes: string[];
 }) {
   const [positions, setPositions] = useState<GraphNode[]>([]);
   const [hoverText, setHoverText] = useState<string>("");
@@ -204,7 +242,7 @@ export function MemoryGraph({
   const simulationRef = useRef<ReturnType<typeof forceSimulation<GraphNode, GraphLink>> | null>(null);
 
   const filteredEdges = useMemo(
-    () => edges.filter((edge) => activeTypes.includes(edge.relationshipType)),
+    () => edges.filter((edge) => activeTypes.includes(edge.edgeType)),
     [activeTypes, edges],
   );
 
@@ -223,7 +261,7 @@ export function MemoryGraph({
       id: edge.id,
       source: edge.source,
       target: edge.target,
-      relationshipType: edge.relationshipType,
+      edgeType: edge.edgeType,
       weight: edge.weight,
     }));
 
@@ -347,11 +385,19 @@ export function MemoryGraph({
               <span className="text-xs text-zinc-300">{label}</span>
             </div>
           ))}
+          {/* Synthesis node in legend */}
+          <div className="flex items-center gap-1.5">
+            <div
+              className="h-4 w-4 rounded-full border-2 border-pink-400"
+              style={{ backgroundColor: MEMORY_TYPE_COLORS.synthesis }}
+            />
+            <span className="text-xs text-zinc-300">Synthesis</span>
+          </div>
         </div>
         <div className="h-4 w-px bg-zinc-700" />
         <div className="flex items-center gap-3">
           <span className="text-xs font-medium text-zinc-400">Edges:</span>
-          {(["similar", "same_entity", "updates", "contradicts", "extends"] as const).map((type) => (
+          {(["similar", "same_entity", "updates", "contradicts", "derives_from"] as const).map((type) => (
             <div key={type} className="flex items-center gap-1.5">
               <div
                 className="h-0.5 w-4 rounded"
@@ -386,31 +432,49 @@ export function MemoryGraph({
                   y1={source.y ?? 0}
                   x2={target.x ?? 0}
                   y2={target.y ?? 0}
-                  stroke={RELATION_COLORS[edge.relationshipType]}
+                  stroke={RELATION_COLORS[edge.edgeType] ?? "#6b7280"}
                   strokeWidth={Math.max(1, edge.weight * 2)}
                   strokeOpacity={0.7}
-                  onMouseEnter={() => setHoverText(`${edge.relationshipType} • weight ${edge.weight.toFixed(2)}`)}
+                  onMouseEnter={() => setHoverText(`${edge.edgeType} • weight ${edge.weight.toFixed(2)}`)}
                   onMouseLeave={() => setHoverText("")}
                 />
               );
             })}
 
-            {positions.map((node) => (
-              <g key={node.id} transform={`translate(${node.x ?? 0} ${node.y ?? 0})`}>
-                <circle
-                  data-role="node"
-                  r={nodeRadius(node)}
-                  fill={MEMORY_TYPE_COLORS[node.memoryType] ?? "#67e8f9"}
-                  fillOpacity={draggingId === node.id ? 0.95 : 0.85}
-                  stroke="#18181b"
-                  strokeWidth={1.5}
-                  onPointerDown={(event) => startNodeDrag(event, node.id)}
-                  onMouseEnter={() => setHoverText(`${node.title} (${node.memoryType})`)}
-                  onMouseLeave={() => setHoverText("")}
-                  onClick={() => setSelectedNodeId(node.id)}
-                />
-              </g>
-            ))}
+            {positions.map((node) => {
+              const isSynthesis = node.nodeType === "synthesis";
+              const label = isSynthesis
+                ? `⭐ ${node.title} (synthesis • ${node.sourceCount ?? 0} sources)`
+                : `${node.title} (${node.memoryType ?? "memory"})`;
+
+              return (
+                <g key={node.id} transform={`translate(${node.x ?? 0} ${node.y ?? 0})`}>
+                  {/* Outer ring for synthesis nodes */}
+                  {isSynthesis && (
+                    <circle
+                      r={nodeRadius(node) + 3}
+                      fill="none"
+                      stroke="#ec4899"
+                      strokeWidth={2}
+                      strokeOpacity={0.6}
+                    />
+                  )}
+                  <circle
+                    data-role="node"
+                    r={nodeRadius(node)}
+                    fill={nodeColor(node)}
+                    fillOpacity={draggingId === node.id ? 0.95 : 0.85}
+                    stroke={isSynthesis ? "#fdf4ff" : "#18181b"}
+                    strokeWidth={isSynthesis ? 2 : 1.5}
+                    onPointerDown={(event) => startNodeDrag(event, node.id)}
+                    onMouseEnter={() => setHoverText(label)}
+                    onMouseLeave={() => setHoverText("")}
+                    onClick={() => !isSynthesis && setSelectedNodeId(node.id)}
+                    className={isSynthesis ? "cursor-default" : "cursor-pointer"}
+                  />
+                </g>
+              );
+            })}
           </g>
         </svg>
       </div>

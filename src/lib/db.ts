@@ -944,6 +944,132 @@ export async function getMemoryGraph(userId: string, limit = 100): Promise<{ nod
   return { nodes, edges };
 }
 
+export type FullGraphNode = {
+  id: string;
+  title: string;
+  nodeType: "memory" | "synthesis";
+  memoryType?: MemoryKind;
+  importance?: number;
+  abstractionLevel?: number;
+  sourceCount?: number;
+};
+
+export type FullGraphEdge = {
+  id: string;
+  source: string;
+  target: string;
+  edgeType: string;
+  weight: number;
+};
+
+/**
+ * Get full memory graph including syntheses and graph_edges.
+ * Returns nodes (memories + syntheses) and edges (memory_edges + graph_edges).
+ */
+export async function getFullMemoryGraph(
+  userId: string,
+  limit = 100
+): Promise<{ nodes: FullGraphNode[]; edges: FullGraphEdge[] }> {
+  await ensureInitialized();
+  const client = getDb();
+  const boundedLimit = Math.max(1, Math.min(limit, 300));
+
+  // Fetch memories
+  const memoryResult = await client.execute({
+    sql: `
+      SELECT id, title, memory_type, importance
+      FROM memories
+      WHERE user_id = ? AND archived_at IS NULL
+      ORDER BY access_count DESC, created_at DESC
+      LIMIT ?
+    `,
+    args: [userId, boundedLimit],
+  });
+
+  const memoryNodes: FullGraphNode[] = memoryResult.rows.map((row) => ({
+    id: row.id as string,
+    title: row.title as string,
+    nodeType: "memory" as const,
+    memoryType: (row.memory_type as MemoryKind) ?? "episodic",
+    importance: Number(row.importance ?? 5),
+  }));
+
+  // Fetch syntheses
+  const synthResult = await client.execute({
+    sql: `
+      SELECT id, title, abstraction_level, source_count
+      FROM synthesized_memories
+      WHERE user_id = ? AND stale = 0
+      ORDER BY access_count DESC, created_at DESC
+      LIMIT ?
+    `,
+    args: [userId, Math.floor(boundedLimit / 3)],
+  });
+
+  const synthNodes: FullGraphNode[] = synthResult.rows.map((row) => ({
+    id: row.id as string,
+    title: row.title as string,
+    nodeType: "synthesis" as const,
+    abstractionLevel: Number(row.abstraction_level ?? 1),
+    sourceCount: Number(row.source_count ?? 0),
+  }));
+
+  const nodes = [...memoryNodes, ...synthNodes];
+  const nodeIds = nodes.map((n) => n.id);
+  if (nodeIds.length === 0) {
+    return { nodes: [], edges: [] };
+  }
+
+  // Fetch memory_edges (memory↔memory)
+  const memoryIds = memoryNodes.map((n) => n.id);
+  let memEdges: FullGraphEdge[] = [];
+  if (memoryIds.length > 0) {
+    const placeholders = memoryIds.map(() => "?").join(",");
+    const memEdgeResult = await client.execute({
+      sql: `
+        SELECT id, source_id, target_id, relationship_type, weight
+        FROM memory_edges
+        WHERE user_id = ?
+        AND source_id IN (${placeholders})
+        AND target_id IN (${placeholders})
+      `,
+      args: [userId, ...memoryIds, ...memoryIds],
+    });
+    memEdges = memEdgeResult.rows.map((row) => ({
+      id: row.id as string,
+      source: row.source_id as string,
+      target: row.target_id as string,
+      edgeType: row.relationship_type as string,
+      weight: Number(row.weight ?? 1),
+    }));
+  }
+
+  // Fetch graph_edges (synthesis↔memory, synthesis↔synthesis)
+  const nodeIdSet = new Set(nodeIds);
+  const graphEdgeResult = await client.execute({
+    sql: `
+      SELECT id, source_id, target_id, edge_type, weight
+      FROM graph_edges
+      WHERE user_id = ?
+      ORDER BY weight DESC
+      LIMIT 500
+    `,
+    args: [userId],
+  });
+
+  const graphEdges: FullGraphEdge[] = graphEdgeResult.rows
+    .filter((row) => nodeIdSet.has(row.source_id as string) || nodeIdSet.has(row.target_id as string))
+    .map((row) => ({
+      id: row.id as string,
+      source: row.source_id as string,
+      target: row.target_id as string,
+      edgeType: row.edge_type as string,
+      weight: Number(row.weight ?? 1),
+    }));
+
+  return { nodes, edges: [...memEdges, ...graphEdges] };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Graph Edges (Decentralized Memory Web)
 // Polymorphic edges: memory↔memory, memory↔synthesis, synthesis↔synthesis
