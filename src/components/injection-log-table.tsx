@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
 import type { MemoryAnalyticsDashboard } from "@/lib/memory-analytics";
 import { Button } from "@/components/ui/button";
 
@@ -28,6 +28,7 @@ export function InjectionLogTable({
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [page, setPage] = useState(1);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const sortedEvents = useMemo(() => {
     const copy = [...events];
@@ -123,16 +124,59 @@ export function InjectionLogTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800 bg-zinc-950/60 text-zinc-200">
-            {pagedEvents.map((event) => (
-              <tr key={event.id} className="align-top">
-                <td className="px-4 py-3 whitespace-nowrap text-zinc-400">{formatTimestamp(event.createdAt)}</td>
-                <td className="px-4 py-3 text-zinc-300">{event.resultCount}</td>
-                <td className="px-4 py-3 text-zinc-300">{event.memoryIds.length}</td>
-                <td className="px-4 py-3 font-mono text-xs text-zinc-400">
-                  {event.conversationId ?? "—"}
-                </td>
-              </tr>
-            ))}
+            {pagedEvents.map((event) => {
+              const isExpanded = expandedId === event.id;
+              return (
+                <>
+                  <tr 
+                    key={event.id} 
+                    className="align-top cursor-pointer hover:bg-zinc-900/50 transition-colors"
+                    onClick={() => setExpandedId(isExpanded ? null : event.id)}
+                  >
+                    <td className="px-4 py-3 whitespace-nowrap text-zinc-400">
+                      <div className="flex items-center gap-2">
+                        {isExpanded ? (
+                          <ChevronDown className="h-4 w-4 text-cyan-400" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-zinc-500" />
+                        )}
+                        {formatTimestamp(event.createdAt)}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-zinc-300">{event.resultCount}</td>
+                    <td className="px-4 py-3 text-zinc-300">{event.memoryIds.length}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-zinc-400">
+                      {event.conversationId ?? "—"}
+                    </td>
+                  </tr>
+                  {isExpanded && (
+                    <tr key={`${event.id}-expanded`} className="bg-zinc-900/30">
+                      <td colSpan={4} className="px-4 py-3">
+                        <div className="pl-6 space-y-2">
+                          <p className="text-xs text-zinc-500 uppercase tracking-wide">
+                            Memories Injected ({event.memoryIds.length})
+                          </p>
+                          <div className="grid gap-1 max-h-48 overflow-y-auto">
+                            {event.memoryIds.map((memoryId, idx) => (
+                              <a
+                                key={memoryId}
+                                href={`/dashboard/memories/${memoryId}`}
+                                className="flex items-center gap-2 text-sm text-cyan-400 hover:text-cyan-300 font-mono group"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <span className="text-zinc-600 text-xs w-4">{idx + 1}.</span>
+                                <span className="truncate">{memoryId}</span>
+                                <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
+              );
+            })}
           </tbody>
         </table>
       </div>
