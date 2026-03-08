@@ -18,6 +18,7 @@ import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 import { countEntityOverlap } from "@/lib/entities";
+import { recordInjectionEvent } from "@/lib/memory-analytics";
 
 export const runtime = "nodejs";
 
@@ -124,6 +125,23 @@ export async function POST(request: Request) {
           estimateTokens(dedupedHigh),
       },
     };
+
+    const injectedMemoryIds = Array.from(
+      new Set([
+        ...criticalMemories.map((memory) => memory.id),
+        ...dedupedHigh.map((memory) => memory.id),
+        ...workingMemories.flatMap((memory) => memory.synthesizedFrom),
+      ]),
+    );
+
+    if (injectedMemoryIds.length > 0) {
+      recordInjectionEvent({
+        userId: identity.userId,
+        memoryIds: injectedMemoryIds,
+        resultCount: injectedMemoryIds.length,
+        conversationId: null,
+      }).catch(() => {});
+    }
 
     return Response.json(response);
   } catch (error) {

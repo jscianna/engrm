@@ -17,6 +17,12 @@ import {
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
+import {
+  createAnalyticsConversationId,
+  detectQualitySignals,
+  recordInjectionEvent,
+  recordQualitySignals,
+} from "@/lib/memory-analytics";
 
 export const runtime = "nodejs";
 
@@ -28,6 +34,7 @@ export async function POST(request: Request, props: Props) {
   try {
     const identity = await validateApiKey(request, "sessions.turn");
     const { id: sessionId } = await props.params;
+    const analyticsConversationId = createAnalyticsConversationId("session", sessionId);
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body)) {
@@ -57,6 +64,11 @@ export async function POST(request: Request, props: Props) {
       ? body.turnNumber 
       : session.turnCount + 1;
 
+    const lastUserMessage = [...messages]
+      .reverse()
+      .find((m: { role?: string; content?: string }) => m.role === "user" && typeof m.content === "string")
+      ?.content?.trim() ?? "";
+
     // Track which memories are being used this turn
     const memoriesUsed = Array.isArray(body.memoriesUsed) 
       ? body.memoriesUsed.filter((id): id is string => typeof id === "string")
@@ -76,6 +88,17 @@ export async function POST(request: Request, props: Props) {
       await incrementAccessCounts(identity.userId, memoriesUsed);
     }
 
+    if (lastUserMessage) {
+      const qualitySignals = detectQualitySignals(lastUserMessage);
+      if (qualitySignals.length > 0) {
+        recordQualitySignals({
+          userId: identity.userId,
+          conversationId: analyticsConversationId,
+          signals: qualitySignals,
+        }).catch(() => {});
+      }
+    }
+
     // Determine if refresh is needed (every 5 turns or topic drift)
     const refreshNeeded = turnNumber % 5 === 0;
 
@@ -83,11 +106,6 @@ export async function POST(request: Request, props: Props) {
     let newContext = null;
     if (refreshNeeded) {
       // Get most recent user message for context search
-      const userMessages = messages.filter(
-        (m: { role: string; content: string }) => m.role === "user"
-      );
-      const lastUserMessage = userMessages[userMessages.length - 1]?.content ?? "";
-
       if (lastUserMessage) {
         try {
           const criticalMemories = await getCriticalMemories(identity.userId);
@@ -128,6 +146,22 @@ export async function POST(request: Request, props: Props) {
               type: m.memoryType,
             })),
           };
+
+          const refreshedMemoryIds = Array.from(
+            new Set([
+              ...criticalMemories.map((memory) => memory.id),
+              ...dedupedHigh.map((memory) => memory.id),
+            ]),
+          );
+
+          if (refreshedMemoryIds.length > 0) {
+            recordInjectionEvent({
+              userId: identity.userId,
+              memoryIds: refreshedMemoryIds,
+              resultCount: refreshedMemoryIds.length,
+              conversationId: analyticsConversationId,
+            }).catch(() => {});
+          }
         } catch {
           // Refresh failed, continue without new context
         }

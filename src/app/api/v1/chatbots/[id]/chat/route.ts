@@ -2,6 +2,11 @@ import { z } from "zod";
 import { getChatbotById, streamChatReply } from "@/lib/chatbot";
 import { validateApiKey } from "@/lib/api-auth";
 import { errorResponse, MemryError } from "@/lib/errors";
+import {
+  createAnalyticsConversationId,
+  detectQualitySignals,
+  recordQualitySignals,
+} from "@/lib/memory-analytics";
 
 export const runtime = "nodejs";
 
@@ -36,6 +41,15 @@ export async function POST(
       chatbotId: id,
       ...payload.data,
     });
+
+    const qualitySignals = detectQualitySignals(payload.data.message);
+    if (qualitySignals.length > 0) {
+      recordQualitySignals({
+        userId: identity.userId,
+        conversationId: createAnalyticsConversationId("chatbot", result.conversation.id),
+        signals: qualitySignals,
+      }).catch(() => {});
+    }
 
     return new Response(result.stream, {
       headers: {

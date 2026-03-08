@@ -235,6 +235,10 @@ async function ensureInitialized(): Promise<void> {
   await initializingPromise;
 }
 
+export async function ensureCoreMemoryTables(): Promise<void> {
+  await ensureInitialized();
+}
+
 async function ensureMemoriesIndexes(client: Client): Promise<void> {
   await client.execute(`
     CREATE INDEX IF NOT EXISTS idx_memories_user_namespace_created_at
@@ -243,6 +247,10 @@ async function ensureMemoriesIndexes(client: Client): Promise<void> {
   await client.execute(`
     CREATE INDEX IF NOT EXISTS idx_memories_user_session_created_at
     ON memories(user_id, session_id, created_at)
+  `);
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_memories_user_access_count_desc
+    ON memories(user_id, access_count DESC)
   `);
   await client.execute(`
     DROP INDEX IF EXISTS idx_memories_user_embedding_hash

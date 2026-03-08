@@ -12,6 +12,7 @@ import {
   incrementAccessCounts,
   checkAndPromoteMemories,
 } from "@/lib/db";
+import { recordInjectionEvent } from "@/lib/memory-analytics";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject, normalizeLimit } from "@/lib/api-v1";
@@ -77,6 +78,12 @@ export async function POST(request: Request) {
     if (accessedIds.length > 0) {
       incrementAccessCounts(identity.userId, accessedIds).catch(() => {});
       checkAndPromoteMemories(identity.userId).catch(() => {});
+      recordInjectionEvent({
+        userId: identity.userId,
+        memoryIds: accessedIds,
+        resultCount: results.length,
+        conversationId: null,
+      }).catch(() => {});
     }
 
     return Response.json({
