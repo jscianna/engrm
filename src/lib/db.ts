@@ -74,10 +74,44 @@ export function decryptMemoryContent(encryptedJson: string, userId: string): str
     const payload = JSON.parse(encryptedJson) as { ciphertext: string; iv: string };
     const key = deriveUserKey(userId);
     return decryptAesGcm(payload, key).toString("utf8");
-  } catch {
-    // If decryption fails, content might be plaintext (legacy) - return as-is
-    return encryptedJson;
+  } catch (error) {
+    console.error("[DB] Failed to decrypt memory content:", error);
+    throw new Error("Failed to decrypt memory content.");
   }
+}
+
+function hashMemoryContent(content: string): string {
+  return crypto.createHash("sha256").update(content, "utf8").digest("hex");
+}
+
+function looksLikeOpaqueEncryptedPayload(content: string): boolean {
+  try {
+    const parsed = JSON.parse(content) as { ciphertext?: unknown; iv?: unknown };
+    return typeof parsed.ciphertext === "string" && typeof parsed.iv === "string";
+  } catch {
+    return false;
+  }
+}
+
+function prepareMemoryContentForStorage(params: {
+  content: string;
+  userId: string;
+  contentHash?: string;
+  sensitive?: boolean;
+}): {
+  contentText: string;
+  contentIv: null;
+  contentEncrypted: number;
+  contentHash: string;
+  sensitive: number;
+} {
+  return {
+    contentText: encryptMemoryContent(params.content, params.userId),
+    contentIv: null,
+    contentEncrypted: 1,
+    contentHash: params.contentHash ?? hashMemoryContent(params.content),
+    sensitive: params.sensitive ? 1 : 0,
+  };
 }
 
 function encryptAesGcm(plaintext: Buffer, key: Buffer): { ciphertext: string; iv: string } {
@@ -125,6 +159,8 @@ async function ensureInitialized(): Promise<void> {
 
     try {
     await client.executeMultiple(`
+    -- TODO: Keep this bootstrap DDL aligned with the runtime column guards below.
+    -- A single schema source of truth would remove this drift risk.
     CREATE TABLE IF NOT EXISTS memories (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -139,6 +175,7 @@ async function ensureInitialized(): Promise<void> {
       content_iv TEXT,
       content_encrypted INTEGER NOT NULL DEFAULT 0,
       content_hash TEXT NOT NULL,
+      sensitive INTEGER NOT NULL DEFAULT 0,
       sync_status TEXT NOT NULL DEFAULT 'pending',
       sync_error TEXT,
       namespace_id TEXT,
@@ -165,6 +202,7 @@ async function ensureInitialized(): Promise<void> {
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
       key_hash TEXT NOT NULL UNIQUE,
+      key_suffix TEXT,
       agent_id TEXT NOT NULL,
       agent_name TEXT,
       created_at TEXT NOT NULL,
@@ -222,6 +260,7 @@ async function ensureInitialized(): Promise<void> {
     ON memory_edges(target_id);
   `);
     await ensureMemoriesColumns(client);
+    await ensureApiKeysColumns(client);
     await ensureMemoriesIndexes(client);
 
       initialized = true;
@@ -275,9 +314,12 @@ async function ensureMemoriesIndexes(client: Client): Promise<void> {
 }
 
 async function ensureMemoriesColumns(client: Client): Promise<void> {
+  // TODO: This ALTER-based bootstrap duplicates the CREATE TABLE definition above.
+  // Consolidate schema ownership so new columns only need to be declared once.
   const requiredColumns: Array<{ name: string; ddl: string }> = [
     { name: "content_iv", ddl: "TEXT" },
     { name: "content_encrypted", ddl: "INTEGER NOT NULL DEFAULT 0" },
+    { name: "sensitive", ddl: "INTEGER NOT NULL DEFAULT 0" },
     { name: "namespace_id", ddl: "TEXT" },
     { name: "session_id", ddl: "TEXT" },
     { name: "metadata_json", ddl: "TEXT" },
@@ -320,6 +362,29 @@ async function ensureMemoriesColumns(client: Client): Promise<void> {
       continue;
     }
     await client.execute(`ALTER TABLE memories ADD COLUMN ${column.name} ${column.ddl}`);
+  }
+}
+
+async function ensureApiKeysColumns(client: Client): Promise<void> {
+  const requiredColumns: Array<{ name: string; ddl: string }> = [
+    { name: "key_suffix", ddl: "TEXT" },
+  ];
+
+  const tableInfo = await client.execute("PRAGMA table_info(api_keys)");
+  const existing = new Set(
+    tableInfo.rows
+      .map((row) => {
+        const record = row as Record<string, unknown>;
+        return typeof record.name === "string" ? record.name : null;
+      })
+      .filter((name): name is string => Boolean(name)),
+  );
+
+  for (const column of requiredColumns) {
+    if (existing.has(column.name)) {
+      continue;
+    }
+    await client.execute(`ALTER TABLE api_keys ADD COLUMN ${column.name} ${column.ddl}`);
   }
 }
 
@@ -377,9 +442,9 @@ export type AgentMemoryRecord = {
 function mapRow(row: Record<string, unknown>): MemoryRecord {
   const entities = parseJsonStringArray((row.entities as string | null) ?? row.entities_json);
   const userId = row.user_id as string;
-  const encryptedText = row.content_text as string;
-  // Decrypt content at rest (handles both encrypted and legacy plaintext)
-  const decryptedText = decryptMemoryContent(encryptedText, userId);
+  const storedText = row.content_text as string;
+  const storageEncrypted = Number(row.content_encrypted ?? 0) === 1;
+  const decryptedText = storageEncrypted ? decryptMemoryContent(storedText, userId) : storedText;
   
   return {
     id: row.id as string,
@@ -394,7 +459,7 @@ function mapRow(row: Record<string, unknown>): MemoryRecord {
     fileName: row.file_name as string | null,
     contentText: decryptedText,
     contentIv: row.content_iv as string | null,
-    isEncrypted: Number(row.content_encrypted ?? 0) === 1,
+    isEncrypted: looksLikeOpaqueEncryptedPayload(decryptedText),
     contentHash: row.content_hash as string,
     sensitive: Number(row.sensitive ?? 0) === 1,
     syncStatus: (row.sync_status as MemorySyncStatus) ?? "pending",
@@ -412,6 +477,12 @@ function mapRow(row: Record<string, unknown>): MemoryRecord {
 export async function insertMemory(memory: MemoryRecord): Promise<void> {
   await ensureInitialized();
   const client = getDb();
+  const preparedContent = prepareMemoryContentForStorage({
+    content: memory.contentText,
+    userId: memory.userId,
+    contentHash: memory.contentHash,
+    sensitive: memory.sensitive,
+  });
   
   await client.execute({
     sql: `
@@ -431,11 +502,11 @@ export async function insertMemory(memory: MemoryRecord): Promise<void> {
       memory.tags.join(","),
       memory.sourceUrl,
       memory.fileName,
-      memory.contentText,
-      memory.contentIv,
-      memory.isEncrypted ? 1 : 0,
-      memory.contentHash,
-      memory.sensitive ? 1 : 0,
+      preparedContent.contentText,
+      preparedContent.contentIv,
+      preparedContent.contentEncrypted,
+      preparedContent.contentHash,
+      preparedContent.sensitive,
       memory.syncStatus,
       memory.syncError,
       memory.createdAt,
@@ -851,9 +922,9 @@ function mapMemoryEdgeRow(row: Record<string, unknown>): MemoryEdgeRecord {
 
 function mapAgentMemoryRow(row: Record<string, unknown>): AgentMemoryRecord {
   const userId = row.user_id as string;
-  const encryptedText = row.content_text as string;
-  // Decrypt content at rest (handles both encrypted and legacy plaintext)
-  const decryptedText = decryptMemoryContent(encryptedText, userId);
+  const storedText = row.content_text as string;
+  const storageEncrypted = Number(row.content_encrypted ?? 0) === 1;
+  const decryptedText = storageEncrypted ? decryptMemoryContent(storedText, userId) : storedText;
   
   return {
     id: row.id as string,
@@ -871,9 +942,14 @@ function mapAgentMemoryRow(row: Record<string, unknown>): AgentMemoryRecord {
     entities: parseJsonStringArray((row.entities as string | null) ?? row.entities_json),
     feedbackScore: Number(row.feedback_score ?? 0),
     accessCount: Number(row.access_count ?? 0),
+    isEncrypted: looksLikeOpaqueEncryptedPayload(decryptedText),
     sensitive: Number(row.sensitive ?? 0) === 1,
     createdAt: row.created_at as string,
   };
+}
+
+export function filterSensitiveMemories<T extends { sensitive: boolean }>(memories: T[]): T[] {
+  return memories.filter((memory) => !memory.sensitive);
 }
 
 export async function createApiKey(userId: string, agentName?: string): Promise<{ apiKey: string; agentId: string }> {
@@ -1337,12 +1413,12 @@ export async function insertAgentMemory(params: {
   const importanceTier = params.importanceTier ?? "normal";
   const entities = params.entities ?? [];
   const entitiesJson = JSON.stringify(entities);
-  const contentHash = crypto.createHash("sha256").update(text, "utf8").digest("hex");
   const sizeBytes = Buffer.byteLength(text, "utf8");
-  const sensitive = containsSecrets(text) ? 1 : 0;
-
-  // Encrypt content at rest unless the payload is already encrypted.
-  const storedText = params.isEncrypted ? text : encryptMemoryContent(text, params.userId);
+  const preparedContent = prepareMemoryContentForStorage({
+    content: text,
+    userId: params.userId,
+    sensitive: containsSecrets(text),
+  });
 
   const tx = await client.transaction("write");
 
@@ -1365,10 +1441,10 @@ export async function insertAgentMemory(params: {
         importanceTier,
         params.sourceUrl ?? null,
         params.fileName ?? null,
-        storedText,
-        params.isEncrypted ? 1 : 0,
-        contentHash,
-        sensitive,
+        preparedContent.contentText,
+        preparedContent.contentEncrypted,
+        preparedContent.contentHash,
+        preparedContent.sensitive,
         now,
         params.namespaceId ?? null,
         params.sessionId ?? null,
@@ -1402,7 +1478,7 @@ export async function insertAgentMemory(params: {
     feedbackScore: 0,
     accessCount: 0,
     isEncrypted: params.isEncrypted ?? false,
-    sensitive: sensitive === 1,
+    sensitive: preparedContent.sensitive === 1,
     createdAt: now,
   };
 }
@@ -2025,13 +2101,21 @@ export async function updateAgentMemory(
     args.push(updates.title);
   }
   if (updates.text !== undefined) {
+    const preparedContent = prepareMemoryContentForStorage({
+      content: updates.text,
+      userId,
+      sensitive: containsSecrets(updates.text),
+    });
     setClauses.push("content_text = ?");
-    args.push(updates.text);
-    // Update content hash when text changes
-    const crypto = await import("crypto");
-    const contentHash = crypto.createHash("sha256").update(updates.text).digest("hex");
+    args.push(preparedContent.contentText);
+    setClauses.push("content_iv = ?");
+    args.push(preparedContent.contentIv);
+    setClauses.push("content_encrypted = ?");
+    args.push(preparedContent.contentEncrypted);
     setClauses.push("content_hash = ?");
-    args.push(contentHash);
+    args.push(preparedContent.contentHash);
+    setClauses.push("sensitive = ?");
+    args.push(preparedContent.sensitive);
   }
 
   if (setClauses.length === 0) {
@@ -2228,13 +2312,16 @@ export async function insertMemoryWithMetadata(params: {
   const text = params.text.trim();
   const title = (params.title?.trim() || text.slice(0, 80) || "Untitled Memory").trim();
   const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
-  const contentHash = crypto.createHash("sha256").update(text, "utf8").digest("hex");
   const embeddingJson = params.embedding ? JSON.stringify(params.embedding) : null;
   const embeddingHashValue = params.embedding ? hashEmbedding(params.embedding) : null;
   const entities = params.entities ?? [];
   const entitiesJson = JSON.stringify(entities);
   const conversationsJson = params.conversationId ? JSON.stringify([params.conversationId]) : null;
-  const sensitive = containsSecrets(text) ? 1 : 0;
+  const preparedContent = prepareMemoryContentForStorage({
+    content: text,
+    userId: params.userId,
+    sensitive: containsSecrets(text),
+  });
 
   await client.execute({
     sql: `
@@ -2253,9 +2340,9 @@ export async function insertMemoryWithMetadata(params: {
       title,
       params.memoryType ?? 'episodic',
       params.importance ?? 5,
-      text,
-      contentHash,
-      sensitive,
+      preparedContent.contentText,
+      preparedContent.contentHash,
+      preparedContent.sensitive,
       now,
       params.namespaceId ?? null,
       params.sessionId ?? null,
@@ -2288,7 +2375,7 @@ export async function insertMemoryWithMetadata(params: {
     entities,
     feedbackScore: 0,
     accessCount: 0,
-    sensitive: sensitive === 1,
+    sensitive: preparedContent.sensitive === 1,
     createdAt: now,
   };
 }
@@ -2320,14 +2407,17 @@ export async function insertMemoryWithMetadataAndQuota(params: {
   const text = params.text.trim();
   const title = (params.title?.trim() || text.slice(0, 80) || "Untitled Memory").trim();
   const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
-  const contentHash = crypto.createHash("sha256").update(text, "utf8").digest("hex");
   const embeddingJson = params.embedding ? JSON.stringify(params.embedding) : null;
   const embeddingHashValue = params.embedding ? hashEmbedding(params.embedding) : null;
   const entities = params.entities ?? [];
   const entitiesJson = JSON.stringify(entities);
   const conversationsJson = params.conversationId ? JSON.stringify([params.conversationId]) : null;
   const sizeBytes = Buffer.byteLength(text, "utf8");
-  const sensitive = containsSecrets(text) ? 1 : 0;
+  const preparedContent = prepareMemoryContentForStorage({
+    content: text,
+    userId: params.userId,
+    sensitive: containsSecrets(text),
+  });
   const tx = await client.transaction("write");
 
   try {
@@ -2349,9 +2439,9 @@ export async function insertMemoryWithMetadataAndQuota(params: {
         title,
         params.memoryType ?? "episodic",
         params.importance ?? 5,
-        text,
-        contentHash,
-        sensitive,
+        preparedContent.contentText,
+        preparedContent.contentHash,
+        preparedContent.sensitive,
         now,
         params.namespaceId ?? null,
         params.sessionId ?? null,
@@ -2402,7 +2492,7 @@ export async function insertMemoryWithMetadataAndQuota(params: {
       entities,
       feedbackScore: 0,
       accessCount: 0,
-      sensitive: sensitive === 1,
+      sensitive: preparedContent.sensitive === 1,
       createdAt: now,
     },
     created: true,

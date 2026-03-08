@@ -8,6 +8,7 @@
 import { embedText } from "@/lib/embeddings";
 import { semanticSearchVectors } from "@/lib/qdrant";
 import { 
+  filterSensitiveMemories,
   getCriticalMemories, 
   getAgentMemoriesByIds,
   incrementAccessCounts,
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
     const message = typeof body.message === "string" ? body.message.trim() : "";
 
     // Get critical memories (always included)
-    const criticalMemories = await getCriticalMemories(identity.userId);
+    const criticalMemories = filterSensitiveMemories(await getCriticalMemories(identity.userId));
 
     // Get relevant memories based on message
     let relevantMemories: typeof criticalMemories = [];
@@ -46,10 +47,10 @@ export async function POST(request: Request) {
         });
 
         if (hits.length > 0) {
-          const memories = await getAgentMemoriesByIds({
+          const memories = filterSensitiveMemories(await getAgentMemoriesByIds({
             userId: identity.userId,
             ids: hits.map((h) => h.item.id),
-          });
+          }));
           
           relevantMemories = memories.filter(
             (m) => m.importanceTier === "high" || m.importanceTier === "normal"

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
-import { Brain, Home, Layers, Network, Plus, Search, Settings } from "lucide-react";
+import { Activity, Brain, Home, Layers, Network, Plus, Search, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { FeedbackWidget } from "@/components/feedback-widget";
@@ -14,6 +14,7 @@ const links = [
   { href: "/dashboard/search", label: "Search", icon: Search },
   { href: "/dashboard/browser", label: "Browser", icon: Layers },
   { href: "/dashboard/graph", label: "Graph", icon: Network },
+  { href: "/dashboard/analytics", label: "Analytics", icon: Activity },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 

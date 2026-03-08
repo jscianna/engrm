@@ -13,7 +13,12 @@
 
 import { embedText } from "@/lib/embeddings";
 import { semanticSearchVectors } from "@/lib/qdrant";
-import { getCriticalMemories, getAgentMemoriesByIds, getHighTierMemories } from "@/lib/db";
+import {
+  filterSensitiveMemories,
+  getCriticalMemories,
+  getAgentMemoriesByIds,
+  getHighTierMemories,
+} from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
@@ -58,7 +63,7 @@ export async function POST(request: Request) {
     const synthesize = body.synthesize === true; // default false
 
     // 1. Always get critical memories
-    const criticalMemories = await getCriticalMemories(identity.userId);
+    const criticalMemories = filterSensitiveMemories(await getCriticalMemories(identity.userId));
 
     // 2. If message provided and includeHigh, search for relevant high-importance memories
     let highMemories: typeof criticalMemories = [];
@@ -73,10 +78,10 @@ export async function POST(request: Request) {
       });
 
       if (hits.length > 0) {
-        const memories = await getAgentMemoriesByIds({
+        const memories = filterSensitiveMemories(await getAgentMemoriesByIds({
           userId: identity.userId,
           ids: hits.map((hit) => hit.item.id),
-        });
+        }));
         
         // Filter to high tier and limit
         highMemories = memories
@@ -94,7 +99,7 @@ export async function POST(request: Request) {
     
     if (synthesize && dedupedHigh.length >= SYNTHESIS_THRESHOLD) {
       // Get all high-tier memories for grouping
-      const allHighMemories = await getHighTierMemories(identity.userId);
+      const allHighMemories = filterSensitiveMemories(await getHighTierMemories(identity.userId));
       const filteredHigh = allHighMemories.filter((m) => !criticalIds.has(m.id));
       
       if (filteredHigh.length >= SYNTHESIS_THRESHOLD) {
