@@ -31,9 +31,15 @@ export async function POST(request: Request) {
     }
 
     const message = typeof body.message === "string" ? body.message.trim() : "";
+    const conversationId = typeof body.conversationId === "string" ? body.conversationId : null;
+    
+    // Limits for context window efficiency
+    const maxCritical = typeof body.maxCritical === "number" ? Math.min(body.maxCritical, 20) : 10;
+    const maxRelevant = typeof body.maxRelevant === "number" ? Math.min(body.maxRelevant, 10) : 5;
 
-    // Get critical memories (always included)
-    const criticalMemories = filterSensitiveMemories(await getCriticalMemories(identity.userId));
+    // Get critical memories (limited to most important)
+    const allCritical = filterSensitiveMemories(await getCriticalMemories(identity.userId));
+    const criticalMemories = allCritical.slice(0, maxCritical);
 
     // Get relevant memories based on message (hybrid: vector + BM25)
     let relevantMemories: typeof criticalMemories = [];
@@ -99,11 +105,11 @@ export async function POST(request: Request) {
       }
     }
 
-    // Dedupe
+    // Dedupe and limit relevant memories
     const criticalIds = new Set(criticalMemories.map((m) => m.id));
     const dedupedRelevant = relevantMemories
       .filter((m) => !criticalIds.has(m.id))
-      .slice(0, 5);
+      .slice(0, maxRelevant);
 
     // Build formatted context string
     const lines: string[] = [];
@@ -148,6 +154,7 @@ export async function POST(request: Request) {
         userId: identity.userId,
         memoryIds: allInjectedIds,
         resultCount: allInjectedIds.length,
+        conversationId: conversationId ?? undefined,
       }).catch(() => {});
     }
 
