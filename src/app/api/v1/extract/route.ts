@@ -141,7 +141,7 @@ function generateTitle(content: string, memoryType: MemoryKind): string {
 
 export async function POST(request: Request) {
   try {
-    const identity = await validateApiKey(request, "extract");
+    await validateApiKey(request, "extract");
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body)) {

@@ -8,7 +8,7 @@
  * POST /api/v1/memories/{id}/reinforce
  */
 
-import { reinforceMemoryExplicit, getAgentMemoryById } from "@/lib/db";
+import { reinforceMemoryExplicit } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
@@ -37,10 +37,8 @@ export async function POST(
       });
     }
 
-    const reason = typeof body.reason === "string" ? body.reason : undefined;
-
     // Apply reinforcement
-    const result = await reinforceMemoryExplicit(identity.userId, id, value, reason);
+    const result = await reinforceMemoryExplicit(identity.userId, id, value);
 
     if (!result) {
       throw new MemryError("MEMORY_NOT_FOUND");

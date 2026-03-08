@@ -2742,8 +2742,7 @@ export async function decayMemoryScores(userId?: string): Promise<{
 export async function reinforceMemoryExplicit(
   userId: string,
   memoryId: string,
-  value: 1 | -1,
-  reason?: string
+  value: 1 | -1
 ): Promise<{
   feedbackScore: number;
   accessCount: number;
