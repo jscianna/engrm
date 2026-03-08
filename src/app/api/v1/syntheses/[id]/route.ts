@@ -1,5 +1,3 @@
-import { auth } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
 import {
   getAgentMemoriesByIds,
   getSynthesizedMemoryById,
@@ -48,50 +46,50 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { userId } = await auth();
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const identity = await validateApiKey(request, "syntheses.update");
+    const { id } = await context.params;
+    const body = await request.json().catch(() => ({}));
+    const title = typeof body.title === "string" ? body.title : undefined;
+    const content = typeof body.synthesis === "string" ? body.synthesis : undefined;
+
+    const existing = await getSynthesizedMemoryById(identity.userId, id);
+    if (!existing) {
+      throw new MemryError("SYNTHESIS_NOT_FOUND");
+    }
+
+    const updated = await updateSynthesizedMemory(identity.userId, id, {
+      title: title ?? existing.title,
+      synthesis: content ?? existing.synthesis,
+    });
+
+    const sourceMemories = await getAgentMemoriesByIds({
+      userId: identity.userId,
+      ids: updated.sourceMemoryIds,
+    });
+
+    return Response.json({ synthesis: updated, sourceMemories });
+  } catch (error) {
+    return errorResponse(error);
   }
-
-  const { id } = await context.params;
-  const body = await request.json();
-  const { title, synthesis: content } = body;
-
-  const existing = await getSynthesizedMemoryById(userId, id);
-  if (!existing) {
-    return NextResponse.json({ error: "Synthesis not found" }, { status: 404 });
-  }
-
-  const updated = await updateSynthesizedMemory(userId, id, {
-    title: title ?? existing.title,
-    synthesis: content ?? existing.synthesis,
-  });
-
-  const sourceMemories = await getAgentMemoriesByIds({
-    userId,
-    ids: updated.sourceMemoryIds,
-  });
-
-  return NextResponse.json({ synthesis: updated, sourceMemories });
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { userId } = await auth();
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const identity = await validateApiKey(request, "syntheses.delete");
+    const { id } = await context.params;
+
+    const existing = await getSynthesizedMemoryById(identity.userId, id);
+    if (!existing) {
+      throw new MemryError("SYNTHESIS_NOT_FOUND");
+    }
+
+    await deleteSynthesizedMemory(identity.userId, id);
+    return Response.json({ success: true });
+  } catch (error) {
+    return errorResponse(error);
   }
-
-  const { id } = await context.params;
-
-  const existing = await getSynthesizedMemoryById(userId, id);
-  if (!existing) {
-    return NextResponse.json({ error: "Synthesis not found" }, { status: 404 });
-  }
-
-  await deleteSynthesizedMemory(userId, id);
-
-  return NextResponse.json({ success: true });
 }

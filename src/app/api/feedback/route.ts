@@ -11,6 +11,30 @@ import { getDb } from "@/lib/turso";
 import { auth } from "@clerk/nextjs/server";
 
 export const runtime = "nodejs";
+const FEEDBACK_WINDOW_MS = 60_000;
+const FEEDBACK_LIMIT_PER_WINDOW = 5;
+const feedbackRateWindow = new Map<string, { count: number; resetAt: number }>();
+
+function getClientIp(request: Request): string {
+  return (
+    request.headers.get("cf-connecting-ip") ??
+    request.headers.get("x-real-ip") ??
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    "unknown"
+  );
+}
+
+function isRateLimited(key: string): boolean {
+  const now = Date.now();
+  const current = feedbackRateWindow.get(key);
+  if (!current || current.resetAt <= now) {
+    feedbackRateWindow.set(key, { count: 1, resetAt: now + FEEDBACK_WINDOW_MS });
+    return false;
+  }
+  current.count += 1;
+  feedbackRateWindow.set(key, current);
+  return current.count > FEEDBACK_LIMIT_PER_WINDOW;
+}
 
 async function ensureFeedbackTable() {
   const client = getDb();
@@ -37,6 +61,10 @@ async function ensureFeedbackTable() {
 export async function POST(request: Request) {
   try {
     await ensureFeedbackTable();
+    const ip = getClientIp(request);
+    if (isRateLimited(ip)) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
     
     const body = await request.json().catch(() => null);
     if (!body || typeof body.message !== "string" || !body.message.trim()) {

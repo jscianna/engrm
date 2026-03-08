@@ -38,6 +38,7 @@ export async function GET(request: Request) {
       namespaceId: resolved.namespaceId,
       limit,
       since,
+      excludeSensitive: true,
     });
 
     return Response.json({ memories });
@@ -166,6 +167,7 @@ export async function POST(request: Request) {
           const similarMemories = await getAgentMemoriesByIds({
             userId: identity.userId,
             ids: similarHits.map((h) => h.item.id),
+            excludeSensitive: true,
           });
 
           // Return consolidation suggestion instead of creating

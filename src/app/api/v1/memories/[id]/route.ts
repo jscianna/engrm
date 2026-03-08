@@ -12,7 +12,7 @@ export async function GET(
   try {
     const identity = await validateApiKey(request, "memories.get");
     const { id } = await context.params;
-    const memory = await getAgentMemoryById(identity.userId, id);
+    const memory = await getAgentMemoryById(identity.userId, id, { excludeSensitive: true });
 
     if (!memory) {
       throw new MemryError("MEMORY_NOT_FOUND");
@@ -51,7 +51,7 @@ export async function PATCH(
       throw new MemryError("MEMORY_NOT_FOUND");
     }
 
-    const memory = await getAgentMemoryById(identity.userId, id);
+    const memory = await getAgentMemoryById(identity.userId, id, { excludeSensitive: true });
     return Response.json({ memory });
   } catch (error) {
     return errorResponse(error);
@@ -67,7 +67,7 @@ export async function DELETE(
     const { id } = await context.params;
     
     // Get memory first to know the size
-    const memory = await getAgentMemoryById(identity.userId, id);
+    const memory = await getAgentMemoryById(identity.userId, id, { excludeSensitive: true });
     if (!memory) {
       throw new MemryError("MEMORY_NOT_FOUND");
     }

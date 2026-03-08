@@ -273,10 +273,17 @@ export class FatHippoContextEngine implements ContextEngine {
       console.error("[FatHippo] Assemble error:", error);
     }
 
+    const baseMessageTokens = this.estimateMessageTokens(params.messages);
+    if (typeof params.tokenBudget === "number" && params.tokenBudget > 0) {
+      const contextBudget = Math.max(0, params.tokenBudget - baseMessageTokens);
+      const constrained = this.constrainContextToBudget(memories, syntheses, contextBudget);
+      memories = constrained.memories;
+      syntheses = constrained.syntheses;
+    }
+
     // Format memories for injection
     const memoryBlock = formatMemoriesForInjection(memories, syntheses);
-    const tokens =
-      estimateTokens(memoryBlock) + this.estimateMessageTokens(params.messages);
+    const tokens = estimateTokens(memoryBlock) + baseMessageTokens;
 
     return {
       messages: params.messages,
@@ -444,5 +451,56 @@ export class FatHippoContextEngine implements ContextEngine {
       .filter((content): content is string => Boolean(content))
       .join("\n");
     return estimateTokens(plainText);
+  }
+
+  private constrainContextToBudget(
+    memories: Memory[],
+    syntheses: SynthesizedMemory[],
+    contextBudget: number,
+  ): { memories: Memory[]; syntheses: SynthesizedMemory[] } {
+    if (contextBudget <= 0) {
+      return { memories: [], syntheses: [] };
+    }
+
+    let remaining = contextBudget;
+    const selectedSyntheses: SynthesizedMemory[] = [];
+    const selectedMemories: Memory[] = [];
+
+    const pushIfFits = (tokens: number): boolean => {
+      if (tokens > remaining) {
+        return false;
+      }
+      remaining -= tokens;
+      return true;
+    };
+
+    for (const synthesis of syntheses) {
+      const tokens = estimateTokens(`${synthesis.title}\n${synthesis.content}`);
+      if (!pushIfFits(tokens)) {
+        continue;
+      }
+      selectedSyntheses.push(synthesis);
+    }
+
+    const critical = memories.filter((memory) => memory.importanceTier === "critical");
+    const high = memories.filter((memory) => memory.importanceTier === "high");
+    const normal = memories.filter(
+      (memory) => memory.importanceTier === "normal" || !memory.importanceTier,
+    );
+
+    for (const group of [critical, high, normal]) {
+      for (const memory of group) {
+        const tokens = estimateTokens(`${memory.title}\n${memory.content}`);
+        if (!pushIfFits(tokens)) {
+          continue;
+        }
+        selectedMemories.push(memory);
+      }
+    }
+
+    return {
+      memories: selectedMemories,
+      syntheses: selectedSyntheses,
+    };
   }
 }

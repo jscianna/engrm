@@ -23,7 +23,14 @@ export type AuditAction =
   | "auth.login"
   | "auth.logout"
   | "auth.api_key_create"
+  | "auth.api_key_delete"
   | "auth.api_key_revoke"
+  | "auth.api_key_expire"
+  | "auth.api_key_expiration_clear"
+  | "vault.read"
+  | "vault.create"
+  | "vault.update"
+  | "vault.delete"
   | "settings.update"
   | "admin.migrate"
   | "admin.maintenance";
@@ -88,8 +95,8 @@ export async function logAuditEvent(params: {
   action: AuditAction;
   resourceType?: string;
   resourceId?: string;
-  ipAddress?: string;
-  userAgent?: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
   try {

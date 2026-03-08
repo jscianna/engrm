@@ -66,6 +66,7 @@ export async function POST(request: Request) {
       userId: identity.userId,
       ids: hits.map((hit) => hit.item.id),
       excludeAbsorbed: true,
+      excludeSensitive: true,
     });
 
     // Filter to high-tier memories and those above relevance threshold
@@ -98,6 +99,7 @@ export async function POST(request: Request) {
         userId: identity.userId,
         ids: currentHighIds.slice(0, 3),
         excludeAbsorbed: true,
+        excludeSensitive: true,
       });
       const newTitles = relevantHighMemories.slice(0, 3);
 

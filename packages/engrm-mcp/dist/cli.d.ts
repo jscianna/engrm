@@ -3,12 +3,12 @@
  * MEMRY MCP Server CLI
  *
  * Usage:
- *   memry-mcp                    # Start MCP server (for Claude Desktop)
- *   memry-mcp --help             # Show help
+ *   fathippo-mcp                    # Start MCP server (for Claude Desktop)
+ *   fathippo-mcp --help             # Show help
  *
  * Environment variables:
- *   ENGRM_API_KEY           # Your MEMRY API key (required)
- *   ENGRM_API_URL           # API URL (default: https://memry-sand.vercel.app)
- *   ENGRM_VAULT_PASSWORD    # Vault password for encryption (required)
+ *   FATHIPPO_API_KEY           # Your FatHippo API key (required)
+ *   FATHIPPO_API_URL           # API URL (default: https://fathippo.ai)
+ *   FATHIPPO_VAULT_PASSWORD    # Vault password for encryption (required)
  */
 export {};

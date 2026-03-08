@@ -1,6 +1,6 @@
 /**
- * Engrm API client for zero-knowledge operations
- * Only sends: vectors (not text) + encrypted blobs
+ * FatHippo API client for MCP operations.
+ * Uses supported v1 endpoints only.
  */
 export interface MemryConfig {
     apiKey: string;
@@ -10,7 +10,6 @@ export interface ZkMemory {
     id: string;
     title: string;
     content: string;
-    vector: number[];
     metadata?: Record<string, unknown>;
     createdAt: string;
 }
@@ -23,9 +22,9 @@ export interface ZkSearchResult {
 }
 /**
  * Get auto-namespace from environment
- * Priority: ENGRM_NAMESPACE > ENGRM_CHAT_ID > ENGRM_SESSION_ID > undefined
+ * Priority: FATHIPPO_NAMESPACE > FATHIPPO_CHAT_ID > FATHIPPO_SESSION_ID > undefined
  *
- * For OpenClaw: set ENGRM_NAMESPACE=${chat_id} or ENGRM_NAMESPACE=${conversation_label}
+ * For OpenClaw: set FATHIPPO_NAMESPACE=${chat_id} or FATHIPPO_NAMESPACE=${conversation_label}
  */
 export declare function getRawNamespace(): string | undefined;
 /**
@@ -45,7 +44,6 @@ export declare function getNamespace(): string | undefined;
 export declare function storeZkMemory(params: {
     encryptedTitle: string;
     encryptedContent: string;
-    vector: number[];
     metadata?: Record<string, unknown>;
     namespace?: string;
 }): Promise<{
@@ -56,7 +54,7 @@ export declare function storeZkMemory(params: {
  * Auto-uses namespace from environment if set
  */
 export declare function searchByVector(params: {
-    vector: number[];
+    query: string;
     topK?: number;
     namespace?: string;
 }): Promise<{

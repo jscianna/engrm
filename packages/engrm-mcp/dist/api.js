@@ -1,25 +1,26 @@
 /**
- * Engrm API client for zero-knowledge operations
- * Only sends: vectors (not text) + encrypted blobs
+ * FatHippo API client for MCP operations.
+ * Uses supported v1 endpoints only.
  */
+import { pbkdf2Sync } from "node:crypto";
 function getConfig() {
-    const apiKey = process.env.ENGRM_API_KEY;
-    const apiUrl = process.env.ENGRM_API_URL || "https://engrm.xyz";
+    const apiKey = process.env.FATHIPPO_API_KEY;
+    const apiUrl = process.env.FATHIPPO_API_URL || "https://fathippo.ai";
     if (!apiKey) {
-        throw new Error("ENGRM_API_KEY not set");
+        throw new Error("FATHIPPO_API_KEY not set");
     }
     return { apiKey, apiUrl: apiUrl.replace(/\/$/, "") };
 }
 /**
  * Get auto-namespace from environment
- * Priority: ENGRM_NAMESPACE > ENGRM_CHAT_ID > ENGRM_SESSION_ID > undefined
+ * Priority: FATHIPPO_NAMESPACE > FATHIPPO_CHAT_ID > FATHIPPO_SESSION_ID > undefined
  *
- * For OpenClaw: set ENGRM_NAMESPACE=${chat_id} or ENGRM_NAMESPACE=${conversation_label}
+ * For OpenClaw: set FATHIPPO_NAMESPACE=${chat_id} or FATHIPPO_NAMESPACE=${conversation_label}
  */
 export function getRawNamespace() {
-    return process.env.ENGRM_NAMESPACE
-        || process.env.ENGRM_CHAT_ID
-        || process.env.ENGRM_SESSION_ID
+    return process.env.FATHIPPO_NAMESPACE
+        || process.env.FATHIPPO_CHAT_ID
+        || process.env.FATHIPPO_SESSION_ID
         || undefined;
 }
 /**
@@ -27,10 +28,8 @@ export function getRawNamespace() {
  * Server sees opaque ID, can't know the actual chat/project name.
  */
 export function hashNamespace(namespace, vaultPassword) {
-    const crypto = require('crypto');
-    const combined = `${namespace}:${vaultPassword}`;
-    const hash = crypto.createHash('sha256').update(combined).digest('hex');
-    return `ns_${hash.slice(0, 16)}`; // e.g., "ns_a3f2b8c1d4e5f6a7"
+    const key = pbkdf2Sync(vaultPassword, namespace, 100_000, 16, "sha256");
+    return `ns_${key.toString("hex")}`;
 }
 /**
  * Get hashed namespace for ZK operations
@@ -39,9 +38,10 @@ export function getNamespace() {
     const raw = getRawNamespace();
     if (!raw)
         return undefined;
-    const vaultPassword = process.env.ENGRM_VAULT_PASSWORD;
-    if (!vaultPassword)
-        return raw; // Fallback to raw if no password (shouldn't happen)
+    const vaultPassword = process.env.FATHIPPO_VAULT_PASSWORD;
+    if (!vaultPassword) {
+        throw new Error("FATHIPPO_VAULT_PASSWORD is required when namespace is set");
+    }
     return hashNamespace(raw, vaultPassword);
 }
 async function request(method, endpoint, data) {
@@ -67,13 +67,13 @@ async function request(method, endpoint, data) {
  */
 export async function storeZkMemory(params) {
     const namespace = params.namespace || getNamespace();
-    return request("POST", "/api/v1/memories/zk", {
-        encryptedTitle: params.encryptedTitle,
-        encryptedContent: params.encryptedContent,
-        vector: params.vector,
+    const response = await request("POST", "/api/v1/memories", {
+        title: params.encryptedTitle,
+        content: params.encryptedContent,
         metadata: params.metadata,
         ...(namespace && { namespace }),
     });
+    return { id: response.memory.id };
 }
 /**
  * Search by vector only - server doesn't know what we're searching for
@@ -81,11 +81,20 @@ export async function storeZkMemory(params) {
  */
 export async function searchByVector(params) {
     const namespace = params.namespace || getNamespace();
-    return request("POST", "/api/v1/search/zk", {
-        vector: params.vector,
+    const response = await request("POST", "/api/v1/search", {
+        query: params.query,
         topK: params.topK || 5,
         ...(namespace && { namespace }),
     });
+    return {
+        results: response.map((item) => ({
+            id: item.id,
+            score: item.score,
+            encryptedTitle: item.memory.title,
+            encryptedContent: item.memory.text,
+            metadata: item.memory.metadata,
+        })),
+    };
 }
 /**
  * List recent memories (encrypted)
@@ -94,8 +103,21 @@ export async function searchByVector(params) {
 export async function listMemories(params) {
     const limit = params?.limit || 10;
     const namespace = params?.namespace || getNamespace();
-    const nsParam = namespace ? `&namespace=${encodeURIComponent(namespace)}` : "";
-    return request("GET", `/api/v1/memories?limit=${limit}${nsParam}`);
+    const query = new URLSearchParams();
+    query.set("limit", String(limit));
+    if (namespace) {
+        query.set("namespace", namespace);
+    }
+    const response = await request("GET", `/api/v1/memories?${query.toString()}`);
+    return {
+        memories: response.memories.map((memory) => ({
+            id: memory.id,
+            score: 1,
+            encryptedTitle: memory.title,
+            encryptedContent: memory.text,
+            metadata: memory.metadata,
+        })),
+    };
 }
 /**
  * Delete a memory

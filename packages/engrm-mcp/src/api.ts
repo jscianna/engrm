@@ -1,6 +1,6 @@
 /**
- * FatHippo API client for zero-knowledge operations
- * Only sends: vectors (not text) + encrypted blobs
+ * FatHippo API client for MCP operations.
+ * Uses supported v1 endpoints only.
  */
 
 import { pbkdf2Sync } from "node:crypto";
@@ -12,9 +12,8 @@ export interface MemryConfig {
 
 export interface ZkMemory {
   id: string;
-  title: string; // encrypted
-  content: string; // encrypted
-  vector: number[];
+  title: string;
+  content: string;
   metadata?: Record<string, unknown>;
   createdAt: string;
 }
@@ -74,7 +73,9 @@ export function getNamespace(): string | undefined {
   if (!raw) return undefined;
   
   const vaultPassword = process.env.FATHIPPO_VAULT_PASSWORD;
-  if (!vaultPassword) return raw; // Fallback to raw if no password (shouldn't happen)
+  if (!vaultPassword) {
+    throw new Error("FATHIPPO_VAULT_PASSWORD is required when namespace is set");
+  }
   
   return hashNamespace(raw, vaultPassword);
 }
@@ -111,18 +112,17 @@ async function request<T>(
 export async function storeZkMemory(params: {
   encryptedTitle: string;
   encryptedContent: string;
-  vector: number[];
   metadata?: Record<string, unknown>;
   namespace?: string;
 }): Promise<{ id: string }> {
   const namespace = params.namespace || getNamespace();
-  return request("POST", "/api/v1/memories/zk", {
-    encryptedTitle: params.encryptedTitle,
-    encryptedContent: params.encryptedContent,
-    vector: params.vector,
+  const response = await request<{ memory: { id: string } }>("POST", "/api/v1/memories", {
+    title: params.encryptedTitle,
+    content: params.encryptedContent,
     metadata: params.metadata,
     ...(namespace && { namespace }),
   });
+  return { id: response.memory.id };
 }
 
 /**
@@ -130,16 +130,35 @@ export async function storeZkMemory(params: {
  * Auto-uses namespace from environment if set
  */
 export async function searchByVector(params: {
-  vector: number[];
+  query: string;
   topK?: number;
   namespace?: string;
 }): Promise<{ results: ZkSearchResult[] }> {
   const namespace = params.namespace || getNamespace();
-  return request("POST", "/api/v1/search/zk", {
-    vector: params.vector,
+  const response = await request<
+    Array<{
+      id: string;
+      score: number;
+      memory: {
+        title: string;
+        text: string;
+        metadata?: Record<string, unknown>;
+      };
+    }>
+  >("POST", "/api/v1/search", {
+    query: params.query,
     topK: params.topK || 5,
     ...(namespace && { namespace }),
   });
+  return {
+    results: response.map((item) => ({
+      id: item.id,
+      score: item.score,
+      encryptedTitle: item.memory.title,
+      encryptedContent: item.memory.text,
+      metadata: item.memory.metadata,
+    })),
+  };
 }
 
 /**
@@ -152,8 +171,28 @@ export async function listMemories(params?: {
 }): Promise<{ memories: ZkSearchResult[] }> {
   const limit = params?.limit || 10;
   const namespace = params?.namespace || getNamespace();
-  const nsParam = namespace ? `&namespace=${encodeURIComponent(namespace)}` : "";
-  return request("GET", `/api/v1/memories?limit=${limit}${nsParam}`);
+  const query = new URLSearchParams();
+  query.set("limit", String(limit));
+  if (namespace) {
+    query.set("namespace", namespace);
+  }
+  const response = await request<{
+    memories: Array<{
+      id: string;
+      title: string;
+      text: string;
+      metadata?: Record<string, unknown>;
+    }>;
+  }>("GET", `/api/v1/memories?${query.toString()}`);
+  return {
+    memories: response.memories.map((memory) => ({
+      id: memory.id,
+      score: 1,
+      encryptedTitle: memory.title,
+      encryptedContent: memory.text,
+      metadata: memory.metadata,
+    })),
+  };
 }
 
 /**

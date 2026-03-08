@@ -3,13 +3,13 @@
  * MEMRY MCP Server CLI
  * 
  * Usage:
- *   memry-mcp                    # Start MCP server (for Claude Desktop)
- *   memry-mcp --help             # Show help
+ *   fathippo-mcp                    # Start MCP server (for Claude Desktop)
+ *   fathippo-mcp --help             # Show help
  * 
  * Environment variables:
- *   ENGRM_API_KEY           # Your MEMRY API key (required)
- *   ENGRM_API_URL           # API URL (default: https://memry-sand.vercel.app)
- *   ENGRM_VAULT_PASSWORD    # Vault password for encryption (required)
+ *   FATHIPPO_API_KEY           # Your FatHippo API key (required)
+ *   FATHIPPO_API_URL           # API URL (default: https://fathippo.ai)
+ *   FATHIPPO_VAULT_PASSWORD    # Vault password for encryption (required)
  */
 
 import { runServer } from "./index.js";
@@ -18,17 +18,17 @@ const args = process.argv.slice(2);
 
 if (args.includes("--help") || args.includes("-h")) {
   console.log(`
-MEMRY MCP Server - Zero-Knowledge Memory for AI Agents
+FATHIPPO MCP Server - Memory for AI Agents
 
 Usage:
-  memry-mcp              Start MCP server (for Claude Desktop, Cursor, etc.)
+  fathippo-mcp           Start MCP server (for Claude Desktop, Cursor, etc.)
 
 Environment variables (required):
-  ENGRM_API_KEY          Your MEMRY API key
-  ENGRM_VAULT_PASSWORD   Vault password for client-side encryption
+  FATHIPPO_API_KEY          Your FatHippo API key
+  FATHIPPO_VAULT_PASSWORD   Vault password for client-side encryption
 
 Environment variables (optional):
-  ENGRM_API_URL          API URL (default: https://memry-sand.vercel.app)
+  FATHIPPO_API_URL          API URL (default: https://fathippo.ai)
 
 Privacy guarantees:
   - Embeddings generated locally (queries never leave your device)
@@ -38,11 +38,11 @@ Privacy guarantees:
 Claude Desktop configuration (~/.config/claude/claude_desktop_config.json):
   {
     "mcpServers": {
-      "memry": {
-        "command": "memry-mcp",
+      "fathippo": {
+        "command": "fathippo-mcp",
         "env": {
-          "ENGRM_API_KEY": "mem_xxx",
-          "ENGRM_VAULT_PASSWORD": "your-vault-password"
+          "FATHIPPO_API_KEY": "mem_xxx",
+          "FATHIPPO_VAULT_PASSWORD": "your-vault-password"
         }
       }
     }
@@ -52,13 +52,13 @@ Claude Desktop configuration (~/.config/claude/claude_desktop_config.json):
 }
 
 // Validate environment
-if (!process.env.ENGRM_API_KEY) {
-  console.error("Error: ENGRM_API_KEY environment variable is required");
+if (!process.env.FATHIPPO_API_KEY) {
+  console.error("Error: FATHIPPO_API_KEY environment variable is required");
   process.exit(1);
 }
 
-if (!process.env.ENGRM_VAULT_PASSWORD) {
-  console.error("Error: ENGRM_VAULT_PASSWORD environment variable is required");
+if (!process.env.FATHIPPO_VAULT_PASSWORD) {
+  console.error("Error: FATHIPPO_VAULT_PASSWORD environment variable is required");
   console.error("This is used for client-side encryption. Server never sees it.");
   process.exit(1);
 }

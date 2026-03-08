@@ -1,15 +1,13 @@
 /**
- * Engrm MCP Server - Zero-Knowledge Memory for AI Agents
+ * FatHippo MCP Server - Zero-Knowledge Memory for AI Agents
  *
- * Privacy guarantees:
- * - Embeddings generated locally (queries never leave device)
- * - Content encrypted client-side (server only sees ciphertext)
- * - Server cannot read your memories or know what you search for
+ * Privacy notes:
+ * - Content can be encrypted client-side before API storage.
+ * - Search queries are sent to FatHippo APIs for retrieval.
  */
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, } from "@modelcontextprotocol/sdk/types.js";
-import { embedLocal, initEmbeddings } from "./embeddings.js";
 import { encryptLocal, decryptLocal, getVaultPassword } from "./crypto.js";
 import { storeZkMemory, searchByVector, listMemories, deleteMemory } from "./api.js";
 const TOOLS = [
@@ -127,18 +125,15 @@ const TOOLS = [
 async function handleStore(params) {
     const vaultPassword = getVaultPassword();
     if (!vaultPassword) {
-        return "Error: ENGRM_VAULT_PASSWORD not set. Cannot encrypt memories.";
+        return "Error: FATHIPPO_VAULT_PASSWORD not set. Cannot encrypt memories.";
     }
     const title = params.title || params.content.slice(0, 100);
     // Encrypt locally - server never sees plaintext
     const encryptedTitle = JSON.stringify(encryptLocal(title, vaultPassword));
     const encryptedContent = JSON.stringify(encryptLocal(params.content, vaultPassword));
-    // Generate embedding locally - query text never leaves device
-    const vector = await embedLocal(params.content);
     const result = await storeZkMemory({
         encryptedTitle,
         encryptedContent,
-        vector,
         metadata: {
             importance: params.importance || 5,
             tags: params.tags || [],
@@ -150,14 +145,12 @@ async function handleStore(params) {
 async function handleSearch(params) {
     const vaultPassword = getVaultPassword();
     if (!vaultPassword) {
-        return "Error: ENGRM_VAULT_PASSWORD not set. Cannot decrypt results.";
+        return "Error: FATHIPPO_VAULT_PASSWORD not set. Cannot decrypt results.";
     }
-    // Generate embedding locally - search query never leaves device
-    const vector = await embedLocal(params.query);
     // If global=true, don't pass namespace (search all)
     const namespace = params.global ? undefined : params.namespace;
     const { results } = await searchByVector({
-        vector,
+        query: params.query,
         topK: params.limit || 5,
         namespace,
     });
@@ -191,7 +184,7 @@ async function handleContext(params) {
 async function handleList(params) {
     const vaultPassword = getVaultPassword();
     if (!vaultPassword) {
-        return "Error: ENGRM_VAULT_PASSWORD not set. Cannot decrypt memories.";
+        return "Error: FATHIPPO_VAULT_PASSWORD not set. Cannot decrypt memories.";
     }
     const { memories } = await listMemories({
         limit: params.limit || 10,
@@ -216,10 +209,9 @@ async function handleDelete(params) {
     return `✓ Deleted memory: ${params.id}`;
 }
 export async function createServer() {
-    // Pre-load embedding model
-    await initEmbeddings();
     const server = new Server({
-        name: "memry-mcp",
+        name: "fathippo-mcp",
+        // Backward-compatible tool names kept for existing MCP clients.
         version: "0.1.0",
     }, {
         capabilities: {
@@ -270,5 +262,5 @@ export async function runServer() {
     const server = await createServer();
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    console.error("[memry-mcp] Server running");
+    console.error("[fathippo-mcp] Server running");
 }

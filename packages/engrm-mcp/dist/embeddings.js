@@ -13,13 +13,13 @@ export async function initEmbeddings() {
     if (embedder)
         return;
     if (!initPromise) {
-        console.error("[engrm-mcp] Loading local embedding model...");
+        console.error("[fathippo-mcp] Loading local embedding model...");
         initPromise = pipeline("feature-extraction", MODEL_NAME, {
             quantized: true, // Smaller model size
         });
     }
     embedder = await initPromise;
-    console.error("[engrm-mcp] Embedding model ready");
+    console.error("[fathippo-mcp] Embedding model ready");
 }
 /**
  * Generate embedding vector locally - text never leaves device

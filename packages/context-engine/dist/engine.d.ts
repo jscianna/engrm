@@ -14,6 +14,9 @@ export declare class FatHippoContextEngine implements ContextEngine {
     private client;
     private config;
     private cachedCritical;
+    private static readonly TRIVIAL_ACKS;
+    private static readonly MIN_VECTOR_SIMILARITY;
+    private static readonly MIN_CRITICAL_RELEVANCE;
     constructor(config: FatHippoConfig);
     /**
      * Initialize engine state for a session
@@ -93,7 +96,9 @@ export declare class FatHippoContextEngine implements ContextEngine {
     dispose(): Promise<void>;
     private extractContent;
     private findLastUserMessage;
+    private isTrivialQuery;
     private isRoleMessage;
     private estimateMessageTokens;
+    private constrainContextToBudget;
 }
 //# sourceMappingURL=engine.d.ts.map

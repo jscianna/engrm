@@ -8,6 +8,11 @@
  * 
  * Speed goal: Make agents feel smarter by being faster.
  * Repeat queries should be near-instant.
+ *
+ * Privacy model note:
+ * This service currently uses a server-trust architecture for embeddings.
+ * Raw text is sent from our server to embedding providers (OpenAI/Cohere).
+ * True zero-knowledge requires generating embeddings locally on the client.
  */
 
 import { getCachedEmbedding, setCachedEmbedding } from "./embedding-cache";
@@ -58,7 +63,7 @@ async function embedWithCohere(input: string): Promise<number[] | null> {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
-        "X-Client-Name": "memry",
+        "X-Client-Name": "fathippo",
       },
       body: JSON.stringify({
         texts: [input.slice(0, 4096)],

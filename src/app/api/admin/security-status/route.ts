@@ -7,14 +7,23 @@
 
 import { NextResponse } from "next/server";
 import { getQdrantStatus } from "@/lib/qdrant";
+import crypto from "node:crypto";
 
 export const runtime = "nodejs";
 
 function isAdmin(request: Request): boolean {
   const authHeader = request.headers.get("authorization");
   const adminKey = process.env.ADMIN_API_KEY;
-  if (!adminKey) return false;
-  return authHeader === `Bearer ${adminKey}`;
+  if (!adminKey || !authHeader?.startsWith("Bearer ")) return false;
+
+  const provided = authHeader.slice("Bearer ".length);
+  const expected = adminKey;
+  const providedBuffer = Buffer.from(provided, "utf8");
+  const expectedBuffer = Buffer.from(expected, "utf8");
+  if (providedBuffer.length !== expectedBuffer.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(providedBuffer, expectedBuffer);
 }
 
 export async function GET(request: Request) {

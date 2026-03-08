@@ -2238,12 +2238,14 @@ export async function listAgentMemories(params: {
   since?: string;
   memoryTypes?: MemoryKind[];
   excludeMemoryTypes?: MemoryKind[];
+  excludeSensitive?: boolean;
 }): Promise<AgentMemoryRecord[]> {
   await ensureInitialized();
   const client = getDb();
   const hasNamespaceFilter = typeof params.namespaceId !== "undefined";
   const hasSessionFilter = typeof params.sessionId !== "undefined";
   const hasSince = typeof params.since === "string" && params.since.length > 0;
+  const excludeSensitive = params.excludeSensitive !== false;
   const limit = Math.max(1, Math.min(params.limit ?? 50, 200));
   const args: Array<string | number | null> = [params.userId];
   let where = "WHERE user_id = ? AND archived_at IS NULL";
@@ -2267,6 +2269,9 @@ export async function listAgentMemories(params: {
   if (params.excludeMemoryTypes?.length) {
     where += ` AND memory_type NOT IN (${params.excludeMemoryTypes.map(() => "?").join(",")})`;
     args.push(...params.excludeMemoryTypes);
+  }
+  if (excludeSensitive) {
+    where += " AND sensitive = 0";
   }
   args.push(limit);
 
@@ -2405,15 +2410,21 @@ export async function findMemoriesWithSharedEntities(
   return matches;
 }
 
-export async function getAgentMemoryById(userId: string, id: string): Promise<AgentMemoryRecord | null> {
+export async function getAgentMemoryById(
+  userId: string,
+  id: string,
+  options?: { excludeSensitive?: boolean },
+): Promise<AgentMemoryRecord | null> {
   await ensureInitialized();
   const client = getDb();
+  const excludeSensitive = options?.excludeSensitive !== false;
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, content_encrypted, metadata_json,
              namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive, created_at
       FROM memories
       WHERE user_id = ? AND id = ?
+      ${excludeSensitive ? "AND sensitive = 0" : ""}
       LIMIT 1
     `,
     args: [userId, id],
@@ -2699,6 +2710,7 @@ export async function getAgentMemoriesByIds(params: {
   memoryTypes?: MemoryKind[];
   excludeMemoryTypes?: MemoryKind[];
   excludeAbsorbed?: boolean;
+  excludeSensitive?: boolean;
 }): Promise<AgentMemoryRecord[]> {
   await ensureInitialized();
   if (params.ids.length === 0) {
@@ -2723,6 +2735,7 @@ export async function getAgentMemoriesByIds(params: {
     args.push(...params.excludeMemoryTypes);
   }
   const excludeAbsorbed = params.excludeAbsorbed === true;
+  const excludeSensitive = params.excludeSensitive !== false;
 
   // When namespace is specified, include both namespace-scoped AND global (null namespace) memories
   // This follows the spec: "Search defaults to current namespace + global"
@@ -2739,6 +2752,7 @@ export async function getAgentMemoriesByIds(params: {
       FROM memories
       WHERE user_id = ? AND id IN (${placeholders}) AND archived_at IS NULL
       ${excludeAbsorbed ? "AND (absorbed = 0 OR absorbed IS NULL)" : ""}
+      ${excludeSensitive ? "AND sensitive = 0" : ""}
       ${namespaceClause}
       ${hasSince ? "AND created_at >= ?" : ""}
       ${params.memoryTypes?.length ? `AND memory_type IN (${params.memoryTypes.map(() => "?").join(",")})` : ""}
@@ -2758,6 +2772,7 @@ export async function getCriticalMemories(
   options?: {
     excludeCompleted?: boolean;
     excludeAbsorbed?: boolean;
+    excludeSensitive?: boolean;
     limit?: number;
   },
 ): Promise<AgentMemoryRecord[]> {
@@ -2771,6 +2786,9 @@ export async function getCriticalMemories(
   }
   if (options?.excludeAbsorbed) {
     whereClauses.push("(absorbed = 0 OR absorbed IS NULL)");
+  }
+  if (options?.excludeSensitive !== false) {
+    whereClauses.push("sensitive = 0");
   }
   if (typeof options?.limit === "number") {
     args.push(Math.max(1, Math.min(options.limit, 500)));

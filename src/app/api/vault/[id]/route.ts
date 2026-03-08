@@ -6,6 +6,7 @@ import {
   type VaultEntryCategory,
 } from "@/lib/db";
 import { requireVaultSessionAuth } from "@/lib/vault-auth";
+import { extractRequestInfo, logAuditEvent } from "@/lib/audit-log";
 
 export const runtime = "nodejs";
 
@@ -31,6 +32,15 @@ export async function GET(
   if (!entry) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+
+  const requestInfo = extractRequestInfo(request);
+  logAuditEvent({
+    userId: authResult.userId,
+    action: "vault.read",
+    resourceType: "vault_entry",
+    resourceId: id,
+    ...requestInfo,
+  }).catch(() => {});
 
   return NextResponse.json({ entry });
 }
@@ -85,6 +95,18 @@ export async function PUT(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  const requestInfo = extractRequestInfo(request);
+  logAuditEvent({
+    userId: authResult.userId,
+    action: "vault.update",
+    resourceType: "vault_entry",
+    resourceId: id,
+    metadata: {
+      fields: Object.keys(updates),
+    },
+    ...requestInfo,
+  }).catch(() => {});
+
   return NextResponse.json({ entry });
 }
 
@@ -102,6 +124,15 @@ export async function DELETE(
   if (!deleted) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+
+  const requestInfo = extractRequestInfo(request);
+  logAuditEvent({
+    userId: authResult.userId,
+    action: "vault.delete",
+    resourceType: "vault_entry",
+    resourceId: id,
+    ...requestInfo,
+  }).catch(() => {});
 
   return NextResponse.json({ success: true });
 }

@@ -112,6 +112,7 @@ export async function POST(request: Request, props: Props) {
           const criticalMemories = await getCriticalMemories(identity.userId, {
             excludeCompleted: true,
             excludeAbsorbed: true,
+            excludeSensitive: true,
           });
           const criticalSyntheses = await listCriticalSynthesizedMemories(identity.userId, 5);
           const criticalForInjection = [
@@ -137,6 +138,7 @@ export async function POST(request: Request, props: Props) {
                 ids: hits.map((h) => h.item.id),
                 namespaceId: session.namespaceId,
                 excludeAbsorbed: true,
+                excludeSensitive: true,
               })
             : [];
 

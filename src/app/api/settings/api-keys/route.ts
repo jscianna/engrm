@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { listApiKeys, createApiKey } from "@/lib/db";
+import { extractRequestInfo, logAuditEvent } from "@/lib/audit-log";
 
 export const runtime = "nodejs";
 
@@ -30,6 +31,17 @@ export async function POST(request: Request) {
     const agentName = typeof body.agentName === "string" ? body.agentName : undefined;
 
     const { apiKey, agentId } = await createApiKey(userId, agentName);
+    const requestInfo = extractRequestInfo(request);
+    logAuditEvent({
+      userId,
+      action: "auth.api_key_create",
+      resourceType: "api_key",
+      resourceId: agentId,
+      metadata: {
+        agentName: agentName ?? null,
+      },
+      ...requestInfo,
+    }).catch(() => {});
 
     return NextResponse.json({
       apiKey,

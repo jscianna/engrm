@@ -22,7 +22,10 @@ export default function RootError({
           <AlertTriangle className="h-4 w-4" />
         </div>
         <h1 className="text-xl font-semibold">Something went wrong</h1>
-        <p className="mt-2 text-sm text-zinc-300">{error.message || "Unexpected application error."}</p>
+        <p className="mt-2 text-sm text-zinc-300">
+          Something unexpected happened. Please try again.
+          {error.digest ? ` Reference: ${error.digest}` : ""}
+        </p>
         <Button className="mt-4 bg-cyan-400 text-zinc-950 hover:bg-cyan-300" onClick={reset}>
           Try again
         </Button>

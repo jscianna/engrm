@@ -21,7 +21,10 @@ export default function DashboardError({
         <AlertTriangle className="h-4 w-4" />
       </div>
       <h1 className="text-lg font-semibold">Dashboard error</h1>
-      <p className="mt-2 text-sm text-zinc-300">{error.message || "Unexpected dashboard error."}</p>
+      <p className="mt-2 text-sm text-zinc-300">
+        We hit an unexpected dashboard error. Please try again.
+        {error.digest ? ` Reference: ${error.digest}` : ""}
+      </p>
       <Button className="mt-4 bg-cyan-400 text-zinc-950 hover:bg-cyan-300" onClick={reset}>
         Reload section
       </Button>

@@ -14,6 +14,38 @@ import type {
 
 const DEFAULT_BASE_URL = "https://www.fathippo.com/api";
 
+function mapMemoryRecord(record: {
+  id: string;
+  title: string;
+  text: string;
+  userId?: string;
+  type?: string;
+  memoryType?: string;
+  tier?: string;
+  importanceTier?: string;
+  createdAt: string;
+  accessCount?: number;
+  absorbed?: boolean;
+  absorbedIntoSynthesisId?: string | null;
+}): Memory {
+  return {
+    id: record.id,
+    title: record.title,
+    content: record.text,
+    userId: record.userId ?? "",
+    memoryType: record.memoryType ?? record.type,
+    importanceTier:
+      (record.importanceTier as Memory["importanceTier"]) ??
+      (record.tier as Memory["importanceTier"]) ??
+      "normal",
+    createdAt: record.createdAt,
+    updatedAt: record.createdAt,
+    accessCount: record.accessCount,
+    absorbed: record.absorbed,
+    absorbedIntoSynthesisId: record.absorbedIntoSynthesisId,
+  };
+}
+
 export class FatHippoClient {
   private apiKey: string;
   private baseUrl: string;
@@ -51,24 +83,52 @@ export class FatHippoClient {
    * Store a memory
    */
   async remember(params: RememberParams): Promise<Memory> {
-    return this.request<Memory>("/v1/memories", {
+    const response = await this.request<{ memory: { id: string; title: string; text: string; userId: string; memoryType?: string; importanceTier?: string; createdAt: string; accessCount?: number; absorbed?: boolean; absorbedIntoSynthesisId?: string | null } }>("/v1/memories", {
       method: "POST",
       body: JSON.stringify(params),
     });
+    return mapMemoryRecord(response.memory);
   }
 
   /**
    * Search memories
    */
   async search(params: SearchParams): Promise<SearchResult[]> {
-    const response = await this.request<{ results: SearchResult[] }>(
+    const response = await this.request<
+      Array<{
+        score: number;
+        vectorScore?: number;
+        bm25Score?: number;
+        memory: {
+          id: string;
+          title: string;
+          text: string;
+          userId: string;
+          memoryType?: string;
+          importanceTier?: string;
+          createdAt: string;
+          accessCount?: number;
+          absorbed?: boolean;
+          absorbedIntoSynthesisId?: string | null;
+        };
+      }>
+    >(
       "/v1/search",
       {
         method: "POST",
         body: JSON.stringify(params),
       }
     );
-    return response.results;
+    return response.map((result) => ({
+      memory: mapMemoryRecord(result.memory),
+      score: result.score,
+      matchType:
+        result.vectorScore && result.bm25Score
+          ? "hybrid"
+          : result.vectorScore
+            ? "vector"
+            : "bm25",
+    }));
   }
 
   /**
@@ -78,13 +138,32 @@ export class FatHippoClient {
     limit?: number;
     excludeAbsorbed?: boolean;
   }): Promise<CriticalMemoriesResponse> {
-    const params = new URLSearchParams();
-    if (options?.limit) params.set("limit", String(options.limit));
-    if (options?.excludeAbsorbed) params.set("excludeAbsorbed", "true");
+    const response = await this.request<{
+      critical: Array<{ id: string; title: string; text: string; type: string; tier: string; createdAt: string }>;
+      working: Array<{ id: string; title: string; text: string; synthesizedFrom?: string[] }>;
+    }>("/v1/context", {
+      method: "POST",
+      body: JSON.stringify({
+        message: "",
+        includeHigh: false,
+        highLimit: 0,
+      }),
+    });
 
-    return this.request<CriticalMemoriesResponse>(
-      `/v1/memories/critical?${params}`
-    );
+    const memories = response.critical
+      .map(mapMemoryRecord)
+      .filter((memory) => (options?.excludeAbsorbed ? !memory.absorbed : true))
+      .slice(0, options?.limit ?? 30);
+    const syntheses = response.working.slice(0, options?.limit ?? 30).map((item) => ({
+      id: item.id,
+      userId: "",
+      title: item.title,
+      content: item.text,
+      sourceMemoryIds: item.synthesizedFrom ?? [],
+      createdAt: new Date().toISOString(),
+    }));
+
+    return { memories, syntheses };
   }
 
   /**
@@ -95,13 +174,17 @@ export class FatHippoClient {
     limit?: number;
   }): Promise<Memory[]> {
     const params = new URLSearchParams();
-    if (options?.hours) params.set("hours", String(options.hours));
     if (options?.limit) params.set("limit", String(options.limit));
 
-    const response = await this.request<{ memories: Memory[] }>(
-      `/v1/memories/recent?${params}`
+    const response = await this.request<{ memories: Array<{ id: string; title: string; text: string; userId: string; memoryType?: string; importanceTier?: string; createdAt: string; accessCount?: number; absorbed?: boolean; absorbedIntoSynthesisId?: string | null }> }>(
+      `/v1/memories?${params}`
     );
-    return response.memories;
+    let memories = response.memories.map(mapMemoryRecord);
+    if (options?.hours) {
+      const cutoff = Date.now() - options.hours * 60 * 60 * 1000;
+      memories = memories.filter((memory) => Date.parse(memory.createdAt) >= cutoff);
+    }
+    return memories;
   }
 
   /**
@@ -112,10 +195,15 @@ export class FatHippoClient {
     synthesized?: number;
     decayed?: number;
   }> {
-    return this.request("/v1/dream-cycle/run", {
+    const response = await this.request<{ maintenance?: { archived?: number; deleted?: number } }>("/v1/lifecycle", {
       method: "POST",
       body: JSON.stringify(params || {}),
     });
+    return {
+      ok: true,
+      synthesized: 0,
+      decayed: (response.maintenance?.archived ?? 0) + (response.maintenance?.deleted ?? 0),
+    };
   }
 
   /**
@@ -126,9 +214,23 @@ export class FatHippoClient {
     syntheses?: Array<{ id: string; title: string; content: string }>;
     tokenEstimate?: number;
   }> {
-    return this.request("/v1/simple/context", {
+    const response = await this.request<{
+      critical: Array<{ id: string; title: string; text: string; type: string; tier: string; createdAt: string }>;
+      high: Array<{ id: string; title: string; text: string; type: string; tier: string; createdAt: string }>;
+      working: Array<{ id: string; title: string; text: string }>;
+      stats?: { totalTokensEstimate?: number };
+    }>("/v1/context", {
       method: "POST",
       body: JSON.stringify({ message: query || "" }),
     });
+    return {
+      memories: [...response.critical, ...response.high].map(mapMemoryRecord),
+      syntheses: response.working?.map((item) => ({
+        id: item.id,
+        title: item.title,
+        content: item.text,
+      })),
+      tokenEstimate: response.stats?.totalTokensEstimate,
+    };
   }
 }

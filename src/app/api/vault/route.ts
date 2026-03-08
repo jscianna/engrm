@@ -5,6 +5,7 @@ import {
   type VaultEntryCategory,
 } from "@/lib/db";
 import { requireVaultSessionAuth } from "@/lib/vault-auth";
+import { extractRequestInfo, logAuditEvent } from "@/lib/audit-log";
 
 export const runtime = "nodejs";
 
@@ -31,6 +32,17 @@ export async function GET(request: Request) {
   }
 
   const entries = await listVaultEntriesByUser(authResult.userId, normalizedCategory);
+  const requestInfo = extractRequestInfo(request);
+  logAuditEvent({
+    userId: authResult.userId,
+    action: "vault.read",
+    resourceType: "vault_entry",
+    metadata: {
+      count: entries.length,
+      category: normalizedCategory ?? null,
+    },
+    ...requestInfo,
+  }).catch(() => {});
   return NextResponse.json({ entries });
 }
 
@@ -67,6 +79,19 @@ export async function POST(request: Request) {
     value,
     metadata,
   });
+
+  const requestInfo = extractRequestInfo(request);
+  logAuditEvent({
+    userId: authResult.userId,
+    action: "vault.create",
+    resourceType: "vault_entry",
+    resourceId: entry.id,
+    metadata: {
+      category,
+      name,
+    },
+    ...requestInfo,
+  }).catch(() => {});
 
   return NextResponse.json({ entry }, { status: 201 });
 }

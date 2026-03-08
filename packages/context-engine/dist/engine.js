@@ -19,6 +19,21 @@ export class FatHippoContextEngine {
     client;
     config;
     cachedCritical = null;
+    static TRIVIAL_ACKS = new Set([
+        "ok",
+        "thanks",
+        "yes",
+        "no",
+        "sure",
+        "cool",
+        "nice",
+        "got it",
+        "k",
+        "ty",
+        "thx",
+    ]);
+    static MIN_VECTOR_SIMILARITY = 0.75;
+    static MIN_CRITICAL_RELEVANCE = 0.7;
     constructor(config) {
         this.config = config;
         this.client = new FatHippoClient(config);
@@ -128,49 +143,67 @@ export class FatHippoContextEngine {
      * Assemble context for the model
      */
     async assemble(params) {
-        const lastUserMessage = this.findLastUserMessage(params.messages);
+        const lastUserMessage = this.findLastUserMessage(params.messages)?.trim() ?? "";
+        if (!lastUserMessage || this.isTrivialQuery(lastUserMessage)) {
+            return {
+                messages: params.messages,
+                estimatedTokens: this.estimateMessageTokens(params.messages),
+            };
+        }
         // Fetch relevant memories based on last user message
         let memories = [];
         let syntheses = [];
         try {
-            // Get critical memories (from cache or fresh)
-            if (this.config.injectCritical !== false) {
+            // Search for relevant memories based on query
+            const results = await this.client.search({
+                query: lastUserMessage,
+                limit: this.config.injectLimit || 20,
+                excludeAbsorbed: true,
+            });
+            const qualifyingResults = results.filter((r) => r.score >= FatHippoContextEngine.MIN_VECTOR_SIMILARITY);
+            const searchedMemories = qualifyingResults.map((r) => r.memory);
+            memories = dedupeMemories(searchedMemories);
+            // Inject critical only for non-trivial queries with critical relevance.
+            const hasRelevantCriticalMatch = results.some((r) => r.memory.importanceTier === "critical" &&
+                r.score > FatHippoContextEngine.MIN_CRITICAL_RELEVANCE);
+            if (this.config.injectCritical !== false && hasRelevantCriticalMatch) {
+                let criticalMemories;
+                let criticalSyntheses;
                 if (this.cachedCritical &&
                     Date.now() - this.cachedCritical.fetchedAt < 5 * 60 * 1000) {
-                    memories = this.cachedCritical.memories;
-                    syntheses = this.cachedCritical.syntheses;
+                    criticalMemories = this.cachedCritical.memories;
+                    criticalSyntheses = this.cachedCritical.syntheses;
                 }
                 else {
                     const critical = await this.client.getCriticalMemories({
                         limit: 15,
                         excludeAbsorbed: true,
                     });
-                    memories = critical.memories;
-                    syntheses = critical.syntheses;
+                    criticalMemories = critical.memories;
+                    criticalSyntheses = critical.syntheses;
                     this.cachedCritical = {
-                        memories,
-                        syntheses,
+                        memories: criticalMemories,
+                        syntheses: criticalSyntheses,
                         fetchedAt: Date.now(),
                     };
                 }
-            }
-            // Search for relevant memories based on query
-            if (lastUserMessage) {
-                const results = await this.client.search({
-                    query: lastUserMessage,
-                    limit: this.config.injectLimit || 20,
-                    excludeAbsorbed: true,
-                });
-                const searchedMemories = results.map((r) => r.memory);
-                memories = dedupeMemories([...memories, ...searchedMemories]);
+                memories = dedupeMemories([...criticalMemories, ...memories]);
+                syntheses = criticalSyntheses;
             }
         }
         catch (error) {
             console.error("[FatHippo] Assemble error:", error);
         }
+        const baseMessageTokens = this.estimateMessageTokens(params.messages);
+        if (typeof params.tokenBudget === "number" && params.tokenBudget > 0) {
+            const contextBudget = Math.max(0, params.tokenBudget - baseMessageTokens);
+            const constrained = this.constrainContextToBudget(memories, syntheses, contextBudget);
+            memories = constrained.memories;
+            syntheses = constrained.syntheses;
+        }
         // Format memories for injection
         const memoryBlock = formatMemoriesForInjection(memories, syntheses);
-        const tokens = estimateTokens(memoryBlock) + this.estimateMessageTokens(params.messages);
+        const tokens = estimateTokens(memoryBlock) + baseMessageTokens;
         return {
             messages: params.messages,
             estimatedTokens: tokens,
@@ -262,6 +295,26 @@ export class FatHippoContextEngine {
         }
         return null;
     }
+    isTrivialQuery(message) {
+        const trimmed = message.trim();
+        if (!trimmed) {
+            return true;
+        }
+        if (trimmed.length < 3) {
+            return true;
+        }
+        const normalized = trimmed.toLowerCase().replace(/\s+/g, " ");
+        if (FatHippoContextEngine.TRIVIAL_ACKS.has(normalized)) {
+            return true;
+        }
+        if (/^[\p{P}\s]+$/u.test(trimmed)) {
+            return true;
+        }
+        if (/^(?:\p{Extended_Pictographic}|\p{Emoji_Component}|\u200D|\uFE0F|\s)+$/u.test(trimmed)) {
+            return true;
+        }
+        return false;
+    }
     isRoleMessage(message) {
         return (typeof message === "object" &&
             message !== null &&
@@ -274,6 +327,44 @@ export class FatHippoContextEngine {
             .filter((content) => Boolean(content))
             .join("\n");
         return estimateTokens(plainText);
+    }
+    constrainContextToBudget(memories, syntheses, contextBudget) {
+        if (contextBudget <= 0) {
+            return { memories: [], syntheses: [] };
+        }
+        let remaining = contextBudget;
+        const selectedSyntheses = [];
+        const selectedMemories = [];
+        const pushIfFits = (tokens) => {
+            if (tokens > remaining) {
+                return false;
+            }
+            remaining -= tokens;
+            return true;
+        };
+        for (const synthesis of syntheses) {
+            const tokens = estimateTokens(`${synthesis.title}\n${synthesis.content}`);
+            if (!pushIfFits(tokens)) {
+                continue;
+            }
+            selectedSyntheses.push(synthesis);
+        }
+        const critical = memories.filter((memory) => memory.importanceTier === "critical");
+        const high = memories.filter((memory) => memory.importanceTier === "high");
+        const normal = memories.filter((memory) => memory.importanceTier === "normal" || !memory.importanceTier);
+        for (const group of [critical, high, normal]) {
+            for (const memory of group) {
+                const tokens = estimateTokens(`${memory.title}\n${memory.content}`);
+                if (!pushIfFits(tokens)) {
+                    continue;
+                }
+                selectedMemories.push(memory);
+            }
+        }
+        return {
+            memories: selectedMemories,
+            syntheses: selectedSyntheses,
+        };
     }
 }
 //# sourceMappingURL=engine.js.map

@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { deleteApiKey, revokeApiKey, setApiKeyExpiration } from "@/lib/db";
+import { extractRequestInfo, logAuditEvent } from "@/lib/audit-log";
 
 export const runtime = "nodejs";
 
@@ -20,6 +21,14 @@ export async function DELETE(
     if (!deleted) {
       return NextResponse.json({ error: "API key not found" }, { status: 404 });
     }
+    const requestInfo = extractRequestInfo(_request);
+    logAuditEvent({
+      userId,
+      action: "auth.api_key_delete",
+      resourceType: "api_key",
+      resourceId: id,
+      ...requestInfo,
+    }).catch(() => {});
     return NextResponse.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to delete API key";
@@ -51,6 +60,14 @@ export async function PATCH(
       if (!revoked) {
         return NextResponse.json({ error: "API key not found or already revoked" }, { status: 404 });
       }
+      const requestInfo = extractRequestInfo(request);
+      logAuditEvent({
+        userId,
+        action: "auth.api_key_revoke",
+        resourceType: "api_key",
+        resourceId: id,
+        ...requestInfo,
+      }).catch(() => {});
       return NextResponse.json({ success: true, message: "API key revoked" });
     }
 
@@ -63,6 +80,15 @@ export async function PATCH(
       if (!updated) {
         return NextResponse.json({ error: "API key not found" }, { status: 404 });
       }
+      const requestInfo = extractRequestInfo(request);
+      logAuditEvent({
+        userId,
+        action: "auth.api_key_expire",
+        resourceType: "api_key",
+        resourceId: id,
+        metadata: { expiresAt: expiresAt.toISOString() },
+        ...requestInfo,
+      }).catch(() => {});
       return NextResponse.json({ success: true, message: "Expiration set", expiresAt: expiresAt.toISOString() });
     }
 
@@ -71,6 +97,14 @@ export async function PATCH(
       if (!updated) {
         return NextResponse.json({ error: "API key not found" }, { status: 404 });
       }
+      const requestInfo = extractRequestInfo(request);
+      logAuditEvent({
+        userId,
+        action: "auth.api_key_expiration_clear",
+        resourceType: "api_key",
+        resourceId: id,
+        ...requestInfo,
+      }).catch(() => {});
       return NextResponse.json({ success: true, message: "Expiration cleared" });
     }
 

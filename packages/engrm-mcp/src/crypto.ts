@@ -74,12 +74,12 @@ export function decryptLocal(encrypted: EncryptedData, vaultPassword: string): s
  * Check if we have a vault password configured
  */
 export function hasVaultPassword(): boolean {
-  return !!process.env.ENGRM_VAULT_PASSWORD;
+  return !!process.env.FATHIPPO_VAULT_PASSWORD;
 }
 
 /**
  * Get vault password from environment
  */
 export function getVaultPassword(): string | null {
-  return process.env.ENGRM_VAULT_PASSWORD || null;
+  return process.env.FATHIPPO_VAULT_PASSWORD || null;
 }
