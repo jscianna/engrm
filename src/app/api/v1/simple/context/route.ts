@@ -13,6 +13,7 @@ import {
   getCriticalMemories, 
   getAgentMemoriesByIds,
   incrementAccessCounts,
+  listCriticalSynthesizedMemories,
 } from "@/lib/db";
 import { recordInjectionEvent } from "@/lib/memory-analytics";
 import { validateApiKey } from "@/lib/api-auth";
@@ -38,7 +39,33 @@ export async function POST(request: Request) {
     const maxRelevant = typeof body.maxRelevant === "number" ? Math.min(body.maxRelevant, 10) : 5;
 
     // Get critical memories
-    const allCritical = filterSensitiveMemories(await getCriticalMemories(identity.userId));
+    const allCriticalMemories = filterSensitiveMemories(
+      await getCriticalMemories(identity.userId, {
+        excludeCompleted: true,
+        excludeAbsorbed: true,
+      }),
+    );
+    const criticalSyntheses = await listCriticalSynthesizedMemories(identity.userId, maxCritical);
+    const synthesizedCritical = criticalSyntheses.map((synthesis) => ({
+      id: synthesis.id,
+      userId: synthesis.userId,
+      title: synthesis.title,
+      text: synthesis.synthesis,
+      sourceType: "text" as const,
+      memoryType: "semantic" as const,
+      importanceTier: "critical" as const,
+      sourceUrl: null,
+      fileName: null,
+      metadata: null,
+      namespaceId: null,
+      sessionId: null,
+      entities: [],
+      feedbackScore: 0,
+      accessCount: synthesis.accessCount,
+      sensitive: false,
+      createdAt: synthesis.synthesizedAt,
+    }));
+    const allCritical = [...synthesizedCritical, ...allCriticalMemories];
     
     // If we have a message, rank critical memories by relevance to it
     let criticalMemories: typeof allCritical;
@@ -122,6 +149,7 @@ export async function POST(request: Request) {
           const memories = filterSensitiveMemories(await getAgentMemoriesByIds({
             userId: identity.userId,
             ids: memoryIds,
+            excludeAbsorbed: true,
           }));
           
           relevantMemories = memories.filter(

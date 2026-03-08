@@ -13,6 +13,7 @@ import {
   getCriticalMemories,
   getAgentMemoriesByIds,
   incrementAccessCounts,
+  listCriticalSynthesizedMemories,
 } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
@@ -108,7 +109,20 @@ export async function POST(request: Request, props: Props) {
       // Get most recent user message for context search
       if (lastUserMessage) {
         try {
-          const criticalMemories = await getCriticalMemories(identity.userId);
+          const criticalMemories = await getCriticalMemories(identity.userId, {
+            excludeCompleted: true,
+            excludeAbsorbed: true,
+          });
+          const criticalSyntheses = await listCriticalSynthesizedMemories(identity.userId, 5);
+          const criticalForInjection = [
+            ...criticalSyntheses.map((synthesis) => ({
+              id: synthesis.id,
+              title: synthesis.title,
+              text: synthesis.synthesis,
+              memoryType: "semantic",
+            })),
+            ...criticalMemories,
+          ];
           const vector = await embedText(lastUserMessage);
           const hits = await semanticSearchVectors({
             userId: identity.userId,
@@ -122,6 +136,7 @@ export async function POST(request: Request, props: Props) {
                 userId: identity.userId,
                 ids: hits.map((h) => h.item.id),
                 namespaceId: session.namespaceId,
+                excludeAbsorbed: true,
               })
             : [];
 
@@ -129,11 +144,11 @@ export async function POST(request: Request, props: Props) {
             (m) => m.importanceTier === "high" || m.importanceTier === "critical"
           );
 
-          const criticalIds = new Set(criticalMemories.map((m) => m.id));
+          const criticalIds = new Set(criticalForInjection.map((m) => m.id));
           const dedupedHigh = highMemories.filter((m) => !criticalIds.has(m.id)).slice(0, 5);
 
           newContext = {
-            critical: criticalMemories.map((m) => ({
+            critical: criticalForInjection.map((m) => ({
               id: m.id,
               title: m.title,
               text: m.text,
@@ -150,6 +165,7 @@ export async function POST(request: Request, props: Props) {
           const refreshedMemoryIds = Array.from(
             new Set([
               ...criticalMemories.map((memory) => memory.id),
+              ...criticalSyntheses.map((memory) => memory.id),
               ...dedupedHigh.map((memory) => memory.id),
             ]),
           );

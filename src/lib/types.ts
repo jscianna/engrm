@@ -97,6 +97,10 @@ export type MemoryRecord = {
   completedAt?: string | null;
   /** Short-lived memory (design changes, tactical decisions) */
   ephemeral?: boolean;
+  /** True when memory has been absorbed into a synthesized principle */
+  absorbed?: boolean;
+  /** Canonical synthesis ID replacing this memory in injection contexts */
+  absorbedIntoSynthesisId?: string | null;
   /** ID of synthesis that absorbed this memory (excluded from direct injection) */
   absorbedBy?: string | null;
   absorbedAt?: string | null;

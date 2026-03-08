@@ -65,6 +65,7 @@ export async function POST(request: Request) {
     const memories = await getAgentMemoriesByIds({
       userId: identity.userId,
       ids: hits.map((hit) => hit.item.id),
+      excludeAbsorbed: true,
     });
 
     // Filter to high-tier memories and those above relevance threshold
@@ -96,6 +97,7 @@ export async function POST(request: Request) {
       const currentTitles = await getAgentMemoriesByIds({
         userId: identity.userId,
         ids: currentHighIds.slice(0, 3),
+        excludeAbsorbed: true,
       });
       const newTitles = relevantHighMemories.slice(0, 3);
 
