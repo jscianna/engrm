@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronUp, Clock, Lock, Shield, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -45,11 +46,19 @@ const TIER_BADGE_COLORS: Record<MemoryImportanceTier, string> = {
 
 function TimelineCard({ memory }: { memory: TimelineMemory }) {
   const [expanded, setExpanded] = useState(false);
+  const router = useRouter();
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Don't navigate if clicking expand button
+    if ((e.target as HTMLElement).closest("button")) return;
+    router.push(`/dashboard/memory/${memory.id}`);
+  };
 
   return (
     <Card 
+      onClick={handleCardClick}
       className={cn(
-        "border-zinc-800 border-l-4 transition-all duration-200 hover:border-zinc-700",
+        "border-zinc-800 border-l-4 transition-all duration-200 hover:border-zinc-700 cursor-pointer",
         TIER_COLORS[memory.importanceTier]
       )}
     >
