@@ -17,6 +17,7 @@ import {
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
+import { detectSecretCategories, VAULT_HINT_MESSAGE } from "@/lib/secrets";
 import type { MemoryImportanceTier, MemoryKind } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -61,6 +62,20 @@ export async function POST(request: Request) {
     const text = typeof body.text === "string" ? body.text.trim() : "";
     if (!text) {
       throw new MemryError("VALIDATION_ERROR", { field: "text", reason: "required" });
+    }
+
+    const matchedSecretCategories = detectSecretCategories(text);
+    if (matchedSecretCategories.length > 0) {
+      return Response.json(
+        {
+          stored: false,
+          warning:
+            "This looks like a sensitive credential. Store it in your secure vault instead of memories.",
+          vault_hint: VAULT_HINT_MESSAGE,
+          matched_categories: matchedSecretCategories,
+        },
+        { status: 200 },
+      );
     }
 
     // Auto-classify memory type

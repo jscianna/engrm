@@ -247,6 +247,23 @@ async function ensureInitialized(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_sessions_user_created_at
     ON sessions(user_id, created_at DESC);
 
+    CREATE TABLE IF NOT EXISTS vault_entries (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      value_encrypted TEXT NOT NULL,
+      metadata_json TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_vault_user
+    ON vault_entries(user_id);
+
+    CREATE INDEX IF NOT EXISTS idx_vault_user_category
+    ON vault_entries(user_id, category);
+
     CREATE TABLE IF NOT EXISTS memory_edges (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -333,6 +350,8 @@ async function ensureInitialized(): Promise<void> {
     await ensureMemoriesIndexes(client);
     await ensureSynthesizedMemoriesColumns(client);
     await ensureSynthesizedMemoriesIndexes(client);
+    await ensureVaultEntriesColumns(client);
+    await ensureVaultEntriesIndexes(client);
 
       initialized = true;
     } catch (error) {
@@ -521,6 +540,45 @@ async function ensureSynthesizedMemoriesIndexes(client: Client): Promise<void> {
   `);
 }
 
+async function ensureVaultEntriesColumns(client: Client): Promise<void> {
+  const requiredColumns: Array<{ name: string; ddl: string }> = [
+    { name: "name", ddl: "TEXT NOT NULL DEFAULT ''" },
+    { name: "category", ddl: "TEXT NOT NULL DEFAULT 'token'" },
+    { name: "value_encrypted", ddl: "TEXT NOT NULL DEFAULT ''" },
+    { name: "metadata_json", ddl: "TEXT" },
+    { name: "created_at", ddl: "TEXT NOT NULL DEFAULT ''" },
+    { name: "updated_at", ddl: "TEXT NOT NULL DEFAULT ''" },
+  ];
+
+  const tableInfo = await client.execute("PRAGMA table_info(vault_entries)");
+  const existing = new Set(
+    tableInfo.rows
+      .map((row) => {
+        const record = row as Record<string, unknown>;
+        return typeof record.name === "string" ? record.name : null;
+      })
+      .filter((name): name is string => Boolean(name)),
+  );
+
+  for (const column of requiredColumns) {
+    if (existing.has(column.name)) {
+      continue;
+    }
+    await client.execute(`ALTER TABLE vault_entries ADD COLUMN ${column.name} ${column.ddl}`);
+  }
+}
+
+async function ensureVaultEntriesIndexes(client: Client): Promise<void> {
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_vault_user
+    ON vault_entries(user_id)
+  `);
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_vault_user_category
+    ON vault_entries(user_id, category)
+  `);
+}
+
 function parseTags(tagsCsv: string): string[] {
   return tagsCsv
     .split(",")
@@ -548,6 +606,27 @@ export type SessionRecord = {
   namespaceName: string | null;
   metadata: Record<string, unknown> | null;
   createdAt: string;
+};
+
+export type VaultEntryCategory =
+  | "api_key"
+  | "password"
+  | "token"
+  | "connection_string"
+  | "private_key";
+
+export type VaultEntryListItem = {
+  id: string;
+  userId: string;
+  name: string;
+  category: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type VaultEntryRecord = VaultEntryListItem & {
+  value: string;
 };
 
 export type AgentMemoryRecord = {
@@ -620,6 +699,18 @@ function mapRow(row: Record<string, unknown>): MemoryRecord {
       ((row.absorbed_by as string | null) ?? null),
     absorbedAt: (row.absorbed_at as string | null) ?? null,
     createdAt: row.created_at as string,
+  };
+}
+
+function mapVaultListItemRow(row: Record<string, unknown>): VaultEntryListItem {
+  return {
+    id: row.id as string,
+    userId: row.user_id as string,
+    name: row.name as string,
+    category: row.category as string,
+    metadata: parseJsonObject(row.metadata_json),
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
   };
 }
 
@@ -1221,7 +1312,6 @@ export async function traverseGraphFromNode(
   maxNodes = 50
 ): Promise<GraphEdgeRecord[]> {
   await ensureInitialized();
-  const client = getDb();
   
   const visited = new Set<string>();
   const edges: GraphEdgeRecord[] = [];
@@ -1316,6 +1406,159 @@ export async function updateMemorySyncFailure(memoryId: string, userId: string, 
     `,
     args: [errorMessage.slice(0, 1000), memoryId, userId],
   });
+}
+
+export async function listVaultEntriesByUser(
+  userId: string,
+  category?: string,
+): Promise<VaultEntryListItem[]> {
+  await ensureInitialized();
+  const client = getDb();
+  const normalizedCategory = typeof category === "string" ? category.trim() : "";
+  const hasCategory = normalizedCategory.length > 0;
+  const result = await client.execute({
+    sql: hasCategory
+      ? `
+        SELECT id, user_id, name, category, metadata_json, created_at, updated_at
+        FROM vault_entries
+        WHERE user_id = ? AND category = ?
+        ORDER BY updated_at DESC, created_at DESC
+      `
+      : `
+        SELECT id, user_id, name, category, metadata_json, created_at, updated_at
+        FROM vault_entries
+        WHERE user_id = ?
+        ORDER BY updated_at DESC, created_at DESC
+      `,
+    args: hasCategory ? [userId, normalizedCategory] : [userId],
+  });
+
+  return result.rows.map((row) => mapVaultListItemRow(row as Record<string, unknown>));
+}
+
+export async function getVaultEntryById(userId: string, id: string): Promise<VaultEntryRecord | null> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, name, category, value_encrypted, metadata_json, created_at, updated_at
+      FROM vault_entries
+      WHERE user_id = ? AND id = ?
+      LIMIT 1
+    `,
+    args: [userId, id],
+  });
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...mapVaultListItemRow(row),
+    value: decryptMemoryContent(row.value_encrypted as string, userId),
+  };
+}
+
+export async function createVaultEntry(params: {
+  userId: string;
+  name: string;
+  category: string;
+  value: string;
+  metadata?: Record<string, unknown> | null;
+}): Promise<VaultEntryListItem> {
+  await ensureInitialized();
+  const client = getDb();
+  const id = `vault_${crypto.randomUUID().replaceAll("-", "")}`;
+  const now = new Date().toISOString();
+
+  await client.execute({
+    sql: `
+      INSERT INTO vault_entries (
+        id, user_id, name, category, value_encrypted, metadata_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    args: [
+      id,
+      params.userId,
+      params.name.trim(),
+      params.category.trim(),
+      encryptMemoryContent(params.value, params.userId),
+      params.metadata ? JSON.stringify(params.metadata) : null,
+      now,
+      now,
+    ],
+  });
+
+  return {
+    id,
+    userId: params.userId,
+    name: params.name.trim(),
+    category: params.category.trim(),
+    metadata: params.metadata ?? null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export async function updateVaultEntry(
+  userId: string,
+  id: string,
+  params: {
+    name?: string;
+    category?: string;
+    value?: string;
+    metadata?: Record<string, unknown> | null;
+  },
+): Promise<VaultEntryListItem | null> {
+  await ensureInitialized();
+  const existing = await getVaultEntryById(userId, id);
+  if (!existing) {
+    return null;
+  }
+
+  const nextName = typeof params.name === "string" ? params.name.trim() : existing.name;
+  const nextCategory = typeof params.category === "string" ? params.category.trim() : existing.category;
+  const nextValue = typeof params.value === "string" ? params.value : existing.value;
+  const nextMetadata = typeof params.metadata === "undefined" ? existing.metadata : params.metadata;
+  const now = new Date().toISOString();
+
+  const client = getDb();
+  await client.execute({
+    sql: `
+      UPDATE vault_entries
+      SET name = ?, category = ?, value_encrypted = ?, metadata_json = ?, updated_at = ?
+      WHERE user_id = ? AND id = ?
+    `,
+    args: [
+      nextName,
+      nextCategory,
+      encryptMemoryContent(nextValue, userId),
+      nextMetadata ? JSON.stringify(nextMetadata) : null,
+      now,
+      userId,
+      id,
+    ],
+  });
+
+  return {
+    id,
+    userId,
+    name: nextName,
+    category: nextCategory,
+    metadata: nextMetadata,
+    createdAt: existing.createdAt,
+    updatedAt: now,
+  };
+}
+
+export async function deleteVaultEntryById(userId: string, id: string): Promise<boolean> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `DELETE FROM vault_entries WHERE user_id = ? AND id = ?`,
+    args: [userId, id],
+  });
+  return (result.rowsAffected ?? 0) > 0;
 }
 
 function hashApiKey(key: string): string {

@@ -19,6 +19,7 @@ import { recordInjectionEvent } from "@/lib/memory-analytics";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
+import { detectSecretQueryIntent, VAULT_HINT_MESSAGE } from "@/lib/secrets";
 
 export const runtime = "nodejs";
 
@@ -33,6 +34,16 @@ export async function POST(request: Request) {
 
     const message = typeof body.message === "string" ? body.message.trim() : "";
     const conversationId = typeof body.conversationId === "string" ? body.conversationId : null;
+
+    if (message) {
+      const secretQuery = detectSecretQueryIntent(message);
+      if (secretQuery.isSecretQuery) {
+        return Response.json({
+          vault_hint: VAULT_HINT_MESSAGE,
+          matched_categories: secretQuery.matchedCategories,
+        });
+      }
+    }
     
     // Limits for context window efficiency (default: 5 critical + 5 relevant = 10 total)
     const maxCritical = typeof body.maxCritical === "number" ? Math.min(body.maxCritical, 10) : 5;
@@ -71,7 +82,6 @@ export async function POST(request: Request) {
     let criticalMemories: typeof allCritical;
     if (message && allCritical.length > maxCritical) {
       // Get embeddings and rank critical memories by relevance
-      const criticalIds = allCritical.map((m) => m.id);
       const vector = await embedText(message);
       const criticalHits = await semanticSearchVectors({
         userId: identity.userId,

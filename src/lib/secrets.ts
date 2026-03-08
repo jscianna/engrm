@@ -1,223 +1,280 @@
 /**
- * Secret detection and redaction for FatHippo memories
- * 
- * Detects common credential patterns and prevents them from
- * being exposed to LLM context while still allowing storage.
- * 
- * Patterns sourced via MoA (Gemini + Claude) for comprehensive coverage.
+ * Secret detection and vault intent detection.
+ *
+ * Patterns are aligned to VAULT_SPEC.md and used for:
+ * - detecting secrets in remember/store flows
+ * - detecting secret retrieval queries for vault hints
  */
 
-// Patterns that indicate a secret/credential
-const SECRET_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
-  // ============================================================================
-  // OpenAI / Anthropic / AI Providers
-  // ============================================================================
-  { pattern: /\bsk-[a-zA-Z0-9]{32,}/g, name: "OpenAI API key" },
-  { pattern: /\bsk-proj-[a-zA-Z0-9]{48,}/g, name: "OpenAI project key" },
-  { pattern: /\bsk-ant-[a-zA-Z0-9]{40,}/g, name: "Anthropic API key" },
-  { pattern: /\br8_[a-zA-Z0-9]{32,}/g, name: "Replicate API key" },
-  { pattern: /\bhf_[a-zA-Z0-9]{32,}/g, name: "Hugging Face token" },
-  { pattern: /\bcohere[_-][a-zA-Z0-9]{32,}/gi, name: "Cohere API key" },
-  { pattern: /\bpinecone[_-][a-zA-Z0-9]{32,}/gi, name: "Pinecone API key" },
-  
-  // ============================================================================
-  // Stripe / Payment Processors
-  // ============================================================================
-  { pattern: /\bsk_live_[a-zA-Z0-9]{24,}/g, name: "Stripe live key" },
-  { pattern: /\bsk_test_[a-zA-Z0-9]{24,}/g, name: "Stripe test key" },
-  { pattern: /\bpk_live_[a-zA-Z0-9]{24,}/g, name: "Stripe publishable key" },
-  { pattern: /\bpk_test_[a-zA-Z0-9]{24,}/g, name: "Stripe publishable key" },
-  { pattern: /\brk_live_[a-zA-Z0-9]{24,}/g, name: "Stripe restricted key" },
-  { pattern: /\brk_test_[a-zA-Z0-9]{24,}/g, name: "Stripe restricted test key" },
-  { pattern: /\bwhsec_[a-zA-Z0-9]{32,}/g, name: "Stripe webhook secret" },
-  { pattern: /\bsq0[a-z]{3}-[a-zA-Z0-9\-_]{22,}/g, name: "Square API key" },
-  
-  // ============================================================================
-  // GitHub / GitLab / Version Control
-  // ============================================================================
-  { pattern: /\bghp_[a-zA-Z0-9]{36,}/g, name: "GitHub PAT" },
-  { pattern: /\bgho_[a-zA-Z0-9]{36,}/g, name: "GitHub OAuth token" },
-  { pattern: /\bghu_[a-zA-Z0-9]{36,}/g, name: "GitHub user token" },
-  { pattern: /\bghs_[a-zA-Z0-9]{36,}/g, name: "GitHub server token" },
-  { pattern: /\bgithub_pat_[a-zA-Z0-9]{82}/g, name: "GitHub fine-grained PAT" },
-  { pattern: /\bglpat-[a-zA-Z0-9\-]{20,}/g, name: "GitLab PAT" },
-  { pattern: /\bgloas-[a-zA-Z0-9\-]{20,}/g, name: "GitLab OAuth token" },
-  
-  // ============================================================================
-  // AWS
-  // ============================================================================
-  { pattern: /\bAKIA[A-Z0-9]{16}/g, name: "AWS access key" },
-  { pattern: /\bASIA[A-Z0-9]{16}/g, name: "AWS temporary access key" },
-  { pattern: /\bAIDA[A-Z0-9]{16}/g, name: "AWS IAM user ID" },
-  { pattern: /aws[_-]?secret[_-]?access[_-]?key\s*[:=]\s*["']?[A-Za-z0-9\/+=]{40}["']?/gi, name: "AWS secret key" },
-  
-  // ============================================================================
-  // Google Cloud Platform
-  // ============================================================================
-  { pattern: /\bAIza[0-9A-Za-z_-]{35}/g, name: "Google API key" },
-  { pattern: /\bya29\.[a-zA-Z0-9_-]{50,}/g, name: "Google OAuth token" },
-  { pattern: /[a-zA-Z0-9_-]{24}\.apps\.googleusercontent\.com/g, name: "Google OAuth client" },
-  
-  // ============================================================================
-  // Azure
-  // ============================================================================
-  { pattern: /DefaultEndpointsProtocol=https;AccountName=[a-zA-Z0-9]+;AccountKey=[a-zA-Z0-9+\/=]+/gi, name: "Azure storage key" },
-  { pattern: /\b[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi, name: "Azure/UUID secret" },
-  
-  // ============================================================================
-  // Slack / Discord / Messaging
-  // ============================================================================
-  { pattern: /\bxoxb-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24}/g, name: "Slack bot token" },
-  { pattern: /\bxoxp-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24}/g, name: "Slack user token" },
-  { pattern: /\bxoxa-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24}/g, name: "Slack app token" },
-  { pattern: /\bxoxr-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24}/g, name: "Slack refresh token" },
-  { pattern: /https:\/\/discord\.com\/api\/webhooks\/\d+\/[a-zA-Z0-9_-]+/g, name: "Discord webhook" },
-  { pattern: /[MN][A-Za-z\d]{23,28}\.[X-Za-z\d]{6}\.[a-zA-Z\d_-]{27,}/g, name: "Discord bot token" },
-  
-  // ============================================================================
-  // Twilio / Communication
-  // ============================================================================
-  { pattern: /\bSK[a-zA-Z0-9]{32}/g, name: "Twilio API key" },
-  { pattern: /\bAC[a-zA-Z0-9]{32}/g, name: "Twilio Account SID" },
-  
-  // ============================================================================
-  // Database Connection Strings
-  // ============================================================================
-  { pattern: /mongodb(\+srv)?:\/\/[^\s]{20,}/gi, name: "MongoDB connection string" },
-  { pattern: /postgres(ql)?:\/\/[^\s]{20,}/gi, name: "PostgreSQL connection string" },
-  { pattern: /mysql:\/\/[^\s]{20,}/gi, name: "MySQL connection string" },
-  { pattern: /redis:\/\/[^\s]{20,}/gi, name: "Redis connection string" },
-  { pattern: /libsql:\/\/[^\s]{20,}/gi, name: "Turso/LibSQL connection string" },
-  
-  // ============================================================================
-  // FatHippo / Custom
-  // ============================================================================
-  { pattern: /\bmem_[a-zA-Z0-9]{30,}/g, name: "FatHippo API key" },
-  
-  // ============================================================================
-  // Vercel / Netlify / Hosting
-  // ============================================================================
-  { pattern: /\bvercel_[a-zA-Z0-9]{24,}/gi, name: "Vercel token" },
-  { pattern: /\bnfp_[a-zA-Z0-9]{40,}/g, name: "Netlify PAT" },
-  
-  // ============================================================================
-  // DigitalOcean / Cloud Providers
-  // ============================================================================
-  { pattern: /\bdop_v1_[a-zA-Z0-9]{64}/g, name: "DigitalOcean API key" },
-  { pattern: /\bdoos_[a-zA-Z0-9]{32}/g, name: "DigitalOcean OAuth" },
-  
-  // ============================================================================
-  // Supabase / PlanetScale / Neon / Modern DBs
-  // ============================================================================
-  { pattern: /\bsbp_[a-zA-Z0-9]{40,}/g, name: "Supabase service key" },
-  { pattern: /\bpscale_tkn_[a-zA-Z0-9]{32,}/g, name: "PlanetScale token" },
-  
-  // ============================================================================
-  // Notion / Airtable / Productivity
-  // ============================================================================
-  { pattern: /\bsecret_[a-zA-Z0-9]{32,}/g, name: "Notion integration token" },
-  { pattern: /\bntn_[a-zA-Z0-9]{32,}/g, name: "Notion token" },
-  { pattern: /\bkey[a-zA-Z0-9]{14}\.[a-zA-Z0-9]{5}/g, name: "Airtable API key" },
-  { pattern: /\bpat[a-zA-Z0-9]{14}\.[a-zA-Z0-9]{64}/g, name: "Airtable PAT" },
-  { pattern: /\blin_api_[a-zA-Z0-9]{32,}/g, name: "Linear API key" },
-  { pattern: /\bfigd_[a-zA-Z0-9]{24,}/g, name: "Figma token" },
-  
-  // ============================================================================
-  // Email Services
-  // ============================================================================
-  { pattern: /\bkey-[0-9a-f]{32}/g, name: "Mailgun API key" },
-  { pattern: /\bSG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}/g, name: "SendGrid API key" },
-  { pattern: /\bre_[a-zA-Z0-9]{32,}/g, name: "Resend API key" },
-  { pattern: /\bpostmark[_-]?[a-zA-Z0-9]{32,}/gi, name: "Postmark token" },
-  
-  // ============================================================================
-  // Monitoring / Observability
-  // ============================================================================
-  { pattern: /https:\/\/[a-f0-9]{32}@[a-z0-9]+\.ingest\.sentry\.io\/\d+/g, name: "Sentry DSN" },
-  { pattern: /\bdd[_-]?api[_-]?key\s*[:=]\s*["']?[a-f0-9]{32}["']?/gi, name: "Datadog API key" },
-  { pattern: /\bNRAK-[A-Z0-9]{27}/g, name: "New Relic API key" },
-  { pattern: /\bNRAL-[a-zA-Z0-9]{32}/g, name: "New Relic license key" },
-  
-  // ============================================================================
-  // CI/CD
-  // ============================================================================
-  { pattern: /\bCIRCLE[_-]?TOKEN\s*[:=]\s*["']?[a-f0-9]{40}["']?/gi, name: "CircleCI token" },
-  { pattern: /\btravis[_-]?token\s*[:=]\s*["']?[a-zA-Z0-9]{22}["']?/gi, name: "Travis CI token" },
-  
-  // ============================================================================
-  // HashiCorp / Infrastructure
-  // ============================================================================
-  { pattern: /\bhvs\.[a-zA-Z0-9]{24,}/g, name: "Vault token" },
-  { pattern: /\bs\.hvs\.[a-zA-Z0-9]{24,}/g, name: "Vault service token" },
-  
-  // ============================================================================
-  // Telegram
-  // ============================================================================
-  { pattern: /\b[0-9]{8,10}:[a-zA-Z0-9_-]{35}/g, name: "Telegram bot token" },
-  
-  // ============================================================================
-  // Firebase
-  // ============================================================================
-  { pattern: /\bAAAA[A-Za-z0-9_-]{100,}/g, name: "Firebase Cloud Messaging key" },
-  
-  // ============================================================================
-  // JWT / OAuth Tokens
-  // ============================================================================
-  { pattern: /\beyJ[a-zA-Z0-9_-]{20,}\.eyJ[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{20,}/g, name: "JWT token" },
-  { pattern: /bearer\s+[a-zA-Z0-9_\-.]{20,}/gi, name: "Bearer token" },
-  
-  // ============================================================================
-  // Private Keys
-  // ============================================================================
-  { pattern: /-----BEGIN\s+(RSA\s+)?PRIVATE\s+KEY-----/g, name: "RSA private key" },
-  { pattern: /-----BEGIN\s+OPENSSH\s+PRIVATE\s+KEY-----/g, name: "SSH private key" },
-  { pattern: /-----BEGIN\s+PGP\s+PRIVATE\s+KEY\s+BLOCK-----/g, name: "PGP private key" },
-  { pattern: /-----BEGIN\s+EC\s+PRIVATE\s+KEY-----/g, name: "EC private key" },
-  { pattern: /-----BEGIN\s+DSA\s+PRIVATE\s+KEY-----/g, name: "DSA private key" },
-  { pattern: /-----BEGIN\s+ENCRYPTED\s+PRIVATE\s+KEY-----/g, name: "Encrypted private key" },
-  
-  // ============================================================================
-  // Crypto / Web3 (wallet seeds - 12 or 24 word mnemonics)
-  // ============================================================================
-  { pattern: /\b(?:[a-z]+\s){11}[a-z]+\b/gi, name: "12-word seed phrase" },
-  { pattern: /\b(?:[a-z]+\s){23}[a-z]+\b/gi, name: "24-word seed phrase" },
-  { pattern: /\b0x[a-fA-F0-9]{64}\b/g, name: "Ethereum private key" },
-  
-  // ============================================================================
-  // Explicit credential labels (context patterns)
-  // ============================================================================
-  // Password variations (colon/equals/dash separators)
-  { pattern: /password\s*[:=\-]\s*["']?[^\s"']{6,}["']?/gi, name: "Password" },
-  { pattern: /passwd\s*[:=\-]\s*["']?[^\s"']{6,}["']?/gi, name: "Password" },
-  { pattern: /pwd\s*[:=\-]\s*["']?[^\s"']{6,}["']?/gi, name: "Password" },
-  { pattern: /\bpw\s*[:=\-]\s*["']?[^\s"']{6,}["']?/gi, name: "Password" },
-  { pattern: /\bpass\s*[:=\-]\s*["']?[^\s"']{6,}["']?/gi, name: "Password" },
-  // Password with space separator (e.g., "pw mypassword123")
-  { pattern: /\bpw\s+[^\s,;]{8,}/gi, name: "Password (space-separated)" },
-  { pattern: /\bpassword\s+[^\s,;]{8,}/gi, name: "Password (space-separated)" },
-  
-  // API key variations (including natural language with dash)
-  { pattern: /api\s*key\s*[:=\-]\s*["']?[^\s"']{10,}["']?/gi, name: "API key" },
-  { pattern: /api[_-]?key\s*[:=\-]\s*["']?[^\s"']{10,}["']?/gi, name: "API key" },
-  { pattern: /apikey\s*[:=\-]\s*["']?[^\s"']{10,}["']?/gi, name: "API key" },
-  // API/admin key with space separator (e.g., "admin key abc123")
-  { pattern: /admin\s*key\s+[^\s,;]{8,}/gi, name: "Admin key (space-separated)" },
-  { pattern: /api\s*key\s+[^\s,;]{10,}/gi, name: "API key (space-separated)" },
-  
-  // Secret/token variations
-  { pattern: /secret\s*[:=\-]\s*["']?[^\s"']{10,}["']?/gi, name: "Secret" },
-  { pattern: /api[_-]?secret\s*[:=\-]\s*["']?[^\s"']{10,}["']?/gi, name: "API secret" },
-  { pattern: /auth[_-]?token\s*[:=\-]\s*["']?[^\s"']{10,}["']?/gi, name: "Auth token" },
-  { pattern: /access[_-]?token\s*[:=\-]\s*["']?[^\s"']{10,}["']?/gi, name: "Access token" },
-  { pattern: /private[_-]?key\s*[:=\-]\s*["']?[^\s"']{10,}["']?/gi, name: "Private key" },
-  { pattern: /token\s*[:=\-]\s*["']?[^\s"']{16,}["']?/gi, name: "Token" },
-  
-  // Login credential patterns (username/email + password combos)
-  { pattern: /(?:username|user|email|login)\s*[:=\-]\s*[^\s]+\s+(?:password|pw|pwd|pass)\s*[:=\-]\s*["']?[^\s"']{4,}["']?/gi, name: "Login credentials" },
-  
-  // Credential blocks
-  { pattern: /credentials?\s*[:=\-]?\s*\{[^}]*(?:password|secret|key)[^}]*\}/gi, name: "Credential block" },
+export type SecretCategory =
+  | "api_key"
+  | "password"
+  | "token"
+  | "connection_string"
+  | "private_key"
+  | "credentials";
+
+type SecretPattern = {
+  name: string;
+  category: SecretCategory;
+  pattern: RegExp;
+  context?: RegExp;
+};
+
+const SECRET_PATTERNS: SecretPattern[] = [
+  // API keys and service tokens
+  { name: "OpenAI API key", category: "api_key", pattern: /\bsk-[a-zA-Z0-9]{20,}\b/g },
+  { name: "Anthropic API key", category: "api_key", pattern: /\bsk-ant-[a-zA-Z0-9-]{40,}\b/g },
+  { name: "AWS access key", category: "api_key", pattern: /\bAKIA[0-9A-Z]{16}\b/g },
+  {
+    name: "AWS secret key",
+    category: "api_key",
+    pattern: /\b[a-zA-Z0-9/+]{40}\b/g,
+    context: /\baws|secret|access[_ -]?key\b/i,
+  },
+  { name: "Google Cloud API key", category: "api_key", pattern: /\bAIza[0-9A-Za-z_-]{35}\b/g },
+  { name: "GitHub token", category: "api_key", pattern: /\bgh[pousr]_[A-Za-z0-9_]{36,}\b/g },
+  {
+    name: "GitHub classic PAT",
+    category: "api_key",
+    pattern: /\bgithub_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}\b/g,
+  },
+  { name: "Stripe secret key", category: "api_key", pattern: /\bsk_(?:live|test)_[0-9a-zA-Z]{24,}\b/g },
+  { name: "Stripe publishable key", category: "api_key", pattern: /\bpk_live_[0-9a-zA-Z]{24,}\b/g },
+  { name: "Twilio key", category: "api_key", pattern: /\bSK[0-9a-fA-F]{32}\b/g },
+  {
+    name: "Twilio auth token",
+    category: "token",
+    pattern: /\b[a-f0-9]{32}\b/g,
+    context: /\btwilio|auth\b/i,
+  },
+  {
+    name: "SendGrid key",
+    category: "api_key",
+    pattern: /\bSG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}\b/g,
+  },
+  { name: "Slack bot token", category: "token", pattern: /\bxoxb-[0-9]{11}-[0-9]{11}-[a-zA-Z0-9]{24}\b/g },
+  { name: "Slack user token", category: "token", pattern: /\bxoxp-[0-9]{11}-[0-9]{11}-[a-zA-Z0-9]{24}\b/g },
+  {
+    name: "Discord bot token",
+    category: "token",
+    pattern: /\b[MN][A-Za-z0-9]{23,}\.[\w-]{6}\.[\w-]{27}\b/g,
+  },
+  {
+    name: "Telegram bot token",
+    category: "token",
+    pattern: /\b[0-9]{8,10}:[a-zA-Z0-9_-]{35}\b/g,
+  },
+  { name: "OpenRouter key", category: "api_key", pattern: /\bsk-or-v1-[a-f0-9]{64}\b/g },
+  { name: "Vercel token", category: "token", pattern: /\bvercel_[a-zA-Z0-9]{24}\b/g },
+  { name: "Supabase key", category: "api_key", pattern: /\bsbp_[a-f0-9]{40}\b/g },
+  {
+    name: "Supabase JWT",
+    category: "token",
+    pattern: /\beyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b/g,
+  },
+  {
+    name: "Cloudflare token",
+    category: "token",
+    pattern: /\b[a-z0-9]{37}\b/g,
+    context: /\bcloudflare|cf[_ -]?api|token\b/i,
+  },
+  {
+    name: "UUID-style secret",
+    category: "api_key",
+    pattern: /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/g,
+    context: /\b(?:heroku|pinecone|railway|token|api[_ -]?key|secret)\b/i,
+  },
+  { name: "Mailgun key", category: "api_key", pattern: /\bkey-[0-9a-zA-Z]{32}\b/g },
+  { name: "HuggingFace key", category: "api_key", pattern: /\bhf_[a-zA-Z0-9]{34}\b/g },
+  { name: "Replicate key", category: "api_key", pattern: /\br8_[a-zA-Z0-9]{40}\b/g },
+  {
+    name: "Cohere key",
+    category: "api_key",
+    pattern: /\b[a-zA-Z0-9]{40}\b/g,
+    context: /\bcohere|api[_ -]?key\b/i,
+  },
+  { name: "Mapbox key", category: "api_key", pattern: /\bpk\.[a-zA-Z0-9]{60,}\b/g },
+  {
+    name: "Firebase token",
+    category: "token",
+    pattern: /\b[a-zA-Z0-9_-]{40}\b/g,
+    context: /\bfirebase|token|api[_ -]?key\b/i,
+  },
+  {
+    name: "DataDog key",
+    category: "api_key",
+    pattern: /\b[a-f0-9]{32}\b/g,
+    context: /\bdatadog|dd[_ -]?api[_ -]?key\b/i,
+  },
+  {
+    name: "Sentry key",
+    category: "api_key",
+    pattern: /\b[a-f0-9]{32}\b/g,
+    context: /\bsentry|dsn\b/i,
+  },
+  { name: "Linear key", category: "api_key", pattern: /\blin_api_[a-zA-Z0-9]{40}\b/g },
+  { name: "Notion key", category: "api_key", pattern: /\bsecret_[a-zA-Z0-9]{43}\b/g },
+  { name: "Airtable key", category: "api_key", pattern: /\bkey[a-zA-Z0-9]{14}\b/g },
+  {
+    name: "Algolia key",
+    category: "api_key",
+    pattern: /\b[a-f0-9]{32}\b/g,
+    context: /\balgolia|api[_ -]?key\b/i,
+  },
+  {
+    name: "Braintree token",
+    category: "token",
+    pattern: /\baccess_token\$[a-z]+\$[a-z0-9]+\$[a-f0-9]{32}\b/g,
+  },
+  { name: "Square access token", category: "token", pattern: /\bsq0atp-[0-9A-Za-z_-]{22}\b/g },
+  { name: "Square secret", category: "token", pattern: /\bsq0csp-[0-9A-Za-z_-]{43}\b/g },
+  {
+    name: "PayPal access token",
+    category: "token",
+    pattern: /\baccess_token\$production\$[a-z0-9]{13}\$[a-f0-9]{32}\b/g,
+  },
+  { name: "npm token", category: "token", pattern: /\bnpm_[a-zA-Z0-9]{36}\b/g },
+  { name: "PyPI token", category: "token", pattern: /\bpypi-[a-zA-Z0-9_-]{50,}\b/g },
+  { name: "Doppler token", category: "token", pattern: /\bdp\.st\.[a-zA-Z0-9_-]{40,}\b/g },
+  { name: "Fly.io token", category: "token", pattern: /\bfo1_[a-zA-Z0-9_-]{40,}\b/g },
+  { name: "PlanetScale token", category: "token", pattern: /\bpscale_tkn_[a-zA-Z0-9_-]{40,}\b/g },
+  {
+    name: "Turso token",
+    category: "token",
+    pattern: /\b[a-zA-Z0-9_-]{40,}\b/g,
+    context: /\bturso|token|api[_ -]?key\b/i,
+  },
+  { name: "Neon token", category: "token", pattern: /\bneon-[a-zA-Z0-9_-]{32,}\b/g },
+  { name: "Clerk secret key", category: "api_key", pattern: /\bsk_(?:live|test)_[a-zA-Z0-9]{40,}\b/g },
+  {
+    name: "Auth0 token",
+    category: "token",
+    pattern: /\b[a-zA-Z0-9_-]{32,}\b/g,
+    context: /\bauth0|token|secret\b/i,
+  },
+  {
+    name: "Okta token",
+    category: "token",
+    pattern: /\b[a-zA-Z0-9_-]{42}\b/g,
+    context: /\bokta|token|secret\b/i,
+  },
+  { name: "Venice API key", category: "api_key", pattern: /\bVENICE-[A-Za-z0-9_-]{40,}\b/g },
+  { name: "FatHippo API key", category: "api_key", pattern: /\bmem_[a-f0-9]{48}\b/g },
+
+  // Tokens and auth
+  {
+    name: "JWT",
+    category: "token",
+    pattern: /\beyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*\b/g,
+  },
+  { name: "Bearer token", category: "token", pattern: /\bbearer\s+[a-zA-Z0-9_-]{20,}\b/gi },
+  { name: "OAuth access token", category: "token", pattern: /\bya29\.[a-zA-Z0-9_-]+\b/g },
+  { name: "OAuth refresh token", category: "token", pattern: /\b1\/\/[a-zA-Z0-9_-]+\b/g },
+
+  // Connection strings
+  {
+    name: "PostgreSQL connection string",
+    category: "connection_string",
+    pattern: /\bpostgres(?:ql)?:\/\/[^:\s]+:[^@\s]+@[^\/\s]+\/\w+\b/gi,
+  },
+  {
+    name: "MySQL connection string",
+    category: "connection_string",
+    pattern: /\bmysql:\/\/[^:\s]+:[^@\s]+@[^\/\s]+\/\w+\b/gi,
+  },
+  {
+    name: "MongoDB connection string",
+    category: "connection_string",
+    pattern: /\bmongodb(?:\+srv)?:\/\/[^:\s]+:[^@\s]+@[^\/\s]+\b/gi,
+  },
+  {
+    name: "Redis connection string",
+    category: "connection_string",
+    pattern: /\bredis:\/\/:?[^@\s]+@[^:\s]+:\d+\b/gi,
+  },
+  {
+    name: "JDBC connection string",
+    category: "connection_string",
+    pattern: /\bjdbc:[a-z]+:\/\/[^:\s]+:[^@\s]+@[^\/\s]+\b/gi,
+  },
+  {
+    name: "SQLite connection string with password",
+    category: "connection_string",
+    pattern: /\bsqlite:\/\/[^\s]*password=[^\s]+\b/gi,
+  },
+
+  // Private keys
+  { name: "RSA private key", category: "private_key", pattern: /-----BEGIN RSA PRIVATE KEY-----/g },
+  { name: "EC private key", category: "private_key", pattern: /-----BEGIN EC PRIVATE KEY-----/g },
+  { name: "OpenSSH private key", category: "private_key", pattern: /-----BEGIN OPENSSH PRIVATE KEY-----/g },
+  { name: "PGP private key", category: "private_key", pattern: /-----BEGIN PGP PRIVATE KEY BLOCK-----/g },
+  { name: "Private key", category: "private_key", pattern: /-----BEGIN PRIVATE KEY-----/g },
+  { name: "Encrypted private key", category: "private_key", pattern: /-----BEGIN ENCRYPTED PRIVATE KEY-----/g },
+
+  // Labeled fields
+  {
+    name: "Password field",
+    category: "password",
+    pattern: /password\s*[:=]\s*['\"]?[^'\"\s]{8,}/gi,
+  },
+  {
+    name: "Secret field",
+    category: "credentials",
+    pattern: /secret\s*[:=]\s*['\"]?[^'\"\s]{8,}/gi,
+  },
+  {
+    name: "API key field",
+    category: "api_key",
+    pattern: /api[_-]?key\s*[:=]\s*['\"]?[^'\"\s]{16,}/gi,
+  },
+  {
+    name: "Token field",
+    category: "token",
+    pattern: /token\s*[:=]\s*['\"]?[^'\"\s]{20,}/gi,
+  },
 ];
+
+const SECRET_QUERY_PATTERNS: RegExp[] = [
+  /what is my .*?(api key|token|password|secret|credentials)/i,
+  /give me .*?(api key|token|password|secret|credentials)/i,
+  /(api key|token|password|secret|credentials) for .*/i,
+  /show .*?(api key|token|password|secret|credentials)/i,
+  /retrieve .*?(api key|token|password|secret|credentials)/i,
+];
+
+const SECRET_QUERY_CATEGORY_HINTS: Array<{ category: SecretCategory; pattern: RegExp }> = [
+  { category: "api_key", pattern: /\bapi[_ -]?key|access key|auth key\b/i },
+  { category: "password", pattern: /\bpassword|passwd|pwd\b/i },
+  { category: "token", pattern: /\btoken|jwt|bearer|oauth\b/i },
+  { category: "connection_string", pattern: /\bconnection string|database url|dsn|postgres|mysql|mongodb|redis|jdbc\b/i },
+  { category: "private_key", pattern: /\bprivate key|ssh key|rsa key|certificate|pem\b/i },
+  { category: "credentials", pattern: /\bcredential|secret\b/i },
+];
+
+function shouldEvaluatePattern(text: string, secretPattern: SecretPattern): boolean {
+  if (!secretPattern.context) {
+    return true;
+  }
+  return secretPattern.context.test(text);
+}
+
+function matchSecretPatterns(text: string): SecretPattern[] {
+  const matches: SecretPattern[] = [];
+
+  for (const secretPattern of SECRET_PATTERNS) {
+    if (!shouldEvaluatePattern(text, secretPattern)) {
+      continue;
+    }
+
+    secretPattern.pattern.lastIndex = 0;
+    if (secretPattern.pattern.test(text)) {
+      matches.push(secretPattern);
+    }
+  }
+
+  return matches;
+}
 
 export interface SecretDetectionResult {
   containsSecrets: boolean;
@@ -226,59 +283,76 @@ export interface SecretDetectionResult {
 }
 
 /**
- * Detect if text contains secrets/credentials
+ * Detect if text contains secrets/credentials.
  */
 export function detectSecrets(text: string): SecretDetectionResult {
-  const detectedTypes = new Set<string>();
-  let redactedText = text;
-  
-  for (const { pattern, name } of SECRET_PATTERNS) {
-    // Reset regex state for global patterns
-    pattern.lastIndex = 0;
-    
-    if (pattern.test(text)) {
-      detectedTypes.add(name);
-      
-      // Reset again for replacement
-      pattern.lastIndex = 0;
-      redactedText = redactedText.replace(pattern, (match) => {
-        // Keep first few chars for identification, redact the rest
-        const visibleChars = Math.min(8, Math.floor(match.length * 0.2));
-        return match.slice(0, visibleChars) + "[REDACTED]";
-      });
-    }
+  const matchedPatterns = matchSecretPatterns(text);
+  if (matchedPatterns.length === 0) {
+    return {
+      containsSecrets: false,
+      detectedTypes: [],
+      redactedText: text,
+    };
   }
-  
+
+  const detectedTypes = Array.from(new Set(matchedPatterns.map((entry) => entry.name)));
+  let redactedText = text;
+
+  for (const entry of matchedPatterns) {
+    entry.pattern.lastIndex = 0;
+    redactedText = redactedText.replace(entry.pattern, (match) => {
+      const visibleChars = Math.min(8, Math.max(3, Math.floor(match.length * 0.15)));
+      return `${match.slice(0, visibleChars)}[REDACTED]`;
+    });
+  }
+
   return {
-    containsSecrets: detectedTypes.size > 0,
-    detectedTypes: Array.from(detectedTypes),
+    containsSecrets: true,
+    detectedTypes,
     redactedText,
   };
 }
 
-/**
- * Check if text contains secrets (simple boolean check)
- */
 export function containsSecrets(text: string): boolean {
-  for (const { pattern } of SECRET_PATTERNS) {
-    pattern.lastIndex = 0;
-    if (pattern.test(text)) {
-      return true;
-    }
-  }
-  return false;
+  return matchSecretPatterns(text).length > 0;
 }
 
-/**
- * Redact secrets from text, replacing with safe placeholders
- */
 export function redactSecrets(text: string): string {
   return detectSecrets(text).redactedText;
 }
 
-/**
- * Get a summary of what types of secrets were detected
- */
 export function getSecretTypes(text: string): string[] {
   return detectSecrets(text).detectedTypes;
 }
+
+export function detectSecretCategories(text: string): SecretCategory[] {
+  const matchedPatterns = matchSecretPatterns(text);
+  return Array.from(new Set(matchedPatterns.map((entry) => entry.category)));
+}
+
+export function detectSecretQueryIntent(query: string): {
+  isSecretQuery: boolean;
+  matchedCategories: SecretCategory[];
+} {
+  const normalized = query.trim();
+  if (!normalized) {
+    return { isSecretQuery: false, matchedCategories: [] };
+  }
+
+  const patternMatched = SECRET_QUERY_PATTERNS.some((pattern) => pattern.test(normalized));
+  const matchedCategories = SECRET_QUERY_CATEGORY_HINTS
+    .filter((entry) => entry.pattern.test(normalized))
+    .map((entry) => entry.category);
+
+  if (!patternMatched && matchedCategories.length === 0) {
+    return { isSecretQuery: false, matchedCategories: [] };
+  }
+
+  return {
+    isSecretQuery: true,
+    matchedCategories: Array.from(new Set(matchedCategories.length > 0 ? matchedCategories : ["credentials"])),
+  };
+}
+
+export const VAULT_HINT_MESSAGE =
+  "Sensitive credentials are stored in your secure vault. View them at fathippo.ai/vault";
