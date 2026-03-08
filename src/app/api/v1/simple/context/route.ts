@@ -33,13 +33,45 @@ export async function POST(request: Request) {
     const message = typeof body.message === "string" ? body.message.trim() : "";
     const conversationId = typeof body.conversationId === "string" ? body.conversationId : null;
     
-    // Limits for context window efficiency
-    const maxCritical = typeof body.maxCritical === "number" ? Math.min(body.maxCritical, 20) : 10;
+    // Limits for context window efficiency (default: 5 critical + 5 relevant = 10 total)
+    const maxCritical = typeof body.maxCritical === "number" ? Math.min(body.maxCritical, 10) : 5;
     const maxRelevant = typeof body.maxRelevant === "number" ? Math.min(body.maxRelevant, 10) : 5;
 
-    // Get critical memories (limited to most important)
+    // Get critical memories
     const allCritical = filterSensitiveMemories(await getCriticalMemories(identity.userId));
-    const criticalMemories = allCritical.slice(0, maxCritical);
+    
+    // If we have a message, rank critical memories by relevance to it
+    let criticalMemories: typeof allCritical;
+    if (message && allCritical.length > maxCritical) {
+      // Get embeddings and rank critical memories by relevance
+      const criticalIds = allCritical.map((m) => m.id);
+      const vector = await embedText(message);
+      const criticalHits = await semanticSearchVectors({
+        userId: identity.userId,
+        query: message,
+        vector,
+        topK: maxCritical * 2, // Get more to filter
+      });
+      
+      // Filter to only critical memories, preserve ranking
+      const criticalHitIds = new Set(criticalHits.map((h) => h.item.id));
+      const rankedCritical = allCritical
+        .filter((m) => criticalHitIds.has(m.id))
+        .slice(0, maxCritical);
+      
+      // If not enough matches, fill with remaining critical (most recent first)
+      if (rankedCritical.length < maxCritical) {
+        const rankedIds = new Set(rankedCritical.map((m) => m.id));
+        const remaining = allCritical
+          .filter((m) => !rankedIds.has(m.id))
+          .slice(0, maxCritical - rankedCritical.length);
+        criticalMemories = [...rankedCritical, ...remaining];
+      } else {
+        criticalMemories = rankedCritical;
+      }
+    } else {
+      criticalMemories = allCritical.slice(0, maxCritical);
+    }
 
     // Get relevant memories based on message (hybrid: vector + BM25)
     let relevantMemories: typeof criticalMemories = [];
