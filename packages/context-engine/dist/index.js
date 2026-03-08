@@ -23,7 +23,7 @@ import { FatHippoContextEngine } from "./engine.js";
  */
 export default function register(api) {
     api.registerContextEngine("fathippo-context-engine", () => {
-        const config = api.getPluginConfig();
+        const config = api.pluginConfig;
         if (!config?.apiKey) {
             throw new Error("FatHippo Context Engine requires an API key. " +
                 "Set plugins.entries.fathippo-context-engine.config.apiKey in your config.");

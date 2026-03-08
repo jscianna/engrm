@@ -60,7 +60,8 @@ export class FatHippoContextEngine {
             return { ingested: false };
         }
         // Only capture user messages (configurable)
-        if (this.config.captureUserOnly !== false && params.message.role !== "user") {
+        if (this.config.captureUserOnly !== false &&
+            (!this.isRoleMessage(params.message) || params.message.role !== "user")) {
             return { ingested: false };
         }
         const content = this.extractContent(params.message);
@@ -169,7 +170,7 @@ export class FatHippoContextEngine {
         }
         // Format memories for injection
         const memoryBlock = formatMemoriesForInjection(memories, syntheses);
-        const tokens = estimateTokens(memoryBlock);
+        const tokens = estimateTokens(memoryBlock) + this.estimateMessageTokens(params.messages);
         return {
             messages: params.messages,
             estimatedTokens: tokens,
@@ -236,15 +237,16 @@ export class FatHippoContextEngine {
     }
     // --- Helper methods ---
     extractContent(message) {
-        if (typeof message.content === "string") {
-            return message.content;
+        const msg = message;
+        if (typeof msg.content === "string") {
+            return msg.content;
         }
-        if (typeof message.text === "string") {
-            return message.text;
+        if (typeof msg.text === "string") {
+            return msg.text;
         }
-        if (Array.isArray(message.content)) {
+        if (Array.isArray(msg.content)) {
             // Handle multi-part content (text blocks)
-            const textParts = message.content
+            const textParts = msg.content
                 .filter((p) => typeof p === "object" && p !== null && "type" in p && p.type === "text")
                 .map((p) => p.text);
             return textParts.join("\n") || null;
@@ -254,11 +256,24 @@ export class FatHippoContextEngine {
     findLastUserMessage(messages) {
         for (let i = messages.length - 1; i >= 0; i--) {
             const msg = messages[i];
-            if (msg.role === "user") {
+            if (this.isRoleMessage(msg) && msg.role === "user") {
                 return this.extractContent(msg);
             }
         }
         return null;
+    }
+    isRoleMessage(message) {
+        return (typeof message === "object" &&
+            message !== null &&
+            "role" in message &&
+            typeof message.role === "string");
+    }
+    estimateMessageTokens(messages) {
+        const plainText = messages
+            .map((message) => this.extractContent(message))
+            .filter((content) => Boolean(content))
+            .join("\n");
+        return estimateTokens(plainText);
     }
 }
 //# sourceMappingURL=engine.js.map

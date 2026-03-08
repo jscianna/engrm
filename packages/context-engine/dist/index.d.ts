@@ -17,20 +17,11 @@
  *         config:
  *           apiKey: "${FATHIPPO_API_KEY}"
  */
-import { FatHippoContextEngine } from "./engine.js";
-import type { FatHippoConfig } from "./types.js";
-interface PluginAPI {
-    registerContextEngine: (id: string, factory: () => FatHippoContextEngine | Promise<FatHippoContextEngine>) => void;
-    getPluginConfig: () => FatHippoConfig | undefined;
-    logger?: {
-        info: (msg: string) => void;
-        error: (msg: string) => void;
-    };
-}
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 /**
  * Plugin entry point
  */
-export default function register(api: PluginAPI): void;
+export default function register(api: OpenClawPluginApi): void;
 export { FatHippoContextEngine } from "./engine.js";
 export type { FatHippoConfig, Memory, SearchResult } from "./types.js";
 //# sourceMappingURL=index.d.ts.map

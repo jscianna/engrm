@@ -3,55 +3,13 @@
  *
  * Implements OpenClaw's ContextEngine interface for encrypted agent memory.
  */
+import type { AssembleResult, BootstrapResult, CompactResult, ContextEngine, ContextEngineInfo, IngestBatchResult, IngestResult, SubagentEndReason, SubagentSpawnPreparation } from "openclaw/plugin-sdk";
+import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { FatHippoConfig } from "./types.js";
-interface AgentMessage {
-    id?: string;
-    role: "user" | "assistant" | "system" | "tool";
-    content?: string | unknown;
-    text?: string;
-    name?: string;
-    timestamp?: string;
-}
-interface ContextEngineInfo {
-    id: string;
-    name: string;
-    version?: string;
-    ownsCompaction?: boolean;
-}
-interface BootstrapResult {
-    bootstrapped: boolean;
-    importedMessages?: number;
-    reason?: string;
-}
-interface IngestResult {
-    ingested: boolean;
-}
-interface IngestBatchResult {
-    ingestedCount: number;
-}
-interface AssembleResult {
-    messages: AgentMessage[];
-    estimatedTokens: number;
-    systemPromptAddition?: string;
-}
-interface CompactResult {
-    ok: boolean;
-    compacted: boolean;
-    reason?: string;
-    result?: {
-        summary?: string;
-        tokensBefore: number;
-        tokensAfter?: number;
-    };
-}
-interface SubagentSpawnPreparation {
-    rollback: () => void | Promise<void>;
-}
-type SubagentEndReason = "deleted" | "completed" | "swept" | "released";
 /**
  * FatHippo Context Engine implementation
  */
-export declare class FatHippoContextEngine {
+export declare class FatHippoContextEngine implements ContextEngine {
     readonly info: ContextEngineInfo;
     private client;
     private config;
@@ -88,7 +46,10 @@ export declare class FatHippoContextEngine {
         sessionFile: string;
         messages: AgentMessage[];
         prePromptMessageCount: number;
+        autoCompactionSummary?: string;
         isHeartbeat?: boolean;
+        tokenBudget?: number;
+        legacyCompactionParams?: Record<string, unknown>;
     }): Promise<void>;
     /**
      * Assemble context for the model
@@ -106,6 +67,10 @@ export declare class FatHippoContextEngine {
         sessionFile: string;
         tokenBudget?: number;
         force?: boolean;
+        currentTokenCount?: number;
+        compactionTarget?: "budget" | "threshold";
+        customInstructions?: string;
+        legacyParams?: Record<string, unknown>;
     }): Promise<CompactResult>;
     /**
      * Prepare context for subagent spawn
@@ -128,6 +93,7 @@ export declare class FatHippoContextEngine {
     dispose(): Promise<void>;
     private extractContent;
     private findLastUserMessage;
+    private isRoleMessage;
+    private estimateMessageTokens;
 }
-export {};
 //# sourceMappingURL=engine.d.ts.map
