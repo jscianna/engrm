@@ -1,5 +1,6 @@
 import {
   createMemoryEdge,
+  createGraphEdge,
   getMemoriesByIds,
   getSynthesizedMemoryByClusterId,
   listMemoryEdgesByUser,
@@ -277,7 +278,7 @@ async function synthesizeClusterIfNeeded(
   }
 
   const synthesized = await synthesizeCluster(cluster);
-  return upsertSynthesizedMemory({
+  const savedSynthesis = await upsertSynthesizedMemory({
     id: existing?.id,
     userId,
     synthesis: synthesized.synthesis,
@@ -295,4 +296,27 @@ async function synthesizeClusterIfNeeded(
     accessCount: existing?.accessCount ?? 0,
     createdAt: existing?.createdAt ?? new Date().toISOString(),
   });
+
+  // Create graph edges linking synthesis to source memories (decentralized graph model)
+  // Only create edges for new syntheses or when sources changed
+  if (!existing || sourceIdsKey !== existingIdsKey) {
+    await Promise.all(
+      sourceIds.map((memoryId) =>
+        createGraphEdge({
+          userId,
+          sourceId: savedSynthesis.id,
+          sourceType: "synthesis",
+          targetId: memoryId,
+          targetType: "memory",
+          edgeType: "derives_from",
+          weight: 1.0,
+          metadata: { clusterId: cluster.id, clusterTopic: cluster.topic },
+        }).catch(() => {
+          // Ignore duplicate edge errors (UNIQUE constraint)
+        }),
+      ),
+    );
+  }
+
+  return savedSynthesis;
 }
