@@ -1,0 +1,84 @@
+/**
+ * FatHippo Context Engine Types
+ */
+
+export interface FatHippoConfig {
+  apiKey: string;
+  baseUrl?: string;
+  injectCritical?: boolean;
+  injectLimit?: number;
+  captureUserOnly?: boolean;
+  dreamCycleOnCompact?: boolean;
+  conversationId?: string | null;
+}
+
+export interface Memory {
+  id: string;
+  title: string;
+  content: string;
+  userId: string;
+  memoryType?: string;
+  importanceTier?: "critical" | "high" | "normal" | "low";
+  importance?: number;
+  entities?: string[];
+  createdAt: string;
+  updatedAt: string;
+  accessCount?: number;
+  lastAccessedAt?: string;
+  absorbed?: boolean;
+  absorbedIntoSynthesisId?: string | null;
+}
+
+export interface SearchResult {
+  memory: Memory;
+  score: number;
+  matchType?: "vector" | "bm25" | "hybrid";
+}
+
+export interface CriticalMemoriesResponse {
+  memories: Memory[];
+  syntheses: SynthesizedMemory[];
+}
+
+export interface SynthesizedMemory {
+  id: string;
+  userId: string;
+  title: string;
+  content: string;
+  sourceMemoryIds: string[];
+  theme?: string;
+  createdAt: string;
+}
+
+export interface RememberParams {
+  content: string;
+  title?: string;
+  conversationId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SearchParams {
+  query: string;
+  limit?: number;
+  excludeAbsorbed?: boolean;
+  conversationId?: string;
+}
+
+export interface DreamCycleParams {
+  processCompleted?: boolean;
+  processEphemeral?: boolean;
+  synthesizeCritical?: boolean;
+  applyDecay?: boolean;
+  updateGraph?: boolean;
+}
+
+export interface ProcessingQueueParams {
+  turnId: string;
+  userId: string;
+  tasks: Array<
+    | "extractEntities"
+    | "detectImportance"
+    | "buildRelationships"
+    | "updateAccessPatterns"
+  >;
+}

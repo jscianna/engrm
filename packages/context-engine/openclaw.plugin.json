@@ -1,0 +1,74 @@
+{
+  "id": "fathippo-context-engine",
+  "name": "FatHippo Context Engine",
+  "version": "0.1.0",
+  "kind": "context-engine",
+  "description": "Encrypted agent memory with semantic search, Dream Cycle synthesis, and tiered intelligence",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "type": "string",
+        "description": "FatHippo API key"
+      },
+      "baseUrl": {
+        "type": "string",
+        "description": "FatHippo API base URL",
+        "default": "https://www.fathippo.com/api"
+      },
+      "injectCritical": {
+        "type": "boolean",
+        "description": "Auto-inject critical memories",
+        "default": true
+      },
+      "injectLimit": {
+        "type": "number",
+        "description": "Maximum memories to inject per turn",
+        "default": 20
+      },
+      "captureUserOnly": {
+        "type": "boolean",
+        "description": "Only capture user messages (avoid self-poisoning)",
+        "default": true
+      },
+      "dreamCycleOnCompact": {
+        "type": "boolean",
+        "description": "Run Dream Cycle during compaction instead of lossy summarization",
+        "default": true
+      },
+      "conversationId": {
+        "type": "string",
+        "description": "Scope memories to a specific conversation/project (null = derive from session)"
+      }
+    },
+    "required": ["apiKey"]
+  },
+  "uiHints": {
+    "apiKey": {
+      "label": "API Key",
+      "sensitive": true,
+      "placeholder": "mem_..."
+    },
+    "baseUrl": {
+      "label": "API Base URL",
+      "advanced": true
+    },
+    "injectCritical": {
+      "label": "Inject Critical Memories"
+    },
+    "injectLimit": {
+      "label": "Injection Limit"
+    },
+    "captureUserOnly": {
+      "label": "Capture User Messages Only"
+    },
+    "dreamCycleOnCompact": {
+      "label": "Dream Cycle on Compact"
+    },
+    "conversationId": {
+      "label": "Conversation ID",
+      "advanced": true
+    }
+  }
+}

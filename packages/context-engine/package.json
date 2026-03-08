@@ -1,0 +1,38 @@
+{
+  "name": "@fathippo/context-engine",
+  "version": "0.1.0",
+  "description": "FatHippo context engine for OpenClaw - encrypted agent memory",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "files": [
+    "dist",
+    "openclaw.plugin.json"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "openclaw",
+    "fathippo",
+    "memory",
+    "context-engine",
+    "ai-agent"
+  ],
+  "author": "FatHippo",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jscianna/fathippo.git",
+    "directory": "packages/context-engine"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.3.7"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "@types/node": "^22.0.0"
+  }
+}

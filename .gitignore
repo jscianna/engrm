@@ -79,3 +79,4 @@ generate-pptx.py
 CHATBOT-*.md
 FRONTEND_AUDIT.md
 moa-heuristics-synthesis.md
+packages/context-engine/node_modules
