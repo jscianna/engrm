@@ -93,27 +93,39 @@ export async function backfillFtsIndex(userId?: string): Promise<{ indexed: numb
     await client.execute("DELETE FROM memories_fts");
   }
 
-  // Repopulate from memories table
-  const result = await client.execute({
+  // Fetch memories to index
+  const memories = await client.execute({
     sql: userId
-      ? `INSERT INTO memories_fts(memory_id, user_id, title, entities)
-         SELECT id, user_id, title, 
-           COALESCE(
-             (SELECT GROUP_CONCAT(value, ' ') FROM json_each(COALESCE(entities, entities_json, '[]'))),
-             ''
-           )
-         FROM memories WHERE user_id = ?`
-      : `INSERT INTO memories_fts(memory_id, user_id, title, entities)
-         SELECT id, user_id, title,
-           COALESCE(
-             (SELECT GROUP_CONCAT(value, ' ') FROM json_each(COALESCE(entities, entities_json, '[]'))),
-             ''
-           )
-         FROM memories`,
+      ? `SELECT id, user_id, title, entities, entities_json FROM memories WHERE user_id = ?`
+      : `SELECT id, user_id, title, entities, entities_json FROM memories`,
     args: userId ? [userId] : [],
   });
 
-  return { indexed: result.rowsAffected };
+  // Batch insert into FTS (explicit inserts for Turso compatibility)
+  let indexed = 0;
+  for (const row of memories.rows) {
+    try {
+      // Parse entities JSON
+      const entitiesRaw = (row.entities as string | null) ?? (row.entities_json as string | null) ?? "[]";
+      let entitiesText = "";
+      try {
+        const parsed = JSON.parse(entitiesRaw) as string[];
+        entitiesText = Array.isArray(parsed) ? parsed.join(" ") : "";
+      } catch {
+        entitiesText = "";
+      }
+
+      await client.execute({
+        sql: "INSERT INTO memories_fts(memory_id, user_id, title, entities) VALUES (?, ?, ?, ?)",
+        args: [row.id, row.user_id, row.title, entitiesText],
+      });
+      indexed++;
+    } catch (err) {
+      console.warn(`[FTS] Failed to index memory ${row.id}:`, err);
+    }
+  }
+
+  return { indexed };
 }
 
 // =============================================================================
