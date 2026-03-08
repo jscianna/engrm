@@ -17,6 +17,7 @@ export type ErrorCode =
   | "CONVERSATION_NOT_FOUND"
   | "NAMESPACE_NOT_FOUND"
   | "SESSION_NOT_FOUND"
+  | "SYNTHESIS_NOT_FOUND"
   | "VALIDATION_ERROR"
   | "ENCRYPTION_REQUIRED"
   | "ENCRYPTION_ERROR"
@@ -88,6 +89,11 @@ const ERROR_DETAILS: Record<ErrorCode, { status: number; message: string; userMe
     status: 404,
     message: "Session not found",
     userMessage: "This session doesn't exist. Create it first.",
+  },
+  SYNTHESIS_NOT_FOUND: {
+    status: 404,
+    message: "Synthesis not found",
+    userMessage: "This synthesis doesn't exist or you don't have access.",
   },
   VALIDATION_ERROR: {
     status: 400,

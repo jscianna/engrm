@@ -29,6 +29,31 @@ export type MemoryRelationshipType =
   | "references"
   | "same_entity";
 
+// Decentralized memory graph types
+export type GraphNodeType = "memory" | "synthesis";
+export type GraphEdgeType =
+  | "derives_from"   // synthesis derives from source memories
+  | "relates_to"     // semantic similarity / association
+  | "abstracts"      // higher-level synthesis abstracting lower ones
+  | "contradicts"    // conflicting information
+  | "updates"        // newer info superseding older
+  | "same_entity";   // different memories about same entity
+
+export type GraphEdgeRecord = {
+  id: string;
+  userId: string;
+  sourceId: string;
+  sourceType: GraphNodeType;
+  targetId: string;
+  targetType: GraphNodeType;
+  edgeType: GraphEdgeType;
+  weight: number;
+  bidirectional: boolean;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string | null;
+};
+
 export type MemoryEdgeRecord = {
   id: string;
   userId: string;
@@ -99,4 +124,25 @@ export type MemoryGraphEdge = {
   target: string;
   relationshipType: MemoryRelationshipType;
   weight: number;
+};
+
+export type SynthesizedMemoryRecord = {
+  id: string;
+  userId: string;
+  synthesis: string;
+  title: string;
+  sourceMemoryIds: string[];
+  sourceCount: number;
+  clusterId: string;
+  clusterTopic: string;
+  compressionRatio: number | null;
+  confidence: number | null;
+  synthesizedAt: string;
+  lastValidatedAt: string;
+  stale: boolean;
+  importanceTier: Extract<MemoryImportanceTier, "critical" | "high" | "normal">;
+  accessCount: number;
+  createdAt: string;
+  /** Abstraction level: 1=first-order synthesis, 2+=meta-synthesis (patterns of patterns) */
+  abstractionLevel: number;
 };

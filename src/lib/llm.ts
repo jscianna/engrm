@@ -2,6 +2,10 @@ const OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
 const DEFAULT_MODEL = "gpt-4o-mini";
 const REQUEST_TIMEOUT_MS = 45_000;
 
+type CallLLMOptions = {
+  model?: string;
+};
+
 export class LLMError extends Error {
   status: number;
   code: string;
@@ -13,7 +17,11 @@ export class LLMError extends Error {
   }
 }
 
-export async function callLLM(prompt: string, systemPrompt?: string): Promise<string> {
+export async function callLLM(
+  prompt: string,
+  systemPrompt?: string,
+  options?: CallLLMOptions,
+): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new LLMError(
@@ -34,7 +42,7 @@ export async function callLLM(prompt: string, systemPrompt?: string): Promise<st
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: DEFAULT_MODEL,
+        model: options?.model ?? DEFAULT_MODEL,
         temperature: 0.2,
         response_format: { type: "json_object" },
         messages: [

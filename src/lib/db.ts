@@ -12,6 +12,10 @@ import type {
   MemoryRelationshipType,
   MemorySourceType,
   MemorySyncStatus,
+  SynthesizedMemoryRecord,
+  GraphEdgeRecord,
+  GraphEdgeType,
+  GraphNodeType,
 } from "@/lib/types";
 import { getDb } from "@/lib/turso";
 import { deleteMemoryVector } from "@/lib/qdrant";
@@ -258,10 +262,70 @@ async function ensureInitialized(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_edges_target
     ON memory_edges(target_id);
+
+    CREATE TABLE IF NOT EXISTS synthesized_memories (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      synthesis TEXT NOT NULL,
+      title TEXT NOT NULL,
+      source_memory_ids TEXT NOT NULL,
+      source_count INTEGER NOT NULL,
+      cluster_id TEXT NOT NULL,
+      cluster_topic TEXT NOT NULL,
+      compression_ratio REAL,
+      confidence REAL,
+      synthesized_at TEXT NOT NULL,
+      last_validated_at TEXT NOT NULL,
+      stale INTEGER DEFAULT 0,
+      importance_tier TEXT DEFAULT 'normal',
+      access_count INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_synth_user
+    ON synthesized_memories(user_id);
+
+    CREATE INDEX IF NOT EXISTS idx_synth_cluster
+    ON synthesized_memories(cluster_id);
+
+    CREATE INDEX IF NOT EXISTS idx_synth_importance
+    ON synthesized_memories(user_id, importance_tier);
+
+    -- Decentralized memory graph: polymorphic edges for any-to-any connections
+    -- Enables: memory↔memory, memory↔synthesis, synthesis↔synthesis links
+    CREATE TABLE IF NOT EXISTS graph_edges (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      source_type TEXT NOT NULL,  -- 'memory' | 'synthesis'
+      target_id TEXT NOT NULL,
+      target_type TEXT NOT NULL,  -- 'memory' | 'synthesis'
+      edge_type TEXT NOT NULL,    -- 'derives_from' | 'relates_to' | 'abstracts' | 'contradicts'
+      weight REAL DEFAULT 1.0,
+      bidirectional INTEGER DEFAULT 0,  -- 1 if edge goes both ways
+      metadata_json TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT,
+      UNIQUE(source_id, target_id, edge_type)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_graph_edges_user
+    ON graph_edges(user_id);
+
+    CREATE INDEX IF NOT EXISTS idx_graph_edges_source
+    ON graph_edges(source_id, source_type);
+
+    CREATE INDEX IF NOT EXISTS idx_graph_edges_target
+    ON graph_edges(target_id, target_type);
+
+    CREATE INDEX IF NOT EXISTS idx_graph_edges_type
+    ON graph_edges(user_id, edge_type);
   `);
     await ensureMemoriesColumns(client);
     await ensureApiKeysColumns(client);
     await ensureMemoriesIndexes(client);
+    await ensureSynthesizedMemoriesColumns(client);
+    await ensureSynthesizedMemoriesIndexes(client);
 
       initialized = true;
     } catch (error) {
@@ -386,6 +450,59 @@ async function ensureApiKeysColumns(client: Client): Promise<void> {
     }
     await client.execute(`ALTER TABLE api_keys ADD COLUMN ${column.name} ${column.ddl}`);
   }
+}
+
+async function ensureSynthesizedMemoriesColumns(client: Client): Promise<void> {
+  const requiredColumns: Array<{ name: string; ddl: string }> = [
+    { name: "synthesis", ddl: "TEXT NOT NULL DEFAULT ''" },
+    { name: "title", ddl: "TEXT NOT NULL DEFAULT ''" },
+    { name: "source_memory_ids", ddl: "TEXT NOT NULL DEFAULT '[]'" },
+    { name: "source_count", ddl: "INTEGER NOT NULL DEFAULT 0" },
+    { name: "cluster_id", ddl: "TEXT NOT NULL DEFAULT ''" },
+    { name: "cluster_topic", ddl: "TEXT NOT NULL DEFAULT ''" },
+    { name: "compression_ratio", ddl: "REAL" },
+    { name: "confidence", ddl: "REAL" },
+    { name: "synthesized_at", ddl: "TEXT NOT NULL DEFAULT ''" },
+    { name: "last_validated_at", ddl: "TEXT NOT NULL DEFAULT ''" },
+    { name: "stale", ddl: "INTEGER DEFAULT 0" },
+    { name: "importance_tier", ddl: "TEXT DEFAULT 'normal'" },
+    { name: "access_count", ddl: "INTEGER DEFAULT 0" },
+    { name: "created_at", ddl: "TEXT NOT NULL DEFAULT ''" },
+    // Decentralized graph model: abstraction level (1=first-order synthesis, 2+=meta-synthesis)
+    { name: "abstraction_level", ddl: "INTEGER DEFAULT 1" },
+  ];
+
+  const tableInfo = await client.execute("PRAGMA table_info(synthesized_memories)");
+  const existing = new Set(
+    tableInfo.rows
+      .map((row) => {
+        const record = row as Record<string, unknown>;
+        return typeof record.name === "string" ? record.name : null;
+      })
+      .filter((name): name is string => Boolean(name)),
+  );
+
+  for (const column of requiredColumns) {
+    if (existing.has(column.name)) {
+      continue;
+    }
+    await client.execute(`ALTER TABLE synthesized_memories ADD COLUMN ${column.name} ${column.ddl}`);
+  }
+}
+
+async function ensureSynthesizedMemoriesIndexes(client: Client): Promise<void> {
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_synth_user
+    ON synthesized_memories(user_id)
+  `);
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_synth_cluster
+    ON synthesized_memories(cluster_id)
+  `);
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_synth_importance
+    ON synthesized_memories(user_id, importance_tier)
+  `);
 }
 
 function parseTags(tagsCsv: string): string[] {
@@ -827,6 +944,182 @@ export async function getMemoryGraph(userId: string, limit = 100): Promise<{ nod
   return { nodes, edges };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Graph Edges (Decentralized Memory Web)
+// Polymorphic edges: memory↔memory, memory↔synthesis, synthesis↔synthesis
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type CreateGraphEdgeInput = {
+  userId: string;
+  sourceId: string;
+  sourceType: GraphNodeType;
+  targetId: string;
+  targetType: GraphNodeType;
+  edgeType: GraphEdgeType;
+  weight?: number;
+  bidirectional?: boolean;
+  metadata?: Record<string, unknown>;
+};
+
+function mapGraphEdgeRow(row: Record<string, unknown>): GraphEdgeRecord {
+  return {
+    id: row.id as string,
+    userId: row.user_id as string,
+    sourceId: row.source_id as string,
+    sourceType: row.source_type as GraphNodeType,
+    targetId: row.target_id as string,
+    targetType: row.target_type as GraphNodeType,
+    edgeType: row.edge_type as GraphEdgeType,
+    weight: Number(row.weight ?? 1),
+    bidirectional: Number(row.bidirectional ?? 0) === 1,
+    metadata: parseJsonObject(row.metadata_json),
+    createdAt: row.created_at as string,
+    updatedAt: (row.updated_at as string) || null,
+  };
+}
+
+export async function createGraphEdge(input: CreateGraphEdgeInput): Promise<GraphEdgeRecord> {
+  await ensureInitialized();
+  const client = getDb();
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  await client.execute({
+    sql: `
+      INSERT INTO graph_edges (
+        id, user_id, source_id, source_type, target_id, target_type,
+        edge_type, weight, bidirectional, metadata_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    args: [
+      id,
+      input.userId,
+      input.sourceId,
+      input.sourceType,
+      input.targetId,
+      input.targetType,
+      input.edgeType,
+      input.weight ?? 1.0,
+      input.bidirectional ? 1 : 0,
+      input.metadata ? JSON.stringify(input.metadata) : null,
+      now,
+    ],
+  });
+
+  return {
+    id,
+    userId: input.userId,
+    sourceId: input.sourceId,
+    sourceType: input.sourceType,
+    targetId: input.targetId,
+    targetType: input.targetType,
+    edgeType: input.edgeType,
+    weight: input.weight ?? 1.0,
+    bidirectional: input.bidirectional ?? false,
+    metadata: input.metadata ?? null,
+    createdAt: now,
+    updatedAt: null,
+  };
+}
+
+export async function getGraphEdgesForNode(
+  userId: string,
+  nodeId: string,
+  nodeType: GraphNodeType
+): Promise<{ incoming: GraphEdgeRecord[]; outgoing: GraphEdgeRecord[] }> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const [outgoingResult, incomingResult] = await Promise.all([
+    client.execute({
+      sql: `
+        SELECT * FROM graph_edges
+        WHERE user_id = ? AND source_id = ? AND source_type = ?
+        ORDER BY weight DESC, created_at DESC
+      `,
+      args: [userId, nodeId, nodeType],
+    }),
+    client.execute({
+      sql: `
+        SELECT * FROM graph_edges
+        WHERE user_id = ? AND target_id = ? AND target_type = ?
+        ORDER BY weight DESC, created_at DESC
+      `,
+      args: [userId, nodeId, nodeType],
+    }),
+  ]);
+
+  return {
+    outgoing: outgoingResult.rows.map((r) => mapGraphEdgeRow(r as Record<string, unknown>)),
+    incoming: incomingResult.rows.map((r) => mapGraphEdgeRow(r as Record<string, unknown>)),
+  };
+}
+
+export async function traverseGraphFromNode(
+  userId: string,
+  startId: string,
+  startType: GraphNodeType,
+  maxDepth = 2,
+  maxNodes = 50
+): Promise<GraphEdgeRecord[]> {
+  await ensureInitialized();
+  const client = getDb();
+  
+  const visited = new Set<string>();
+  const edges: GraphEdgeRecord[] = [];
+  const queue: Array<{ id: string; type: GraphNodeType; depth: number }> = [
+    { id: startId, type: startType, depth: 0 },
+  ];
+
+  while (queue.length > 0 && edges.length < maxNodes) {
+    const current = queue.shift()!;
+    const nodeKey = `${current.type}:${current.id}`;
+    
+    if (visited.has(nodeKey) || current.depth > maxDepth) continue;
+    visited.add(nodeKey);
+
+    const { outgoing, incoming } = await getGraphEdgesForNode(userId, current.id, current.type);
+    
+    for (const edge of [...outgoing, ...incoming]) {
+      if (edges.length >= maxNodes) break;
+      edges.push(edge);
+      
+      // Queue connected nodes for next depth
+      if (current.depth < maxDepth) {
+        const nextId = edge.sourceId === current.id ? edge.targetId : edge.sourceId;
+        const nextType = edge.sourceId === current.id ? edge.targetType : edge.sourceType;
+        queue.push({ id: nextId, type: nextType, depth: current.depth + 1 });
+      }
+    }
+  }
+
+  return edges;
+}
+
+export async function deleteGraphEdge(userId: string, edgeId: string): Promise<boolean> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `DELETE FROM graph_edges WHERE id = ? AND user_id = ?`,
+    args: [edgeId, userId],
+  });
+  return (result.rowsAffected ?? 0) > 0;
+}
+
+export async function updateGraphEdgeWeight(
+  userId: string,
+  edgeId: string,
+  weight: number
+): Promise<boolean> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `UPDATE graph_edges SET weight = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+    args: [weight, new Date().toISOString(), edgeId, userId],
+  });
+  return (result.rowsAffected ?? 0) > 0;
+}
+
 export async function getDashboardStatsByUser(userId: string): Promise<MemoryDashboardStats> {
   await ensureInitialized();
   const client = getDb();
@@ -903,6 +1196,38 @@ function parseJsonStringArray(input: unknown): string[] {
   }
 
   return [];
+}
+
+function mapSynthesizedMemoryRow(row: Record<string, unknown>): SynthesizedMemoryRecord {
+  const userId = row.user_id as string;
+  const storedSynthesis = row.synthesis as string;
+  return {
+    id: row.id as string,
+    userId,
+    synthesis: looksLikeOpaqueEncryptedPayload(storedSynthesis)
+      ? decryptMemoryContent(storedSynthesis, userId)
+      : storedSynthesis,
+    title: row.title as string,
+    sourceMemoryIds: parseJsonStringArray(row.source_memory_ids),
+    sourceCount: Number(row.source_count ?? 0),
+    clusterId: row.cluster_id as string,
+    clusterTopic: row.cluster_topic as string,
+    compressionRatio:
+      row.compression_ratio === null || typeof row.compression_ratio === "undefined"
+        ? null
+        : Number(row.compression_ratio),
+    confidence:
+      row.confidence === null || typeof row.confidence === "undefined"
+        ? null
+        : Number(row.confidence),
+    synthesizedAt: row.synthesized_at as string,
+    lastValidatedAt: row.last_validated_at as string,
+    stale: Number(row.stale ?? 0) === 1,
+    importanceTier: ((row.importance_tier as SynthesizedMemoryRecord["importanceTier"]) ?? "normal"),
+    accessCount: Number(row.access_count ?? 0),
+    createdAt: row.created_at as string,
+    abstractionLevel: Number(row.abstraction_level ?? 1),
+  };
 }
 
 export type CreateMemoryEdgeInput = {
@@ -1685,6 +2010,207 @@ export async function getAgentMemoryById(userId: string, id: string): Promise<Ag
   });
   const row = result.rows[0] as Record<string, unknown> | undefined;
   return row ? mapAgentMemoryRow(row) : null;
+}
+
+export async function listSynthesizedMemoriesByUser(
+  userId: string,
+  limit = 100,
+): Promise<SynthesizedMemoryRecord[]> {
+  await ensureInitialized();
+  const client = getDb();
+  const boundedLimit = Math.max(1, Math.min(limit, 500));
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, synthesis, title, source_memory_ids, source_count, cluster_id, cluster_topic,
+             compression_ratio, confidence, synthesized_at, last_validated_at, stale,
+             importance_tier, access_count, created_at
+      FROM synthesized_memories
+      WHERE user_id = ?
+      ORDER BY synthesized_at DESC, created_at DESC
+      LIMIT ?
+    `,
+    args: [userId, boundedLimit],
+  });
+
+  return result.rows.map((row) => mapSynthesizedMemoryRow(row as Record<string, unknown>));
+}
+
+export async function getSynthesizedMemoryById(
+  userId: string,
+  id: string,
+): Promise<SynthesizedMemoryRecord | null> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, synthesis, title, source_memory_ids, source_count, cluster_id, cluster_topic,
+             compression_ratio, confidence, synthesized_at, last_validated_at, stale,
+             importance_tier, access_count, created_at
+      FROM synthesized_memories
+      WHERE user_id = ? AND id = ?
+      LIMIT 1
+    `,
+    args: [userId, id],
+  });
+
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  return row ? mapSynthesizedMemoryRow(row) : null;
+}
+
+export async function getSynthesizedMemoryByClusterId(
+  userId: string,
+  clusterId: string,
+): Promise<SynthesizedMemoryRecord | null> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, synthesis, title, source_memory_ids, source_count, cluster_id, cluster_topic,
+             compression_ratio, confidence, synthesized_at, last_validated_at, stale,
+             importance_tier, access_count, created_at
+      FROM synthesized_memories
+      WHERE user_id = ? AND cluster_id = ?
+      ORDER BY synthesized_at DESC
+      LIMIT 1
+    `,
+    args: [userId, clusterId],
+  });
+
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  return row ? mapSynthesizedMemoryRow(row) : null;
+}
+
+export async function upsertSynthesizedMemory(params: {
+  id?: string;
+  userId: string;
+  synthesis: string;
+  title: string;
+  sourceMemoryIds: string[];
+  sourceCount: number;
+  clusterId: string;
+  clusterTopic: string;
+  compressionRatio?: number | null;
+  confidence?: number | null;
+  synthesizedAt?: string;
+  lastValidatedAt?: string;
+  stale?: boolean;
+  importanceTier?: SynthesizedMemoryRecord["importanceTier"];
+  accessCount?: number;
+  createdAt?: string;
+}): Promise<SynthesizedMemoryRecord> {
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+  const id = params.id ?? `synth_${crypto.randomUUID().replaceAll("-", "")}`;
+  const synthesis = encryptMemoryContent(params.synthesis, params.userId);
+  const sourceMemoryIdsJson = JSON.stringify(params.sourceMemoryIds);
+
+  await client.execute({
+    sql: `
+      INSERT INTO synthesized_memories (
+        id, user_id, synthesis, title, source_memory_ids, source_count, cluster_id, cluster_topic,
+        compression_ratio, confidence, synthesized_at, last_validated_at, stale,
+        importance_tier, access_count, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        synthesis = excluded.synthesis,
+        title = excluded.title,
+        source_memory_ids = excluded.source_memory_ids,
+        source_count = excluded.source_count,
+        cluster_id = excluded.cluster_id,
+        cluster_topic = excluded.cluster_topic,
+        compression_ratio = excluded.compression_ratio,
+        confidence = excluded.confidence,
+        synthesized_at = excluded.synthesized_at,
+        last_validated_at = excluded.last_validated_at,
+        stale = excluded.stale,
+        importance_tier = excluded.importance_tier,
+        access_count = excluded.access_count
+    `,
+    args: [
+      id,
+      params.userId,
+      synthesis,
+      params.title,
+      sourceMemoryIdsJson,
+      params.sourceCount,
+      params.clusterId,
+      params.clusterTopic,
+      params.compressionRatio ?? null,
+      params.confidence ?? null,
+      params.synthesizedAt ?? now,
+      params.lastValidatedAt ?? now,
+      params.stale ? 1 : 0,
+      params.importanceTier ?? "normal",
+      params.accessCount ?? 0,
+      params.createdAt ?? now,
+    ],
+  });
+
+  const record = await getSynthesizedMemoryById(params.userId, id);
+  if (!record) {
+    throw new Error("Failed to upsert synthesized memory");
+  }
+  return record;
+}
+
+export async function markSynthesizedMemoryStale(
+  userId: string,
+  id: string,
+  stale: boolean,
+): Promise<void> {
+  await ensureInitialized();
+  const client = getDb();
+  await client.execute({
+    sql: `
+      UPDATE synthesized_memories
+      SET stale = ?, last_validated_at = ?
+      WHERE user_id = ? AND id = ?
+    `,
+    args: [stale ? 1 : 0, new Date().toISOString(), userId, id],
+  });
+}
+
+export async function incrementSynthesizedMemoryAccess(
+  userId: string,
+  id: string,
+): Promise<void> {
+  await ensureInitialized();
+  const client = getDb();
+  await client.execute({
+    sql: `
+      UPDATE synthesized_memories
+      SET access_count = access_count + 1
+      WHERE user_id = ? AND id = ?
+    `,
+    args: [userId, id],
+  });
+}
+
+export async function validateSynthesizedMemories(userId: string): Promise<SynthesizedMemoryRecord[]> {
+  await ensureInitialized();
+  const syntheses = await listSynthesizedMemoriesByUser(userId, 500);
+  const touched: SynthesizedMemoryRecord[] = [];
+
+  for (const synthesis of syntheses) {
+    const sourceMemories = await getAgentMemoriesByIds({
+      userId,
+      ids: synthesis.sourceMemoryIds,
+    });
+    const liveIds = new Set(sourceMemories.map((memory) => memory.id));
+    const missingSource = synthesis.sourceMemoryIds.some((id) => !liveIds.has(id));
+    const sourceCountMismatch = sourceMemories.length !== synthesis.sourceMemoryIds.length;
+    const shouldBeStale = synthesis.stale || missingSource || sourceCountMismatch;
+
+    await markSynthesizedMemoryStale(userId, synthesis.id, shouldBeStale);
+    touched.push({
+      ...synthesis,
+      stale: shouldBeStale,
+      lastValidatedAt: new Date().toISOString(),
+    });
+  }
+
+  return touched;
 }
 
 export async function getAgentMemoriesByIds(params: {

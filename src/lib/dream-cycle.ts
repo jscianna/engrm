@@ -1,5 +1,18 @@
-import { createMemoryEdge, getMemoriesByIds, listMemoryEdgesByUser, listMemoryRecordsByUser } from "@/lib/db";
+import {
+  createMemoryEdge,
+  getMemoriesByIds,
+  getSynthesizedMemoryByClusterId,
+  listMemoryEdgesByUser,
+  listMemoryRecordsByUser,
+  listSynthesizedMemoriesByUser,
+  markSynthesizedMemoryStale,
+  upsertSynthesizedMemory,
+  validateSynthesizedMemories,
+} from "@/lib/db";
 import { embedText } from "@/lib/embeddings";
+import type { SynthesizedMemoryRecord } from "@/lib/types";
+import { clusterMemories, type MemoryCluster } from "@/lib/synthesis/clustering";
+import { synthesizeCluster } from "@/lib/synthesis/synthesize";
 import { semanticSearchVectors } from "@/lib/vector";
 
 export type DreamBondSuggestion = {
@@ -30,6 +43,7 @@ export type DreamCycleResult = {
   bonds: DreamBondSuggestion[];
   promotions: DreamPromotionSuggestion[];
   decay: DreamDecayPoint[];
+  syntheses: SynthesizedMemoryRecord[];
 };
 
 function dayDiff(createdAt: string): number {
@@ -205,10 +219,80 @@ export async function runDreamCycle(userId: string): Promise<DreamCycleResult> {
     };
   });
 
+  const clusters = await clusterMemories(userId);
+  const currentClusterIds = new Set(clusters.map((cluster) => cluster.id));
+  const existingSyntheses = await listSynthesizedMemoriesByUser(userId, 500);
+
+  await Promise.all(
+    existingSyntheses.map(async (synthesis) => {
+      const currentCluster = clusters.find((cluster) => cluster.id === synthesis.clusterId);
+      const currentIds = currentCluster?.memories.map((memory) => memory.id).sort() ?? [];
+      const previousIds = synthesis.sourceMemoryIds.slice().sort();
+      const sourceSetChanged =
+        currentIds.length === 0 ||
+        currentIds.length !== previousIds.length ||
+        currentIds.some((id, index) => id !== previousIds[index]);
+
+      if (!currentClusterIds.has(synthesis.clusterId) || sourceSetChanged) {
+        await markSynthesizedMemoryStale(userId, synthesis.id, true);
+      }
+    }),
+  );
+
+  const syntheses: SynthesizedMemoryRecord[] = [];
+  for (const cluster of clusters) {
+    const synthesized = await synthesizeClusterIfNeeded(userId, cluster);
+    if (synthesized) {
+      syntheses.push(synthesized);
+    }
+  }
+
+  await validateSynthesizedMemories(userId);
+
   return {
     generatedAt: new Date().toISOString(),
     bonds,
     promotions,
     decay,
+    syntheses,
   };
+}
+
+async function synthesizeClusterIfNeeded(
+  userId: string,
+  cluster: MemoryCluster,
+): Promise<SynthesizedMemoryRecord | null> {
+  if (cluster.memories.length < 3) {
+    return null;
+  }
+
+  const existing = await getSynthesizedMemoryByClusterId(userId, cluster.id);
+  const sourceIds = cluster.memories.map((memory) => memory.id);
+  const sourceIdsKey = sourceIds.slice().sort().join(":");
+  const existingIdsKey = existing?.sourceMemoryIds.slice().sort().join(":") ?? "";
+  const needsRefresh = !existing || existing.stale || sourceIdsKey !== existingIdsKey;
+
+  if (!needsRefresh) {
+    return existing;
+  }
+
+  const synthesized = await synthesizeCluster(cluster);
+  return upsertSynthesizedMemory({
+    id: existing?.id,
+    userId,
+    synthesis: synthesized.synthesis,
+    title: synthesized.title,
+    sourceMemoryIds: sourceIds,
+    sourceCount: cluster.memories.length,
+    clusterId: cluster.id,
+    clusterTopic: cluster.topic,
+    compressionRatio: synthesized.compressionRatio,
+    confidence: synthesized.confidence,
+    synthesizedAt: new Date().toISOString(),
+    lastValidatedAt: new Date().toISOString(),
+    stale: false,
+    importanceTier: existing?.importanceTier ?? "normal",
+    accessCount: existing?.accessCount ?? 0,
+    createdAt: existing?.createdAt ?? new Date().toISOString(),
+  });
 }
