@@ -191,6 +191,12 @@ export default async function MemoryAnalyticsPage({
                     </Badge>
                   </div>
                 ))}
+                <Link
+                  href="/dashboard/browser?sort=accessCount"
+                  className="mt-3 block text-center text-sm text-cyan-400 hover:text-cyan-300"
+                >
+                  View all memories →
+                </Link>
               </div>
             )}
           </CardContent>

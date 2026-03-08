@@ -2,10 +2,10 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { auth } from "@clerk/nextjs/server";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { MemoryDeleteButton } from "@/components/memory-delete-button";
+import { MemoryDetailBackButton } from "@/components/memory-detail-back-button";
 import { MemoryRelationships } from "@/components/memory-relationships";
 import { MemoryEditForm } from "@/components/memory-edit-form";
 import { getCachedMemory, getCachedRelatedMemories } from "@/lib/memories";
@@ -71,12 +71,7 @@ export default async function MemoryDetailPage({
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-5">
-      <Button asChild variant="ghost" className="text-zinc-400 hover:text-zinc-100">
-        <Link href="/dashboard">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back
-        </Link>
-      </Button>
+      <MemoryDetailBackButton />
 
       <Card className="border-zinc-800 bg-zinc-900/70">
         <CardHeader className="space-y-3">
@@ -131,12 +126,15 @@ export default async function MemoryDetailPage({
           <div>
             <div className="mb-2 flex items-center justify-between">
               <p className="text-xs uppercase tracking-wide text-zinc-500">Memory Content</p>
-              <MemoryEditForm 
-                memoryId={memory.id} 
-                initialTitle={memory.title} 
-                initialText={memory.contentText}
-                isEncrypted={memory.isEncrypted}
-              />
+              <div className="flex items-center gap-2">
+                <MemoryEditForm
+                  memoryId={memory.id}
+                  initialTitle={memory.title}
+                  initialText={memory.contentText}
+                  isEncrypted={memory.isEncrypted}
+                />
+                <MemoryDeleteButton memoryId={memory.id} />
+              </div>
             </div>
             <pre className="max-h-[460px] overflow-auto whitespace-pre-wrap rounded-md border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-200">
               {memory.contentText}

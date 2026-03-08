@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Pencil, Save, Trash2, X } from "lucide-react";
+import { Loader2, Pencil, Save, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,6 @@ export function MemoryEditForm({ memoryId, initialTitle, initialText, isEncrypte
   const [title, setTitle] = useState(initialTitle);
   const [text, setText] = useState(initialText);
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
 
   async function handleSave() {
     if (isEncrypted) {
@@ -56,40 +55,6 @@ export function MemoryEditForm({ memoryId, initialTitle, initialText, isEncrypte
       toast.error(error instanceof Error ? error.message : "Failed to update");
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function handleDelete() {
-    const confirmed = window.confirm("Are you sure? This cannot be undone.");
-    if (!confirmed) {
-      return;
-    }
-
-    setDeleting(true);
-    try {
-      const response = await fetch(`/api/memories/${memoryId}`, {
-        method: "DELETE",
-      });
-
-      const textResponse = await response.text();
-      let data;
-      try {
-        data = textResponse ? JSON.parse(textResponse) : {};
-      } catch {
-        data = {};
-      }
-
-      if (!response.ok) {
-        throw new Error(data.error || `Failed to delete (${response.status})`);
-      }
-
-      toast.success("Memory deleted");
-      router.push("/dashboard");
-      router.refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to delete");
-    } finally {
-      setDeleting(false);
     }
   }
 
@@ -140,20 +105,12 @@ export function MemoryEditForm({ memoryId, initialTitle, initialText, isEncrypte
       </div>
 
       <div className="flex justify-end gap-2">
-        <Button variant="destructive" onClick={handleDelete} disabled={saving || deleting}>
-          {deleting ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Trash2 className="mr-2 h-4 w-4" />
-          )}
-          Delete
-        </Button>
-        <Button variant="ghost" onClick={() => setIsEditing(false)} disabled={saving || deleting}>
+        <Button variant="ghost" onClick={() => setIsEditing(false)} disabled={saving}>
           Cancel
         </Button>
         <Button
           onClick={handleSave}
-          disabled={saving || deleting}
+          disabled={saving}
           className="bg-cyan-600 hover:bg-cyan-500"
         >
           {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}

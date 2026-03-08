@@ -53,6 +53,23 @@ export interface ScoringResult {
 
 const STORAGE_THRESHOLD = 6.0;
 
+const REJECTION_PATTERNS = [
+  /^(clawdaddy@|npm error|npm warn|\$\s)/im,
+  /[~$#%>]\s*$/m,
+  /^(Conversation info|Sender) \(untrusted metadata\):/im,
+  /(error code|EUSAGE|stack trace|debug-.*\.log)/i,
+  /^\s*\{\s*"message_id":/i,
+];
+
+function shouldRejectMemoryContent(text: string): boolean {
+  const normalized = text.trim();
+  if (!normalized) {
+    return true;
+  }
+
+  return REJECTION_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
 // Type multipliers
 const TYPE_MULTIPLIERS: Record<MemoryType, number> = {
   constraint: 1.3,
@@ -403,6 +420,28 @@ function detectMemoryType(text: string): MemoryType {
 // =============================================================================
 
 export function scoreMemory(text: string, context: ScoringContext = {}): ScoringResult {
+  if (shouldRejectMemoryContent(text)) {
+    return {
+      score: 0,
+      type: 'fact',
+      signals: ['rejected_junk'],
+      entities: [],
+      shouldStore: false,
+      breakdown: {
+        explicit: 0,
+        entityDensity: 0,
+        emotional: 0,
+        decision: 0,
+        correction: 0,
+        temporal: 0,
+        causal: 0,
+        completion: 0,
+        context: 0,
+        typeMultiplier: 0,
+      },
+    };
+  }
+
   const signals: string[] = [];
   const entities = extractEntities(text);
   

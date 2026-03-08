@@ -480,7 +480,7 @@ export async function getMemoryAnalyticsDashboard(
       FROM memories
       WHERE user_id = ? AND archived_at IS NULL
       ORDER BY access_count DESC, created_at DESC
-      LIMIT 5
+      LIMIT 10
     `,
     args: [userId],
   });
