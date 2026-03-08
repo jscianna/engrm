@@ -206,7 +206,7 @@ function OpenClawCodePreview() {
             <span className={colors.command}>openclaw</span>{" "}
             <span className={colors.subcommand}>plugins</span>{" "}
             <span className={colors.action}>install</span>{" "}
-            <span className={colors.package}>@fathippo/memory</span>
+            <span className={colors.package}>@fathippo/context-engine</span>
           </motion.div>
           
           {/* Empty line */}
@@ -222,9 +222,9 @@ function OpenClawCodePreview() {
             <span className={colors.command}>openclaw</span>{" "}
             <span className={colors.subcommand}>config</span>{" "}
             <span className={colors.action}>set</span>{" "}
-            <span className={colors.key}>plugins.slots.memory</span>
+            <span className={colors.key}>plugins.slots.contextEngine</span>
             <span className={colors.equals}>=</span>
-            <span className={colors.value}>fathippo-memory</span>
+            <span className={colors.value}>fathippo-context-engine</span>
           </motion.div>
           
           {/* Line 5: Config apiKey */}
@@ -232,7 +232,7 @@ function OpenClawCodePreview() {
             <span className={colors.command}>openclaw</span>{" "}
             <span className={colors.subcommand}>config</span>{" "}
             <span className={colors.action}>set</span>{" "}
-            <span className={colors.key}>plugins.entries.fathippo-memory.config.apiKey</span>
+            <span className={colors.key}>plugins.entries.fathippo-context-engine.config.apiKey</span>
             <span className={colors.equals}>=</span>
             <span className={colors.value}>mem_xxx</span>
           </motion.div>
@@ -575,7 +575,7 @@ export default function Home() {
               className="mb-6 border-[#E5E7EB] bg-white text-[#6B7280] font-medium"
             >
               <Sparkles className="mr-1.5 h-3 w-3 text-[#0070F3]" />
-              The memory plugin for OpenClaw
+              OpenClaw's pluggable memory layer
             </Badge>
           </motion.div>
 

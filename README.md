@@ -5,21 +5,21 @@
 <h1 align="center">FatHippo</h1>
 
 <p align="center">
-  <strong>Memory that just works.</strong><br/>
+  <strong>OpenClaw's pluggable memory layer.</strong><br/>
   Persistent, encrypted memory infrastructure for AI agents.
 </p>
 
 <p align="center">
   <a href="https://fathippo.ai">Website</a> •
   <a href="https://fathippo.ai/docs">Documentation</a> •
-  <a href="https://www.npmjs.com/package/@fathippo/openclaw-memory">OpenClaw Plugin</a>
+  <a href="https://www.npmjs.com/package/@fathippo/context-engine">Context Engine</a>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License" />
   <img src="https://img.shields.io/badge/typescript-5.0+-blue.svg" alt="TypeScript" />
   <img src="https://img.shields.io/badge/next.js-16+-black.svg" alt="Next.js" />
-  <img src="https://img.shields.io/npm/v/@fathippo/openclaw-memory.svg" alt="npm" />
+  <img src="https://img.shields.io/npm/v/@fathippo/context-engine.svg" alt="npm" />
 </p>
 
 ---
@@ -41,23 +41,22 @@ Every AI agent wakes up with amnesia. FatHippo fixes that.
 The fastest way to add memory to your AI agent:
 
 ```bash
-# Install the plugin
-openclaw plugins install @fathippo/openclaw-memory
+# Install the context engine
+openclaw plugins install @fathippo/context-engine
 
-# Set your API key
-openclaw config set plugins.entries.memory-fathippo.config.apiKey=mem_xxx
-
-# Enable as memory provider
-openclaw config set plugins.slots.memory=memory-fathippo
+# Configure as context engine
+openclaw config set plugins.slots.contextEngine=fathippo-context-engine
+openclaw config set plugins.entries.fathippo-context-engine.config.apiKey=mem_xxx
 
 # Done. Memory is now automatic.
 ```
 
 Your agent now:
-- ✅ Auto-recalls relevant context at conversation start
+- ✅ Injects relevant memories every turn (not just session start)
 - ✅ Auto-captures insights, preferences, decisions
+- ✅ Runs Dream Cycle on compaction (synthesis, not lossy summarization)
+- ✅ Inherits context to spawned subagents
 - ✅ Works across all chat surfaces
-- ✅ Survives restarts and model switches
 
 ---
 
@@ -285,7 +284,7 @@ Apache 2.0 — see [LICENSE](LICENSE) for details.
 ## Links
 
 - **Website:** [fathippo.ai](https://fathippo.ai)
-- **npm:** [@fathippo/openclaw-memory](https://www.npmjs.com/package/@fathippo/openclaw-memory)
+- **npm:** [@fathippo/context-engine](https://www.npmjs.com/package/@fathippo/context-engine)
 - **Twitter:** [@scianna](https://x.com/scianna)
 
 ---
