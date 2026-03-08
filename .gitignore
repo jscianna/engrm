@@ -81,3 +81,10 @@ FRONTEND_AUDIT.md
 moa-heuristics-synthesis.md
 packages/context-engine/node_modules
 packages/mcp-server/node_modules
+
+# Internal review docs
+CONTEXT_REVIEW.md
+CODEBASE_REVIEW.md
+VAULT_SPEC.md
+*_REVIEW.md
+*_SPEC.md
