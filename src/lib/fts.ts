@@ -27,14 +27,14 @@ export async function ensureFtsInitialized(): Promise<void> {
 
   await client.executeMultiple(`
     -- FTS5 virtual table for keyword search
-    -- Indexed fields: title, entities (space-separated), user_id (for filtering)
+    -- Indexed fields: title, entities (space-separated)
+    -- UNINDEXED: memory_id, user_id (stored but not searchable)
+    -- NOT using contentless mode so we can retrieve memory_id
     CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
       memory_id UNINDEXED,
       user_id UNINDEXED,
       title,
-      entities,
-      content='',
-      contentless_delete=1
+      entities
     );
 
     -- Trigger: Insert into FTS when memory is created
@@ -80,18 +80,20 @@ export async function ensureFtsInitialized(): Promise<void> {
  * Run once after adding FTS to populate index for pre-existing data
  */
 export async function backfillFtsIndex(userId?: string): Promise<{ indexed: number }> {
-  await ensureFtsInitialized();
   const client = getDb();
 
-  // Clear existing FTS entries for user (or all if no userId)
-  if (userId) {
-    await client.execute({
-      sql: "DELETE FROM memories_fts WHERE user_id = ?",
-      args: [userId],
-    });
-  } else {
-    await client.execute("DELETE FROM memories_fts");
+  // Drop and recreate FTS table to handle schema changes
+  try {
+    await client.execute("DROP TABLE IF EXISTS memories_fts");
+  } catch {
+    // Table might not exist
   }
+  
+  // Reset init flag and reinitialize
+  ftsInitialized = false;
+  await ensureFtsInitialized();
+
+  // No need to clear - we just recreated the table
 
   // Fetch memories to index
   const memories = await client.execute({
