@@ -19,27 +19,15 @@
  */
 
 import { FatHippoContextEngine } from "./engine.js";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { FatHippoConfig } from "./types.js";
-
-// OpenClaw plugin API type (minimal interface)
-interface PluginAPI {
-  registerContextEngine: (
-    id: string,
-    factory: () => FatHippoContextEngine | Promise<FatHippoContextEngine>
-  ) => void;
-  getPluginConfig: () => FatHippoConfig | undefined;
-  logger?: {
-    info: (msg: string) => void;
-    error: (msg: string) => void;
-  };
-}
 
 /**
  * Plugin entry point
  */
-export default function register(api: PluginAPI): void {
+export default function register(api: OpenClawPluginApi): void {
   api.registerContextEngine("fathippo-context-engine", () => {
-    const config = api.getPluginConfig();
+    const config = api.pluginConfig as FatHippoConfig | undefined;
 
     if (!config?.apiKey) {
       throw new Error(

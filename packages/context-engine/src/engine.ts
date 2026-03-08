@@ -5,6 +5,18 @@
  */
 
 import { FatHippoClient } from "./api/client.js";
+import type {
+  AssembleResult,
+  BootstrapResult,
+  CompactResult,
+  ContextEngine,
+  ContextEngineInfo,
+  IngestBatchResult,
+  IngestResult,
+  SubagentEndReason,
+  SubagentSpawnPreparation,
+} from "openclaw/plugin-sdk";
+import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { FatHippoConfig, Memory, SynthesizedMemory } from "./types.js";
 import {
   formatMemoriesForInjection,
@@ -17,64 +29,10 @@ import {
   sanitizeContent,
 } from "./utils/filtering.js";
 
-// Types from OpenClaw's plugin SDK (we can't import directly, so we define compatible types)
-interface AgentMessage {
-  id?: string;
-  role: "user" | "assistant" | "system" | "tool";
-  content?: string | unknown;
-  text?: string;
-  name?: string;
-  timestamp?: string;
-}
-
-interface ContextEngineInfo {
-  id: string;
-  name: string;
-  version?: string;
-  ownsCompaction?: boolean;
-}
-
-interface BootstrapResult {
-  bootstrapped: boolean;
-  importedMessages?: number;
-  reason?: string;
-}
-
-interface IngestResult {
-  ingested: boolean;
-}
-
-interface IngestBatchResult {
-  ingestedCount: number;
-}
-
-interface AssembleResult {
-  messages: AgentMessage[];
-  estimatedTokens: number;
-  systemPromptAddition?: string;
-}
-
-interface CompactResult {
-  ok: boolean;
-  compacted: boolean;
-  reason?: string;
-  result?: {
-    summary?: string;
-    tokensBefore: number;
-    tokensAfter?: number;
-  };
-}
-
-interface SubagentSpawnPreparation {
-  rollback: () => void | Promise<void>;
-}
-
-type SubagentEndReason = "deleted" | "completed" | "swept" | "released";
-
 /**
  * FatHippo Context Engine implementation
  */
-export class FatHippoContextEngine {
+export class FatHippoContextEngine implements ContextEngine {
   readonly info: ContextEngineInfo = {
     id: "fathippo-context-engine",
     name: "FatHippo Context Engine",
@@ -142,7 +100,10 @@ export class FatHippoContextEngine {
     }
 
     // Only capture user messages (configurable)
-    if (this.config.captureUserOnly !== false && params.message.role !== "user") {
+    if (
+      this.config.captureUserOnly !== false &&
+      (!this.isRoleMessage(params.message) || params.message.role !== "user")
+    ) {
       return { ingested: false };
     }
 
@@ -207,7 +168,10 @@ export class FatHippoContextEngine {
     sessionFile: string;
     messages: AgentMessage[];
     prePromptMessageCount: number;
+    autoCompactionSummary?: string;
     isHeartbeat?: boolean;
+    tokenBudget?: number;
+    legacyCompactionParams?: Record<string, unknown>;
   }): Promise<void> {
     // Don't process heartbeat turns
     if (params.isHeartbeat) return;
@@ -277,7 +241,8 @@ export class FatHippoContextEngine {
 
     // Format memories for injection
     const memoryBlock = formatMemoriesForInjection(memories, syntheses);
-    const tokens = estimateTokens(memoryBlock);
+    const tokens =
+      estimateTokens(memoryBlock) + this.estimateMessageTokens(params.messages);
 
     return {
       messages: params.messages,
@@ -294,6 +259,10 @@ export class FatHippoContextEngine {
     sessionFile: string;
     tokenBudget?: number;
     force?: boolean;
+    currentTokenCount?: number;
+    compactionTarget?: "budget" | "threshold";
+    customInstructions?: string;
+    legacyParams?: Record<string, unknown>;
   }): Promise<CompactResult> {
     if (this.config.dreamCycleOnCompact === false) {
       // Fall back to default compaction
@@ -365,15 +334,20 @@ export class FatHippoContextEngine {
   // --- Helper methods ---
 
   private extractContent(message: AgentMessage): string | null {
-    if (typeof message.content === "string") {
-      return message.content;
+    const msg = message as {
+      content?: unknown;
+      text?: unknown;
+    };
+
+    if (typeof msg.content === "string") {
+      return msg.content;
     }
-    if (typeof message.text === "string") {
-      return message.text;
+    if (typeof msg.text === "string") {
+      return msg.text;
     }
-    if (Array.isArray(message.content)) {
+    if (Array.isArray(msg.content)) {
       // Handle multi-part content (text blocks)
-      const textParts = message.content
+      const textParts = msg.content
         .filter((p): p is { type: "text"; text: string } =>
           typeof p === "object" && p !== null && "type" in p && p.type === "text"
         )
@@ -386,10 +360,29 @@ export class FatHippoContextEngine {
   private findLastUserMessage(messages: AgentMessage[]): string | null {
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
-      if (msg.role === "user") {
+      if (this.isRoleMessage(msg) && msg.role === "user") {
         return this.extractContent(msg);
       }
     }
     return null;
+  }
+
+  private isRoleMessage(
+    message: AgentMessage
+  ): message is AgentMessage & { role: string } {
+    return (
+      typeof message === "object" &&
+      message !== null &&
+      "role" in message &&
+      typeof (message as { role?: unknown }).role === "string"
+    );
+  }
+
+  private estimateMessageTokens(messages: AgentMessage[]): number {
+    const plainText = messages
+      .map((message) => this.extractContent(message))
+      .filter((content): content is string => Boolean(content))
+      .join("\n");
+    return estimateTokens(plainText);
   }
 }
