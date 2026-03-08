@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 import { getDb } from "@/lib/turso";
 
+// TODO: public_token exists in storage, but the public chatbot access flow is not finished yet.
+
 type JsonValue = Record<string, unknown> | Array<unknown> | string | number | boolean | null;
 
 export type ChatbotRecord = {
@@ -172,6 +174,8 @@ export async function ensureChatbotTables(): Promise<void> {
   }
 
   const client = getDb();
+  // TODO: This raw bootstrap DDL overlaps with Drizzle schema definitions in src/lib/db/schema.ts.
+  // Pick a single schema source of truth to avoid future drift.
   await client.executeMultiple(`
     CREATE TABLE IF NOT EXISTS chatbots (
       id TEXT PRIMARY KEY,

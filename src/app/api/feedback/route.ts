@@ -6,6 +6,7 @@
  */
 
 import { NextResponse } from "next/server";
+import crypto from "node:crypto";
 import { getDb } from "@/lib/turso";
 import { auth } from "@clerk/nextjs/server";
 

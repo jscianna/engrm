@@ -84,83 +84,89 @@ export async function checkRateLimit(
   const now = new Date();
   const nowIso = now.toISOString();
   const oneMinuteAgo = new Date(now.getTime() - 60 * 1000).toISOString();
-
-  // Atomic: Insert the usage record first, then check limits
-  // This prevents race conditions where multiple requests slip through
   const id = crypto.randomUUID();
-  
-  // Use a transaction for atomicity
-  const batch = await client.batch([
-    // 1. Insert the new usage record
-    {
+  const today = nowIso.slice(0, 10);
+  const thisMonth = nowIso.slice(0, 7);
+  const tx = await client.transaction("write");
+
+  try {
+    await tx.execute({
+      sql: `
+        INSERT INTO usage_stats (
+          user_id, memories_this_month, storage_bytes, api_calls_today,
+          api_calls_this_month, last_reset_day, last_reset_month, updated_at
+        )
+        VALUES (?, 0, 0, 0, 0, ?, ?, ?)
+        ON CONFLICT(user_id) DO NOTHING
+      `,
+      args: [userId, today, thisMonth, nowIso],
+    });
+
+    const [minuteResult, statsResult] = await Promise.all([
+      tx.execute({
+        sql: `SELECT COUNT(*) as count FROM api_usage WHERE api_key_id = ? AND timestamp > ?`,
+        args: [apiKeyId, oneMinuteAgo],
+      }),
+      tx.execute({
+        sql: `
+          SELECT api_calls_today, api_calls_this_month, last_reset_day, last_reset_month
+          FROM usage_stats
+          WHERE user_id = ?
+          LIMIT 1
+        `,
+        args: [userId],
+      }),
+    ]);
+
+    const minuteCount = Number((minuteResult.rows[0] as Record<string, unknown> | undefined)?.count ?? 0);
+    if (minuteCount >= LIMITS.REQUESTS_PER_MINUTE) {
+      throw new MemryError("RATE_LIMIT_MINUTE", {
+        limit: LIMITS.REQUESTS_PER_MINUTE,
+        window: "1 minute",
+        retryAfter: 60,
+      });
+    }
+
+    const stats = statsResult.rows[0] as Record<string, unknown> | undefined;
+    const apiCallsToday = stats?.last_reset_day === today ? Number(stats.api_calls_today ?? 0) : 0;
+    if (apiCallsToday >= LIMITS.REQUESTS_PER_DAY) {
+      throw new MemryError("RATE_LIMIT_DAILY", {
+        limit: LIMITS.REQUESTS_PER_DAY,
+        resetAt: getTomorrowMidnightUTC(),
+      });
+    }
+
+    await tx.execute({
       sql: `INSERT INTO api_usage (id, user_id, api_key_id, endpoint, timestamp) VALUES (?, ?, ?, ?, ?)`,
       args: [id, userId, apiKeyId, endpoint, nowIso],
-    },
-    // 2. Count requests in last minute (including the one we just inserted)
-    {
-      sql: `SELECT COUNT(*) as count FROM api_usage WHERE api_key_id = ? AND timestamp > ?`,
-      args: [apiKeyId, oneMinuteAgo],
-    },
-    // 3. Upsert and increment daily stats atomically
-    {
+    });
+
+    await tx.execute({
       sql: `
-        INSERT INTO usage_stats (user_id, api_calls_today, api_calls_this_month, memories_this_month, storage_bytes, last_reset_day, last_reset_month, updated_at)
-        VALUES (?, 1, 1, 0, 0, ?, ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET
-          api_calls_today = CASE 
-            WHEN last_reset_day != ? THEN 1 
-            ELSE api_calls_today + 1 
+        UPDATE usage_stats
+        SET
+          api_calls_today = CASE
+            WHEN last_reset_day != ? THEN 1
+            ELSE api_calls_today + 1
           END,
-          api_calls_this_month = CASE 
-            WHEN last_reset_month != ? THEN 1 
-            ELSE api_calls_this_month + 1 
+          api_calls_this_month = CASE
+            WHEN last_reset_month != ? THEN 1
+            ELSE api_calls_this_month + 1
           END,
           last_reset_day = ?,
           last_reset_month = ?,
           updated_at = ?
+        WHERE user_id = ?
       `,
-      args: [
-        userId,
-        nowIso.slice(0, 10), // today
-        nowIso.slice(0, 7),  // this month
-        nowIso,
-        nowIso.slice(0, 10), // for CASE comparison
-        nowIso.slice(0, 7),  // for CASE comparison
-        nowIso.slice(0, 10), // new last_reset_day
-        nowIso.slice(0, 7),  // new last_reset_month
-        nowIso,
-      ],
-    },
-    // 4. Get current stats
-    {
-      sql: `SELECT api_calls_today, api_calls_this_month FROM usage_stats WHERE user_id = ?`,
-      args: [userId],
-    },
-  ], "write");
+      args: [today, thisMonth, today, thisMonth, nowIso, userId],
+    });
 
-  // Check per-minute limit
-  const minuteCount = Number((batch[1].rows[0] as Record<string, unknown>)?.count ?? 0);
-  if (minuteCount > LIMITS.REQUESTS_PER_MINUTE) {
-    // Delete the record we just inserted since we're over limit
-    await client.execute({
-      sql: `DELETE FROM api_usage WHERE id = ?`,
-      args: [id],
-    });
-    throw new MemryError("RATE_LIMIT_MINUTE", {
-      limit: LIMITS.REQUESTS_PER_MINUTE,
-      window: "1 minute",
-      retryAfter: 60,
-    });
-  }
-
-  // Check daily limit
-  const stats = batch[3].rows[0] as Record<string, unknown> | undefined;
-  const apiCallsToday = Number(stats?.api_calls_today ?? 0);
-  if (apiCallsToday > LIMITS.REQUESTS_PER_DAY) {
-    throw new MemryError("RATE_LIMIT_DAILY", {
-      limit: LIMITS.REQUESTS_PER_DAY,
-      resetAt: getTomorrowMidnightUTC(),
-    });
+    await tx.commit();
+  } catch (error) {
+    await tx.rollback().catch(() => {});
+    throw error;
+  } finally {
+    tx.close();
   }
 
   // Probabilistic cleanup - self-healing, no cron needed

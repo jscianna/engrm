@@ -22,7 +22,7 @@ export async function GET() {
     const memoriesResult = await client.execute({
       sql: `
         SELECT 
-          id, title, content_text, memory_type, importance_tier,
+          id, title, content_text, content_encrypted, memory_type, importance_tier,
           access_count, feedback_score, last_accessed_at,
           promotion_locked, decay_immune, locked_tier, sensitive, created_at
         FROM memories
@@ -36,7 +36,8 @@ export async function GET() {
     const memories = memoriesResult.rows.map((row) => {
       const r = row as Record<string, unknown>;
       const rawText = r.content_text as string;
-      const decryptedText = decryptMemoryContent(rawText, userId);
+      const decryptedText =
+        Number(r.content_encrypted ?? 0) === 1 ? decryptMemoryContent(rawText, userId) : rawText;
       return {
         id: r.id as string,
         title: r.title as string,

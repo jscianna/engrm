@@ -6,6 +6,8 @@
  * 2. HMAC verification for memory content integrity
  */
 
+// TODO: Currently unused. Integrate with request auth and memory write/read flows.
+
 import crypto from "node:crypto";
 import {
   revokeApiKey as revokeApiKeyInDb,

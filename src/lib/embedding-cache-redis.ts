@@ -34,7 +34,7 @@ function getRedis(): Redis | null {
 
 function hashKey(text: string): string {
   const normalized = text.trim().toLowerCase();
-  return CACHE_PREFIX + crypto.createHash("sha256").update(normalized).digest("hex").slice(0, 16);
+  return CACHE_PREFIX + crypto.createHash("sha256").update(normalized).digest("hex");
 }
 
 export async function getCachedEmbeddingPersistent(text: string): Promise<number[] | null> {
@@ -46,7 +46,7 @@ export async function getCachedEmbeddingPersistent(text: string): Promise<number
     const cached = await client.get<number[]>(key);
     
     if (cached) {
-      console.log(`[EmbeddingCache] HIT: ${text.slice(0, 50)}...`);
+      console.log("[EmbeddingCache] HIT");
       return cached;
     }
     

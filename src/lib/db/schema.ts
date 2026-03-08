@@ -1,5 +1,8 @@
 import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
+// TODO: This Drizzle schema currently drifts from the raw SQL bootstrap paths in src/lib/chatbot/storage.ts and src/lib/db.ts.
+// Consolidate on a single schema source of truth before adding more columns.
+
 export const chatbots = sqliteTable("chatbots", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull(),

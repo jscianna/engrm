@@ -1,7 +1,7 @@
 import { embedChatbotText } from "@/lib/chatbot/embedder";
 import {
-  getSourceById,
   listChunksByChatbot,
+  listSourcesByChatbot,
   type ChunkRecord,
 } from "@/lib/chatbot/storage";
 
@@ -35,20 +35,19 @@ export async function retrieveRelevantChunks(params: {
   limit?: number;
 }): Promise<RankedChunk[]> {
   const queryEmbedding = await embedChatbotText(params.query);
-  const chunks = await listChunksByChatbot(params.chatbotId);
+  // TODO: Push source metadata into the chunk query path so this stays O(n) over chunks, not chunks + sources.
+  const [chunks, sources] = await Promise.all([
+    listChunksByChatbot(params.chatbotId),
+    listSourcesByChatbot(params.chatbotId),
+  ]);
+  const sourceNameById = new Map(sources.map((source) => [source.id, source.name]));
   const topK = params.limit ?? 5;
 
-  const scored = await Promise.all(
-    chunks.map(async (chunk) => {
-      const source = await getSourceById(params.chatbotId, chunk.sourceId);
-      const score = cosineSimilarity(queryEmbedding, chunk.embedding ?? []);
-      return {
-        chunk,
-        score,
-        sourceName: source?.name ?? null,
-      };
-    }),
-  );
+  const scored = chunks.map((chunk) => ({
+    chunk,
+    score: cosineSimilarity(queryEmbedding, chunk.embedding ?? []),
+    sourceName: sourceNameById.get(chunk.sourceId) ?? null,
+  }));
 
   return scored.sort((left, right) => right.score - left.score).slice(0, topK);
 }

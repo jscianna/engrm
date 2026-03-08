@@ -35,7 +35,7 @@ async function embedWithOpenAI(input: string): Promise<number[] | null> {
     });
 
     if (!response.ok) {
-      console.error("[Embeddings] OpenAI error:", response.status, await response.text());
+      console.error("[Embeddings] OpenAI error:", response.status);
       return null;
     }
 
@@ -69,7 +69,7 @@ async function embedWithCohere(input: string): Promise<number[] | null> {
     });
 
     if (!response.ok) {
-      console.error("[Embeddings] Cohere error:", response.status, await response.text());
+      console.error("[Embeddings] Cohere error:", response.status);
       return null;
     }
 

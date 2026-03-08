@@ -5,6 +5,9 @@
  * Designed for SOC2/GDPR readiness.
  */
 
+// TODO: Currently unused. Wire this into the authenticated mutation/read paths.
+
+import crypto from "node:crypto";
 import { getDb } from "./turso";
 
 // =============================================================================

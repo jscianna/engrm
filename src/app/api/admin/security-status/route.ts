@@ -67,22 +67,21 @@ export async function GET(request: Request) {
       },
       apiAuth: {
         method: "Bearer token",
-        keyStorage: "Hashed in database",
+        keyStorage: "SHA-256 hashed in database",
       },
     },
 
     // Privacy Features
     privacy: {
-      clientSideEncryption: {
+      serverSideMemoryEncryption: {
         enabled: true,
         algorithm: "AES-256-GCM",
-        keyDerivation: "PBKDF2 (100k iterations)",
+        keyDerivation: "Server-side SHA-256 derivation from ENCRYPTION_KEY + user_id",
+        notes: "Memory content is encrypted on the server before database writes.",
       },
       namespaceHashing: {
-        enabled: true,
-        algorithm: "PBKDF2-SHA256",
-        iterations: 100_000,
-        location: "client_only",
+        enabled: false,
+        notes: "Namespace names are stored directly; client-only hashing is not implemented.",
       },
       embeddingPrivacy: {
         enabled: false,
@@ -97,9 +96,9 @@ export async function GET(request: Request) {
     // Compliance Readiness
     compliance: {
       auditLogging: {
-        enabled: true,
-        retention: "90 days",
-        events: ["memory.create", "memory.read", "memory.delete", "auth.*", "settings.*"],
+        enabled: false,
+        status: "Implemented in code but not wired into live request flows",
+        retention: "90 days when enabled",
       },
       gdpr: {
         dataExport: "Planned",

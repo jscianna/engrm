@@ -520,7 +520,7 @@ export async function listMemoriesByUser(userId: string, limit = 100): Promise<M
   
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, source_type, source_url, file_name, content_hash, created_at,
+      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, created_at,
              memory_type, importance, importance_tier, tags_csv, sensitive, sync_status, sync_error, content_iv, content_encrypted,
              (
                SELECT COUNT(*)
@@ -543,27 +543,33 @@ export async function listMemoriesByUser(userId: string, limit = 100): Promise<M
     args: [userId, limit],
   });
 
-  return result.rows.map((row) => ({
-    id: row.id as string,
-    userId: row.user_id as string,
-    title: row.title as string,
-    sourceType: row.source_type as MemorySourceType,
-    memoryType: (row.memory_type as MemoryKind) ?? "episodic",
-    importance: (row.importance as number) ?? 5,
-    importanceTier: (row.importance_tier as MemoryImportanceTier) ?? "normal",
-    tags: parseTags((row.tags_csv as string) ?? ""),
-    sourceUrl: row.source_url as string | null,
-    fileName: row.file_name as string | null,
-    contentIv: row.content_iv as string | null,
-    isEncrypted: Number(row.content_encrypted ?? 0) === 1,
-    contentHash: row.content_hash as string,
-    sensitive: Number(row.sensitive ?? 0) === 1,
-    syncStatus: (row.sync_status as MemorySyncStatus) ?? "pending",
-    syncError: row.sync_error as string | null,
-    createdAt: row.created_at as string,
-    relationshipCount: Number(row.relationship_count ?? 0),
-    supersededByCount: Number(row.superseded_by_count ?? 0),
-  }));
+  return result.rows.map((row) => {
+    const storedText = row.content_text as string;
+    const storageEncrypted = Number(row.content_encrypted ?? 0) === 1;
+    const decryptedText = storageEncrypted ? decryptMemoryContent(storedText, userId) : storedText;
+
+    return {
+      id: row.id as string,
+      userId: row.user_id as string,
+      title: row.title as string,
+      sourceType: row.source_type as MemorySourceType,
+      memoryType: (row.memory_type as MemoryKind) ?? "episodic",
+      importance: (row.importance as number) ?? 5,
+      importanceTier: (row.importance_tier as MemoryImportanceTier) ?? "normal",
+      tags: parseTags((row.tags_csv as string) ?? ""),
+      sourceUrl: row.source_url as string | null,
+      fileName: row.file_name as string | null,
+      contentIv: row.content_iv as string | null,
+      isEncrypted: looksLikeOpaqueEncryptedPayload(decryptedText),
+      contentHash: row.content_hash as string,
+      sensitive: Number(row.sensitive ?? 0) === 1,
+      syncStatus: (row.sync_status as MemorySyncStatus) ?? "pending",
+      syncError: row.sync_error as string | null,
+      createdAt: row.created_at as string,
+      relationshipCount: Number(row.relationship_count ?? 0),
+      supersededByCount: Number(row.superseded_by_count ?? 0),
+    };
+  });
 }
 
 export async function listMemoryRecordsByUser(userId: string, limit = 100): Promise<MemoryRecord[]> {
@@ -617,7 +623,7 @@ export async function getMemoriesByIds(userId: string, ids: string[]): Promise<M
   
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, source_type, source_url, file_name, content_hash, created_at,
+      SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, created_at,
              memory_type, importance, importance_tier, tags_csv, sensitive, sync_status, sync_error, content_iv, content_encrypted,
              (
                SELECT COUNT(*)
@@ -638,27 +644,33 @@ export async function getMemoriesByIds(userId: string, ids: string[]): Promise<M
     args: [userId, ...ids],
   });
 
-  return result.rows.map((row) => ({
-    id: row.id as string,
-    userId: row.user_id as string,
-    title: row.title as string,
-    sourceType: row.source_type as MemorySourceType,
-    memoryType: (row.memory_type as MemoryKind) ?? "episodic",
-    importance: (row.importance as number) ?? 5,
-    importanceTier: (row.importance_tier as MemoryImportanceTier) ?? "normal",
-    tags: parseTags((row.tags_csv as string) ?? ""),
-    sourceUrl: row.source_url as string | null,
-    fileName: row.file_name as string | null,
-    contentIv: row.content_iv as string | null,
-    isEncrypted: Number(row.content_encrypted ?? 0) === 1,
-    contentHash: row.content_hash as string,
-    sensitive: Number(row.sensitive ?? 0) === 1,
-    syncStatus: (row.sync_status as MemorySyncStatus) ?? "pending",
-    syncError: row.sync_error as string | null,
-    createdAt: row.created_at as string,
-    relationshipCount: Number(row.relationship_count ?? 0),
-    supersededByCount: Number(row.superseded_by_count ?? 0),
-  }));
+  return result.rows.map((row) => {
+    const storedText = row.content_text as string;
+    const storageEncrypted = Number(row.content_encrypted ?? 0) === 1;
+    const decryptedText = storageEncrypted ? decryptMemoryContent(storedText, userId) : storedText;
+
+    return {
+      id: row.id as string,
+      userId: row.user_id as string,
+      title: row.title as string,
+      sourceType: row.source_type as MemorySourceType,
+      memoryType: (row.memory_type as MemoryKind) ?? "episodic",
+      importance: (row.importance as number) ?? 5,
+      importanceTier: (row.importance_tier as MemoryImportanceTier) ?? "normal",
+      tags: parseTags((row.tags_csv as string) ?? ""),
+      sourceUrl: row.source_url as string | null,
+      fileName: row.file_name as string | null,
+      contentIv: row.content_iv as string | null,
+      isEncrypted: looksLikeOpaqueEncryptedPayload(decryptedText),
+      contentHash: row.content_hash as string,
+      sensitive: Number(row.sensitive ?? 0) === 1,
+      syncStatus: (row.sync_status as MemorySyncStatus) ?? "pending",
+      syncError: row.sync_error as string | null,
+      createdAt: row.created_at as string,
+      relationshipCount: Number(row.relationship_count ?? 0),
+      supersededByCount: Number(row.superseded_by_count ?? 0),
+    };
+  });
 }
 
 export async function createMemoryEdge(input: CreateMemoryEdgeInput): Promise<MemoryEdgeRecord> {
@@ -2109,7 +2121,7 @@ export async function updateAgentMemory(
     setClauses.push("content_text = ?");
     args.push(preparedContent.contentText);
     setClauses.push("content_iv = ?");
-    args.push(preparedContent.contentIv);
+    args.push(preparedContent.contentIv ?? "");
     setClauses.push("content_encrypted = ?");
     args.push(preparedContent.contentEncrypted);
     setClauses.push("content_hash = ?");
@@ -2331,7 +2343,7 @@ export async function insertMemoryWithMetadata(params: {
         sync_status, sync_error, created_at, namespace_id, session_id, metadata_json,
         embedding, embedding_hash, strength, base_strength, halflife_days, entities, entities_json, source_conversations,
         first_mentioned_at, last_mentioned_at, last_accessed_at
-      ) VALUES (?, ?, ?, 'text', ?, ?, '', NULL, NULL, ?, NULL, 0, ?, ?, 'pending', NULL, ?, ?, ?, ?,
+      ) VALUES (?, ?, ?, 'text', ?, ?, '', NULL, NULL, ?, NULL, ?, ?, ?, 'pending', NULL, ?, ?, ?, ?,
                 ?, ?, 1.0, 1.0, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
@@ -2341,6 +2353,7 @@ export async function insertMemoryWithMetadata(params: {
       params.memoryType ?? 'episodic',
       params.importance ?? 5,
       preparedContent.contentText,
+      preparedContent.contentEncrypted,
       preparedContent.contentHash,
       preparedContent.sensitive,
       now,
@@ -2424,13 +2437,13 @@ export async function insertMemoryWithMetadataAndQuota(params: {
     await reserveMemoryQuotaInTransaction(tx, params.userId, sizeBytes);
     await tx.execute({
       sql: `
-        INSERT INTO memories (
-          id, user_id, title, source_type, memory_type, importance, tags_csv,
-          source_url, file_name, content_text, content_iv, content_encrypted, content_hash, sensitive,
-          sync_status, sync_error, created_at, namespace_id, session_id, metadata_json,
-          embedding, embedding_hash, strength, base_strength, halflife_days, entities, entities_json, source_conversations,
-          first_mentioned_at, last_mentioned_at, last_accessed_at
-        ) VALUES (?, ?, ?, 'text', ?, ?, '', NULL, NULL, ?, NULL, 0, ?, ?, 'pending', NULL, ?, ?, ?, ?,
+      INSERT INTO memories (
+        id, user_id, title, source_type, memory_type, importance, tags_csv,
+        source_url, file_name, content_text, content_iv, content_encrypted, content_hash, sensitive,
+        sync_status, sync_error, created_at, namespace_id, session_id, metadata_json,
+        embedding, embedding_hash, strength, base_strength, halflife_days, entities, entities_json, source_conversations,
+        first_mentioned_at, last_mentioned_at, last_accessed_at
+        ) VALUES (?, ?, ?, 'text', ?, ?, '', NULL, NULL, ?, NULL, ?, ?, ?, 'pending', NULL, ?, ?, ?, ?,
                   ?, ?, 1.0, 1.0, ?, ?, ?, ?, ?, ?, ?)
       `,
       args: [
@@ -2440,6 +2453,7 @@ export async function insertMemoryWithMetadataAndQuota(params: {
         params.memoryType ?? "episodic",
         params.importance ?? 5,
         preparedContent.contentText,
+        preparedContent.contentEncrypted,
         preparedContent.contentHash,
         preparedContent.sensitive,
         now,

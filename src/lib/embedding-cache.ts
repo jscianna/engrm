@@ -3,6 +3,8 @@
  * Persists in warm serverless functions, reducing OpenAI calls.
  */
 
+import crypto from "node:crypto";
+
 interface CacheEntry {
   vector: number[];
   timestamp: number;
@@ -14,15 +16,8 @@ const MAX_CACHE_SIZE = 500;
 const cache = new Map<string, CacheEntry>();
 
 function hashQuery(query: string): string {
-  // Simple hash for cache key
   const normalized = query.toLowerCase().trim();
-  let hash = 0;
-  for (let i = 0; i < normalized.length; i++) {
-    const char = normalized.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return `emb_${hash.toString(36)}`;
+  return `emb_${crypto.createHash("sha256").update(normalized).digest("hex")}`;
 }
 
 export function getCachedEmbedding(query: string): number[] | null {
