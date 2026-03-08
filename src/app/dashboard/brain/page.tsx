@@ -236,15 +236,15 @@ export default function DashboardBrainPage() {
               </div>
             </div>
 
-            {selectedNode.nodeType === "memory" && (
-              <Link
-                href={`/dashboard/memory/${selectedNode.id}`}
-                className="block w-full text-center bg-cyan-500 hover:bg-cyan-400 text-black font-medium rounded-lg py-2 transition-colors"
-                onClick={() => setSelectedNode(null)}
-              >
-                View Memory
-              </Link>
-            )}
+            <Link
+              href={selectedNode.nodeType === "synthesis" 
+                ? `/dashboard/synthesis/${selectedNode.id}` 
+                : `/dashboard/memory/${selectedNode.id}`}
+              className="block w-full text-center bg-cyan-500 hover:bg-cyan-400 text-black font-medium rounded-lg py-2 transition-colors"
+              onClick={() => setSelectedNode(null)}
+            >
+              {selectedNode.nodeType === "synthesis" ? "View Synthesis" : "View Memory"}
+            </Link>
           </div>
         </div>
       )}

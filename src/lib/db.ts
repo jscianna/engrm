@@ -2313,6 +2313,74 @@ export async function incrementSynthesizedMemoryAccess(
   });
 }
 
+export async function updateSynthesizedMemory(
+  userId: string,
+  id: string,
+  updates: { title?: string; synthesis?: string },
+): Promise<SynthesizedMemoryRecord> {
+  await ensureInitialized();
+  const client = getDb();
+
+  const setClauses: string[] = [];
+  const args: (string | number)[] = [];
+
+  if (updates.title !== undefined) {
+    const encrypted = prepareMemoryContentForStorage({ content: updates.title, userId });
+    setClauses.push("title = ?");
+    args.push(encrypted.contentText);
+  }
+  if (updates.synthesis !== undefined) {
+    const encrypted = prepareMemoryContentForStorage({ content: updates.synthesis, userId });
+    setClauses.push("synthesis = ?");
+    args.push(encrypted.contentText);
+  }
+
+  if (setClauses.length === 0) {
+    const existing = await getSynthesizedMemoryById(userId, id);
+    if (!existing) throw new Error("Synthesis not found");
+    return existing;
+  }
+
+  setClauses.push("last_validated_at = ?");
+  args.push(new Date().toISOString());
+
+  args.push(userId, id);
+
+  await client.execute({
+    sql: `
+      UPDATE synthesized_memories
+      SET ${setClauses.join(", ")}
+      WHERE user_id = ? AND id = ?
+    `,
+    args,
+  });
+
+  const record = await getSynthesizedMemoryById(userId, id);
+  if (!record) throw new Error("Failed to update synthesis");
+  return record;
+}
+
+export async function deleteSynthesizedMemory(
+  userId: string,
+  id: string,
+): Promise<boolean> {
+  await ensureInitialized();
+  const client = getDb();
+
+  // Also delete any graph_edges that reference this synthesis
+  await client.execute({
+    sql: `DELETE FROM graph_edges WHERE user_id = ? AND (source_id = ? OR target_id = ?)`,
+    args: [userId, id, id],
+  });
+
+  const result = await client.execute({
+    sql: `DELETE FROM synthesized_memories WHERE user_id = ? AND id = ?`,
+    args: [userId, id],
+  });
+
+  return (result.rowsAffected ?? 0) > 0;
+}
+
 export async function validateSynthesizedMemories(userId: string): Promise<SynthesizedMemoryRecord[]> {
   await ensureInitialized();
   const syntheses = await listSynthesizedMemoriesByUser(userId, 500);
