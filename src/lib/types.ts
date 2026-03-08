@@ -92,6 +92,14 @@ export type MemoryRecord = {
   lockedTier?: MemoryImportanceTier | null;
   /** If true, memory is immune to automatic decay */
   decayImmune?: boolean;
+  /** Task-like memory is complete (triggers demotion from critical) */
+  completed?: boolean;
+  completedAt?: string | null;
+  /** Short-lived memory (design changes, tactical decisions) */
+  ephemeral?: boolean;
+  /** ID of synthesis that absorbed this memory (excluded from direct injection) */
+  absorbedBy?: string | null;
+  absorbedAt?: string | null;
   createdAt: string;
   relationshipCount?: number;
   supersededByCount?: number;

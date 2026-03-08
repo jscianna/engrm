@@ -409,6 +409,13 @@ async function ensureMemoriesColumns(client: Client): Promise<void> {
     { name: "promotion_locked", ddl: "INTEGER DEFAULT 0" },  // Prevents auto-demotion of manually set tiers
     { name: "locked_tier", ddl: "TEXT" },  // Lock memory at specific tier (prevents promotion/demotion)
     { name: "decay_immune", ddl: "INTEGER DEFAULT 0" },  // If 1, memory is immune to automatic decay
+    // Ephemeral/completed task tracking
+    { name: "completed", ddl: "INTEGER DEFAULT 0" },  // Task-like memory is done (demote from critical)
+    { name: "completed_at", ddl: "TEXT" },  // When task was marked complete
+    { name: "ephemeral", ddl: "INTEGER DEFAULT 0" },  // Short-lived memory (design changes, etc)
+    // Synthesis absorption tracking
+    { name: "absorbed_by", ddl: "TEXT" },  // ID of synthesis that absorbed this memory
+    { name: "absorbed_at", ddl: "TEXT" },  // When memory was absorbed into synthesis
   ];
 
   const tableInfo = await client.execute("PRAGMA table_info(memories)");
