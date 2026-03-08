@@ -18,6 +18,7 @@ import {
   getCriticalMemories,
   getAgentMemoriesByIds,
   getHighTierMemories,
+  listCriticalSynthesizedMemories,
 } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
@@ -63,7 +64,22 @@ export async function POST(request: Request) {
     const synthesize = body.synthesize === true; // default false
 
     // 1. Always get critical memories
-    const criticalMemories = filterSensitiveMemories(await getCriticalMemories(identity.userId));
+    const criticalMemories = filterSensitiveMemories(
+      await getCriticalMemories(identity.userId, {
+        excludeCompleted: true,
+        excludeAbsorbed: true,
+      }),
+    );
+    const criticalSyntheses = await listCriticalSynthesizedMemories(identity.userId, 8);
+    const synthesizedAsCritical = criticalSyntheses.map((synthesis) => ({
+      id: synthesis.id,
+      title: synthesis.title,
+      text: synthesis.synthesis,
+      memoryType: "semantic",
+      importanceTier: "critical",
+      createdAt: synthesis.synthesizedAt,
+    }));
+    const criticalForInjection = [...synthesizedAsCritical, ...criticalMemories];
 
     // 2. If message provided and includeHigh, search for relevant high-importance memories
     let highMemories: typeof criticalMemories = [];
@@ -81,6 +97,7 @@ export async function POST(request: Request) {
         const memories = filterSensitiveMemories(await getAgentMemoriesByIds({
           userId: identity.userId,
           ids: hits.map((hit) => hit.item.id),
+          excludeAbsorbed: true,
         }));
         
         // Filter to high tier and limit
@@ -91,7 +108,7 @@ export async function POST(request: Request) {
     }
 
     // 3. Deduplicate (in case a critical memory also matched)
-    const criticalIds = new Set(criticalMemories.map((m) => m.id));
+    const criticalIds = new Set(criticalForInjection.map((m) => m.id));
     let dedupedHigh = highMemories.filter((m) => !criticalIds.has(m.id));
 
     // 4. Handle synthesis of high memories into working tier
@@ -99,7 +116,9 @@ export async function POST(request: Request) {
     
     if (synthesize && dedupedHigh.length >= SYNTHESIS_THRESHOLD) {
       // Get all high-tier memories for grouping
-      const allHighMemories = filterSensitiveMemories(await getHighTierMemories(identity.userId));
+      const allHighMemories = filterSensitiveMemories(
+        await getHighTierMemories(identity.userId, { excludeAbsorbed: true }),
+      );
       const filteredHigh = allHighMemories.filter((m) => !criticalIds.has(m.id));
       
       if (filteredHigh.length >= SYNTHESIS_THRESHOLD) {
@@ -116,16 +135,16 @@ export async function POST(request: Request) {
 
     // 5. Format response
     const response = {
-      critical: criticalMemories.map(formatMemory),
+      critical: criticalForInjection.map(formatMemory),
       working: workingMemories.map(formatSynthesizedMemory),
       high: dedupedHigh.map(formatMemory),
       stats: {
-        criticalCount: criticalMemories.length,
+        criticalCount: criticalForInjection.length,
         workingCount: workingMemories.length,
         highCount: dedupedHigh.length,
         synthesized: workingMemories.length > 0,
         totalTokensEstimate: 
-          estimateTokens(criticalMemories) + 
+          estimateTokens(criticalForInjection) + 
           estimateTokensFromSynthesized(workingMemories) +
           estimateTokens(dedupedHigh),
       },
@@ -133,7 +152,7 @@ export async function POST(request: Request) {
 
     const injectedMemoryIds = Array.from(
       new Set([
-        ...criticalMemories.map((memory) => memory.id),
+        ...criticalForInjection.map((memory) => memory.id),
         ...dedupedHigh.map((memory) => memory.id),
         ...workingMemories.flatMap((memory) => memory.synthesizedFrom),
       ]),

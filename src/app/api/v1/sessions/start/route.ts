@@ -13,6 +13,7 @@ import {
   getCriticalMemories, 
   getAgentMemoriesByIds,
   getNamespaceByName,
+  listCriticalSynthesizedMemories,
 } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
@@ -49,7 +50,20 @@ export async function POST(request: Request) {
     });
 
     // Get critical memories (always injected)
-    const criticalMemories = filterSensitiveMemories(await getCriticalMemories(identity.userId));
+    const criticalMemories = filterSensitiveMemories(
+      await getCriticalMemories(identity.userId, {
+        excludeCompleted: true,
+        excludeAbsorbed: true,
+      }),
+    );
+    const criticalSyntheses = await listCriticalSynthesizedMemories(identity.userId, 5);
+    const synthesizedCritical = criticalSyntheses.map((s) => ({
+      id: s.id,
+      title: s.title,
+      text: s.synthesis,
+      memoryType: "semantic",
+    }));
+    const criticalForInjection = [...synthesizedCritical, ...criticalMemories];
 
     // Get high-tier memories relevant to first message
     let highMemories: typeof criticalMemories = [];
@@ -69,6 +83,7 @@ export async function POST(request: Request) {
             userId: identity.userId,
             ids: hits.map((h) => h.item.id),
             namespaceId,
+            excludeAbsorbed: true,
           }));
           
           // Filter to high tier only
@@ -80,7 +95,7 @@ export async function POST(request: Request) {
     }
 
     // Dedupe
-    const criticalIds = new Set(criticalMemories.map((m) => m.id));
+    const criticalIds = new Set(criticalForInjection.map((m) => m.id));
     const dedupedHigh = highMemories.filter((m) => !criticalIds.has(m.id)).slice(0, 5);
 
     // Estimate tokens
@@ -89,13 +104,14 @@ export async function POST(request: Request) {
 
     const tokensInjected = estimateTokens([
       ...criticalMemories.map((m) => m.text),
+      ...synthesizedCritical.map((m) => m.text),
       ...dedupedHigh.map((m) => m.text),
     ]);
 
     return Response.json({
       sessionId: session.id,
       context: {
-        critical: criticalMemories.map((m) => ({
+        critical: criticalForInjection.map((m) => ({
           id: m.id,
           title: m.title,
           text: m.text,
@@ -110,7 +126,7 @@ export async function POST(request: Request) {
       },
       stats: {
         tokensInjected,
-        criticalCount: criticalMemories.length,
+        criticalCount: criticalForInjection.length,
         highCount: dedupedHigh.length,
       },
     }, { status: 201 });

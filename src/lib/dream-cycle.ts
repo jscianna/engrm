@@ -13,8 +13,14 @@ import {
 import { embedText } from "@/lib/embeddings";
 import type { SynthesizedMemoryRecord } from "@/lib/types";
 import { clusterMemories, type MemoryCluster } from "@/lib/synthesis/clustering";
+import {
+  absorbMemoriesIntoSynthesis as absorbCriticalMemoriesIntoSynthesis,
+  clusterCriticalMemories,
+  synthesizeClusterToPrinciple,
+} from "@/lib/synthesis/critical-synthesis";
 import { synthesizeCluster } from "@/lib/synthesis/synthesize";
 import { semanticSearchVectors } from "@/lib/vector";
+import { processCompletedMemories, processEphemeralMemories } from "@/lib/memory/critical-processing";
 
 export type DreamBondSuggestion = {
   leftId: string;
@@ -219,6 +225,22 @@ export async function runDreamCycle(userId: string): Promise<DreamCycleResult> {
       count: inWindow.length,
     };
   });
+
+  await processCompletedMemories(userId);
+  await processEphemeralMemories(userId);
+
+  const criticalClusters = await clusterCriticalMemories(userId);
+  for (const cluster of criticalClusters) {
+    if (cluster.memories.length < 2) {
+      continue;
+    }
+    const synthesis = await synthesizeClusterToPrinciple(userId, cluster);
+    await absorbCriticalMemoriesIntoSynthesis(
+      userId,
+      synthesis.id,
+      cluster.memories.map((memory) => memory.id),
+    );
+  }
 
   const clusters = await clusterMemories(userId);
   const currentClusterIds = new Set(clusters.map((cluster) => cluster.id));

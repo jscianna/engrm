@@ -185,6 +185,13 @@ async function ensureInitialized(): Promise<void> {
       namespace_id TEXT,
       session_id TEXT,
       metadata_json TEXT,
+      completed INTEGER DEFAULT 0,
+      completed_at TEXT,
+      ephemeral INTEGER DEFAULT 0,
+      absorbed INTEGER DEFAULT 0,
+      absorbed_into_synthesis_id TEXT,
+      absorbed_by TEXT,
+      absorbed_at TEXT,
       created_at TEXT NOT NULL
     );
 
@@ -413,6 +420,8 @@ async function ensureMemoriesColumns(client: Client): Promise<void> {
     { name: "completed", ddl: "INTEGER DEFAULT 0" },  // Task-like memory is done (demote from critical)
     { name: "completed_at", ddl: "TEXT" },  // When task was marked complete
     { name: "ephemeral", ddl: "INTEGER DEFAULT 0" },  // Short-lived memory (design changes, etc)
+    { name: "absorbed", ddl: "INTEGER DEFAULT 0" },  // If 1, memory has been absorbed into synthesis
+    { name: "absorbed_into_synthesis_id", ddl: "TEXT" },  // Canonical synthesis ID replacing this memory
     // Synthesis absorption tracking
     { name: "absorbed_by", ddl: "TEXT" },  // ID of synthesis that absorbed this memory
     { name: "absorbed_at", ddl: "TEXT" },  // When memory was absorbed into synthesis
@@ -560,6 +569,13 @@ export type AgentMemoryRecord = {
   isEncrypted?: boolean;
   /** If true, memory contains detected secrets and is excluded from LLM context */
   sensitive: boolean;
+  completed?: boolean;
+  completedAt?: string | null;
+  ephemeral?: boolean;
+  absorbed?: boolean;
+  absorbedIntoSynthesisId?: string | null;
+  absorbedBy?: string | null;
+  absorbedAt?: string | null;
   createdAt: string;
 };
 
@@ -594,6 +610,15 @@ function mapRow(row: Record<string, unknown>): MemoryRecord {
     promotionLocked: Number(row.promotion_locked ?? 0) === 1,
     lockedTier: (row.locked_tier as MemoryImportanceTier | null) ?? null,
     decayImmune: Number(row.decay_immune ?? 0) === 1,
+    completed: Number(row.completed ?? 0) === 1,
+    completedAt: (row.completed_at as string | null) ?? null,
+    ephemeral: Number(row.ephemeral ?? 0) === 1,
+    absorbed: Number(row.absorbed ?? 0) === 1,
+    absorbedBy: (row.absorbed_by as string | null) ?? null,
+    absorbedIntoSynthesisId:
+      (row.absorbed_into_synthesis_id as string | null) ??
+      ((row.absorbed_by as string | null) ?? null),
+    absorbedAt: (row.absorbed_at as string | null) ?? null,
     createdAt: row.created_at as string,
   };
 }
@@ -1414,6 +1439,15 @@ function mapAgentMemoryRow(row: Record<string, unknown>): AgentMemoryRecord {
     accessCount: Number(row.access_count ?? 0),
     isEncrypted: looksLikeOpaqueEncryptedPayload(decryptedText),
     sensitive: Number(row.sensitive ?? 0) === 1,
+    completed: Number(row.completed ?? 0) === 1,
+    completedAt: (row.completed_at as string | null) ?? null,
+    ephemeral: Number(row.ephemeral ?? 0) === 1,
+    absorbed: Number(row.absorbed ?? 0) === 1,
+    absorbedIntoSynthesisId:
+      (row.absorbed_into_synthesis_id as string | null) ??
+      ((row.absorbed_by as string | null) ?? null),
+    absorbedBy: (row.absorbed_by as string | null) ?? null,
+    absorbedAt: (row.absorbed_at as string | null) ?? null,
     createdAt: row.created_at as string,
   };
 }
@@ -1995,7 +2029,7 @@ export async function listAgentMemories(params: {
 
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, metadata_json,
+      SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, content_encrypted, metadata_json,
              namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive, created_at
       FROM memories
       ${where}
@@ -2032,7 +2066,7 @@ export async function listConsolidatedMemories(params: {
 
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, metadata_json,
+      SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, content_encrypted, metadata_json,
              namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive, created_at
       FROM memories
       ${where}
@@ -2050,7 +2084,7 @@ export async function listSessionMemories(userId: string, sessionId: string): Pr
   const client = getDb();
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, metadata_json,
+      SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, content_encrypted, metadata_json,
              namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive, created_at
       FROM memories
       WHERE user_id = ? AND session_id = ? AND archived_at IS NULL
@@ -2133,7 +2167,7 @@ export async function getAgentMemoryById(userId: string, id: string): Promise<Ag
   const client = getDb();
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, metadata_json,
+      SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, content_encrypted, metadata_json,
              namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive, created_at
       FROM memories
       WHERE user_id = ? AND id = ?
@@ -2421,6 +2455,7 @@ export async function getAgentMemoriesByIds(params: {
   since?: string;
   memoryTypes?: MemoryKind[];
   excludeMemoryTypes?: MemoryKind[];
+  excludeAbsorbed?: boolean;
 }): Promise<AgentMemoryRecord[]> {
   await ensureInitialized();
   if (params.ids.length === 0) {
@@ -2444,6 +2479,7 @@ export async function getAgentMemoriesByIds(params: {
   if (params.excludeMemoryTypes?.length) {
     args.push(...params.excludeMemoryTypes);
   }
+  const excludeAbsorbed = params.excludeAbsorbed === true;
 
   // When namespace is specified, include both namespace-scoped AND global (null namespace) memories
   // This follows the spec: "Search defaults to current namespace + global"
@@ -2454,10 +2490,12 @@ export async function getAgentMemoriesByIds(params: {
 
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, source_type, memory_type, importance_tier, source_url, file_name, content_text, metadata_json,
-             namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive, created_at
+      SELECT id, user_id, title, source_type, memory_type, importance_tier, source_url, file_name, content_text, content_encrypted, metadata_json,
+             namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive,
+             completed, completed_at, ephemeral, absorbed, absorbed_into_synthesis_id, absorbed_by, absorbed_at, created_at
       FROM memories
       WHERE user_id = ? AND id IN (${placeholders}) AND archived_at IS NULL
+      ${excludeAbsorbed ? "AND (absorbed = 0 OR absorbed IS NULL)" : ""}
       ${namespaceClause}
       ${hasSince ? "AND created_at >= ?" : ""}
       ${params.memoryTypes?.length ? `AND memory_type IN (${params.memoryTypes.map(() => "?").join(",")})` : ""}
@@ -2472,20 +2510,153 @@ export async function getAgentMemoriesByIds(params: {
 /**
  * Get all critical-tier memories for a user (always injected at session start)
  */
-export async function getCriticalMemories(userId: string): Promise<AgentMemoryRecord[]> {
+export async function getCriticalMemories(
+  userId: string,
+  options?: {
+    excludeCompleted?: boolean;
+    excludeAbsorbed?: boolean;
+    limit?: number;
+  },
+): Promise<AgentMemoryRecord[]> {
   await ensureInitialized();
   const client = getDb();
+  const args: Array<string | number> = [userId];
+  const whereClauses = ["user_id = ?", "importance_tier = 'critical'", "archived_at IS NULL"];
+
+  if (options?.excludeCompleted) {
+    whereClauses.push("(completed = 0 OR completed IS NULL)");
+  }
+  if (options?.excludeAbsorbed) {
+    whereClauses.push("(absorbed = 0 OR absorbed IS NULL)");
+  }
+  if (typeof options?.limit === "number") {
+    args.push(Math.max(1, Math.min(options.limit, 500)));
+  }
 
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, memory_type, importance_tier, source_url, file_name, 
-             content_text, metadata_json, namespace_id, session_id, entities, entities_json, 
-             feedback_score, access_count, sensitive, created_at
+             content_text, content_encrypted, metadata_json, namespace_id, session_id, entities, entities_json, 
+             feedback_score, access_count, sensitive, completed, completed_at, ephemeral, absorbed,
+             absorbed_into_synthesis_id, absorbed_by, absorbed_at, created_at
       FROM memories
-      WHERE user_id = ? AND importance_tier = 'critical' AND archived_at IS NULL
+      WHERE ${whereClauses.join(" AND ")}
       ORDER BY created_at DESC
+      ${typeof options?.limit === "number" ? "LIMIT ?" : ""}
     `,
-    args: [userId],
+    args,
+  });
+
+  return result.rows.map((row) => mapAgentMemoryRow(row as Record<string, unknown>));
+}
+
+export async function listCriticalSynthesizedMemories(
+  userId: string,
+  limit = 8,
+): Promise<SynthesizedMemoryRecord[]> {
+  await ensureInitialized();
+  const client = getDb();
+  const boundedLimit = Math.max(1, Math.min(limit, 100));
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, synthesis, title, source_memory_ids, source_count, cluster_id, cluster_topic,
+             compression_ratio, confidence, synthesized_at, last_validated_at, stale,
+             importance_tier, access_count, created_at, abstraction_level
+      FROM synthesized_memories
+      WHERE user_id = ? AND stale = 0 AND importance_tier = 'critical'
+      ORDER BY synthesized_at DESC, created_at DESC
+      LIMIT ?
+    `,
+    args: [userId, boundedLimit],
+  });
+
+  return result.rows.map((row) => mapSynthesizedMemoryRow(row as Record<string, unknown>));
+}
+
+export async function markMemoryCompleted(
+  userId: string,
+  memoryId: string,
+): Promise<boolean> {
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+  const result = await client.execute({
+    sql: `
+      UPDATE memories
+      SET completed = 1,
+          completed_at = ?,
+          importance_tier = 'normal'
+      WHERE user_id = ? AND id = ?
+    `,
+    args: [now, userId, memoryId],
+  });
+  return (result.rowsAffected ?? 0) > 0;
+}
+
+export async function absorbMemoriesByIds(
+  userId: string,
+  synthesisId: string,
+  memoryIds: string[],
+): Promise<number> {
+  await ensureInitialized();
+  if (memoryIds.length === 0) {
+    return 0;
+  }
+  const client = getDb();
+  const now = new Date().toISOString();
+  const placeholders = memoryIds.map(() => "?").join(",");
+  const result = await client.execute({
+    sql: `
+      UPDATE memories
+      SET absorbed = 1,
+          absorbed_into_synthesis_id = ?,
+          absorbed_by = ?,
+          absorbed_at = ?,
+          importance_tier = 'normal'
+      WHERE user_id = ? AND id IN (${placeholders})
+    `,
+    args: [synthesisId, synthesisId, now, userId, ...memoryIds],
+  });
+  return result.rowsAffected ?? 0;
+}
+
+export async function demoteMemoryToNormal(userId: string, memoryId: string): Promise<boolean> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      UPDATE memories
+      SET importance_tier = 'normal'
+      WHERE user_id = ? AND id = ?
+    `,
+    args: [userId, memoryId],
+  });
+  return (result.rowsAffected ?? 0) > 0;
+}
+
+export async function listEphemeralMemoriesOlderThan(
+  userId: string,
+  olderThanDays: number,
+  limit = 100,
+): Promise<AgentMemoryRecord[]> {
+  await ensureInitialized();
+  const client = getDb();
+  const boundedLimit = Math.max(1, Math.min(limit, 500));
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, title, source_type, memory_type, importance_tier, source_url, file_name,
+             content_text, content_encrypted, metadata_json, namespace_id, session_id, entities, entities_json,
+             feedback_score, access_count, sensitive, completed, completed_at, ephemeral, absorbed,
+             absorbed_into_synthesis_id, absorbed_by, absorbed_at, created_at
+      FROM memories
+      WHERE user_id = ?
+        AND ephemeral = 1
+        AND archived_at IS NULL
+        AND julianday(created_at) <= julianday('now') - ?
+      ORDER BY created_at ASC
+      LIMIT ?
+    `,
+    args: [userId, Math.max(1, Math.floor(olderThanDays)), boundedLimit],
   });
 
   return result.rows.map((row) => mapAgentMemoryRow(row as Record<string, unknown>));
@@ -2592,7 +2763,7 @@ export async function listMemoryCompactionCandidates(params: {
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, metadata_json,
-             namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive, created_at,
+             content_encrypted, namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive, created_at,
              embedding, strength, mention_count, archived_at
       FROM memories
       ${where}
@@ -3328,20 +3499,38 @@ export async function setPromotionLocked(
 /**
  * Get all high-tier memories for a user (for context synthesis)
  */
-export async function getHighTierMemories(userId: string): Promise<AgentMemoryRecord[]> {
+export async function getHighTierMemories(
+  userId: string,
+  options?: { excludeAbsorbed?: boolean; limit?: number },
+): Promise<AgentMemoryRecord[]> {
   await ensureInitialized();
   const client = getDb();
+  const args: Array<string | number> = [userId];
+  const whereClauses = [
+    "user_id = ?",
+    "importance_tier = 'high'",
+    "archived_at IS NULL",
+  ];
+  if (options?.excludeAbsorbed) {
+    whereClauses.push("(absorbed = 0 OR absorbed IS NULL)");
+  }
+  const hasLimit = typeof options?.limit === "number";
+  if (hasLimit) {
+    args.push(Math.max(1, Math.min(options.limit ?? 100, 500)));
+  }
 
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, memory_type, importance_tier, source_url, file_name, 
-             content_text, metadata_json, namespace_id, session_id, entities, entities_json, 
-             feedback_score, access_count, sensitive, created_at
+             content_text, content_encrypted, metadata_json, namespace_id, session_id, entities, entities_json, 
+             feedback_score, access_count, sensitive, completed, completed_at, ephemeral, absorbed,
+             absorbed_into_synthesis_id, absorbed_by, absorbed_at, created_at
       FROM memories
-      WHERE user_id = ? AND importance_tier = 'high' AND archived_at IS NULL
+      WHERE ${whereClauses.join(" AND ")}
       ORDER BY access_count DESC, created_at DESC
+      ${hasLimit ? "LIMIT ?" : ""}
     `,
-    args: [userId],
+    args,
   });
 
   return result.rows.map((row) => mapAgentMemoryRow(row as Record<string, unknown>));
