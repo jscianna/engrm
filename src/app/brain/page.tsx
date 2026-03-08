@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
+import { Loader2 } from "lucide-react";
+import { useAuth } from "@clerk/nextjs";
+import type { FullGraphEdge, FullGraphNode } from "@/components/memory-graph";
 
 // =============================================================================
 // Types
@@ -16,6 +19,7 @@ interface MemoryNode {
   vy: number;
   vz: number;
   type: string;
+  nodeType?: string;
   strength: number;
   importance: number;
   title: string;
@@ -682,6 +686,7 @@ function generateDemoData(): { nodes: MemoryNode[]; edges: MemoryEdge[] } {
 // =============================================================================
 
 export default function BrainPage() {
+  const { isLoaded, isSignedIn } = useAuth();
   const [nodes, setNodes] = useState<MemoryNode[]>([]);
   const [edges, setEdges] = useState<MemoryEdge[]>([]);
   const [stats, setStats] = useState<BrainStats>({
@@ -692,26 +697,126 @@ export default function BrainPage() {
   });
   const [hoveredNode, setHoveredNode] = useState<MemoryNode | null>(null);
   const [selectedNode, setSelectedNode] = useState<MemoryNode | null>(null);
-  const [isLive, setIsLive] = useState(true);
+  const [isLiveData, setIsLiveData] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [isEmptyLiveData, setIsEmptyLiveData] = useState(false);
   const [latestThought, setLatestThought] = useState("Initializing neural network...");
 
-  // Initialize with demo data
-  useEffect(() => {
-    const { nodes: demoNodes, edges: demoEdges } = generateDemoData();
-    setNodes(demoNodes);
-    setEdges(demoEdges);
-    
-    const avgImportance = demoNodes.reduce((sum, n) => sum + n.importance, 0) / demoNodes.length;
-    const avgDecay = demoNodes.reduce((sum, n) => sum + n.strength, 0) / demoNodes.length;
-    
+  const applyStats = useCallback((nextNodes: MemoryNode[], nextEdges: MemoryEdge[]) => {
+    const avgImportance = nextNodes.length
+      ? nextNodes.reduce((sum, n) => sum + n.importance, 0) / nextNodes.length
+      : 0;
+    const avgDecay = nextNodes.length
+      ? nextNodes.reduce((sum, n) => sum + n.strength, 0) / nextNodes.length
+      : 0;
+
     setStats({
-      nodes: demoNodes.length,
-      connections: demoEdges.length,
+      nodes: nextNodes.length,
+      connections: nextEdges.length,
       avgDecay: Math.round(avgDecay * 100),
       avgImportance: Math.round(avgImportance * 100),
     });
+  }, []);
 
-    // Simulate neural activity
+  const applyDemoData = useCallback(() => {
+    const { nodes: demoNodes, edges: demoEdges } = generateDemoData();
+    setNodes(demoNodes);
+    setEdges(demoEdges);
+    applyStats(demoNodes, demoEdges);
+    setIsLiveData(false);
+    setIsEmptyLiveData(false);
+  }, [applyStats]);
+
+  // Load real data for authenticated users, demo data otherwise
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadData() {
+      if (!isLoaded) return;
+      setLoading(true);
+
+      if (isSignedIn) {
+        try {
+          const response = await fetch("/api/memories/graph?limit=200&full=true");
+          const payload = (await response.json()) as {
+            error?: string;
+            nodes?: FullGraphNode[];
+            edges?: FullGraphEdge[];
+          };
+
+          if (!response.ok) {
+            throw new Error(payload.error || "Failed to load graph");
+          }
+
+          const apiNodes = payload.nodes || [];
+          const apiEdges = payload.edges || [];
+
+          // Keep same conversion logic used in /dashboard/brain
+          const brainNodes: MemoryNode[] = apiNodes.map((n, i) => {
+            const phi = Math.acos(-1 + (2 * i) / apiNodes.length);
+            const theta = Math.sqrt(apiNodes.length * Math.PI) * phi;
+            const radius = 60 + Math.random() * 40;
+            const isSynthesis = n.nodeType === "synthesis";
+
+            return {
+              id: n.id,
+              x: radius * Math.sin(phi) * Math.cos(theta),
+              y: radius * Math.sin(phi) * Math.sin(theta),
+              z: radius * Math.cos(phi),
+              vx: 0,
+              vy: 0,
+              vz: 0,
+              type: n.memoryType || "fact",
+              nodeType: n.nodeType,
+              strength: 0.7 + Math.random() * 0.3,
+              importance: (n.importance ?? 5) / 10,
+              title: n.title,
+              radius: isSynthesis ? 8 + (n.sourceCount ?? 0) * 0.5 : 4 + ((n.importance ?? 5) / 10) * 4,
+            };
+          });
+
+          const brainEdges: MemoryEdge[] = apiEdges.map((e) => ({
+            source: e.source,
+            target: e.target,
+            weight: e.weight,
+            type: e.edgeType,
+          }));
+
+          if (!isCancelled) {
+            setNodes(brainNodes);
+            setEdges(brainEdges);
+            applyStats(brainNodes, brainEdges);
+            setIsLiveData(true);
+            setIsEmptyLiveData(brainNodes.length === 0);
+          }
+        } catch (error) {
+          console.error("Failed to load real graph data, falling back to demo.", error);
+          if (!isCancelled) {
+            applyDemoData();
+          }
+        } finally {
+          if (!isCancelled) {
+            setLoading(false);
+          }
+        }
+        return;
+      }
+
+      if (!isCancelled) {
+        applyDemoData();
+        setLoading(false);
+      }
+    }
+
+    void loadData();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isLoaded, isSignedIn, applyDemoData, applyStats]);
+
+  // Simulate neural activity
+  useEffect(() => {
     const thoughts = [
       "Processing memory consolidation...",
       "Strengthening associative links...",
@@ -742,10 +847,10 @@ export default function BrainPage() {
             <span className="text-zinc-500">|</span>
             <span className="text-cyan-400 font-mono text-sm">THE BRAIN</span>
             <span className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium ${
-              isLive ? "bg-emerald-500/20 text-emerald-400" : "bg-zinc-800 text-zinc-400"
+              isLiveData ? "bg-emerald-500/20 text-emerald-400" : "bg-zinc-800 text-zinc-400"
             }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${isLive ? "bg-emerald-400 animate-pulse" : "bg-zinc-500"}`} />
-              {isLive ? "LIVE" : "PAUSED"}
+              <span className={`w-1.5 h-1.5 rounded-full ${isLiveData ? "bg-emerald-400 animate-pulse" : "bg-zinc-500"}`} />
+              {isLiveData ? "YOUR BRAIN" : "DEMO"}
             </span>
           </div>
           <div className="flex items-center gap-4">
@@ -768,6 +873,34 @@ export default function BrainPage() {
           onNodeClick={setSelectedNode}
         />
       </div>
+
+      {/* Loading state */}
+      {loading && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-zinc-950/70 backdrop-blur-sm">
+          <div className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900/90 px-4 py-3 text-zinc-200">
+            <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
+            <span className="text-sm">{isLoaded && isSignedIn ? "Loading your memory graph..." : "Loading demo brain..."}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Empty live data state */}
+      {!loading && isLiveData && isEmptyLiveData && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center pointer-events-none">
+          <div className="pointer-events-auto max-w-md rounded-2xl border border-zinc-800 bg-zinc-900/90 p-6 text-center backdrop-blur">
+            <div className="mb-2 text-sm font-mono uppercase tracking-wider text-zinc-500">Your Brain Is Empty</div>
+            <p className="mb-4 text-sm text-zinc-300">
+              Start capturing memories and ideas to see your real network come alive.
+            </p>
+            <Link
+              href="/dashboard"
+              className="inline-block rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-cyan-400"
+            >
+              Go to Dashboard
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Stats overlay - Top left */}
       <div className="fixed top-24 left-6 z-40">
@@ -921,10 +1054,19 @@ export default function BrainPage() {
               </div>
             </div>
 
-            {/* Demo note */}
-            <div className="text-xs text-zinc-600 text-center">
-              This is demo data • Sign in to see your real memories
-            </div>
+            {isLiveData ? (
+              <Link
+                href={selectedNode.nodeType === "synthesis" ? `/dashboard/synthesis/${selectedNode.id}` : `/dashboard/memory/${selectedNode.id}`}
+                className="block w-full rounded-lg bg-cyan-500 py-2 text-center text-sm font-medium text-black transition-colors hover:bg-cyan-400"
+                onClick={() => setSelectedNode(null)}
+              >
+                {selectedNode.nodeType === "synthesis" ? "View Synthesis" : "View Memory"}
+              </Link>
+            ) : (
+              <div className="text-xs text-zinc-600 text-center">
+                This is demo data • Sign in to see your real memories
+              </div>
+            )}
           </div>
         </div>
       )}
