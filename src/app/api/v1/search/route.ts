@@ -1,12 +1,15 @@
 import { embedText } from "@/lib/embeddings";
 import { countEntityOverlap, extractEntities } from "@/lib/entities";
 import { semanticSearchVectors } from "@/lib/qdrant";
+import { bm25Search, rrfFusion, ensureFtsInitialized } from "@/lib/fts";
 import { getAgentMemoriesByIds, recordMemorySearchHits, incrementAccessCounts, checkAndPromoteMemories } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject, normalizeIsoTimestamp, normalizeLimit, resolveNamespaceIdOrError } from "@/lib/api-v1";
 
 export const runtime = "nodejs";
+
+type SearchMode = "hybrid" | "vector" | "keyword";
 
 function buildProvenance(memory: {
   sourceType: string;
@@ -34,50 +37,99 @@ export async function POST(request: Request) {
     const topK = normalizeLimit(body.topK, 10, 50);
     const since = normalizeIsoTimestamp(body.since, "since");
     const namespace = typeof body.namespace === "string" ? body.namespace : undefined;
+    const mode: SearchMode = body.mode === "vector" || body.mode === "keyword" ? body.mode : "hybrid";
+    
     const resolved = await resolveNamespaceIdOrError(identity.userId, namespace);
     if (resolved.error) {
       return resolved.error;
     }
 
-    const vector = await embedText(body.query.trim());
-    const hits = await semanticSearchVectors({
-      userId: identity.userId,
-      query: body.query.trim(),
-      vector,
-      since,
-      topK: Math.max(topK * 5, 50),
-    });
+    // Run searches based on mode
+    const queryText = body.query.trim();
+    const retrievalLimit = Math.max(topK * 5, 50);
 
+    let vectorHits: Array<{ id: string; score: number }> = [];
+    let bm25Hits: Array<{ memoryId: string; score: number }> = [];
+
+    if (mode === "hybrid" || mode === "vector") {
+      // Vector search
+      const vector = await embedText(queryText);
+      const hits = await semanticSearchVectors({
+        userId: identity.userId,
+        query: queryText,
+        vector,
+        since,
+        topK: retrievalLimit,
+      });
+      vectorHits = hits.map((h) => ({ id: h.item.id, score: h.score }));
+    }
+
+    if (mode === "hybrid" || mode === "keyword") {
+      // BM25 keyword search
+      try {
+        await ensureFtsInitialized();
+        bm25Hits = await bm25Search({
+          userId: identity.userId,
+          query: queryText,
+          topK: retrievalLimit,
+        });
+      } catch (err) {
+        // FTS not available or failed - continue with vector only
+        console.warn("[Search] BM25 search failed:", err);
+      }
+    }
+
+    // Combine results using RRF fusion (or just use single source if mode != hybrid)
+    let rankedIds: Array<{ memoryId: string; score: number; vectorScore?: number; bm25Score?: number }>;
+    
+    if (mode === "hybrid" && vectorHits.length > 0 && bm25Hits.length > 0) {
+      rankedIds = rrfFusion(vectorHits, bm25Hits, {
+        k: 60,
+        vectorWeight: 1.0,
+        bm25Weight: 1.2, // Slight boost to exact matches
+        topRankBonus: 0.05,
+      });
+    } else if (vectorHits.length > 0) {
+      rankedIds = vectorHits.map((h) => ({ memoryId: h.id, score: h.score, vectorScore: h.score }));
+    } else if (bm25Hits.length > 0) {
+      rankedIds = bm25Hits.map((h) => ({ memoryId: h.memoryId, score: h.score, bm25Score: h.score }));
+    } else {
+      rankedIds = [];
+    }
+
+    // Fetch full memory records
     const memories = await getAgentMemoriesByIds({
       userId: identity.userId,
-      ids: hits.map((hit) => hit.item.id),
+      ids: rankedIds.map((r) => r.memoryId),
       namespaceId: resolved.namespaceId,
       since,
     });
     const memoryById = new Map(memories.map((memory) => [memory.id, memory]));
     const queryEntities = extractEntities(body.query);
 
-    const allResults = hits
-      .map((hit) => {
-        const memory = memoryById.get(hit.item.id);
+    // Build final results with quality adjustments
+    const allResults = rankedIds
+      .map((ranked) => {
+        const memory = memoryById.get(ranked.memoryId);
         if (!memory) {
           return null;
         }
         const entityOverlap = countEntityOverlap(queryEntities, memory.entities);
         const adjustedScore =
-          hit.score +
+          ranked.score +
           (memory.feedbackScore * 0.08) +
           (Math.min(memory.accessCount, 25) * 0.01) +
           (entityOverlap * 0.06);
         return {
           id: memory.id,
           score: adjustedScore,
-          vectorScore: hit.score,
+          vectorScore: ranked.vectorScore,
+          bm25Score: ranked.bm25Score,
           provenance: buildProvenance(memory),
           memory,
         };
       })
-      .filter((value): value is { id: string; score: number; vectorScore: number; provenance: ReturnType<typeof buildProvenance>; memory: (typeof memories)[number] } => Boolean(value))
+      .filter((value): value is NonNullable<typeof value> => Boolean(value))
       .sort((left, right) => right.score - left.score);
 
     // Separate sensitive memories (containing detected secrets) - excluded from LLM context

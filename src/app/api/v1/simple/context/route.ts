@@ -7,6 +7,7 @@
 
 import { embedText } from "@/lib/embeddings";
 import { semanticSearchVectors } from "@/lib/qdrant";
+import { bm25Search, rrfFusion, ensureFtsInitialized } from "@/lib/fts";
 import { 
   filterSensitiveMemories,
   getCriticalMemories, 
@@ -33,23 +34,55 @@ export async function POST(request: Request) {
     // Get critical memories (always included)
     const criticalMemories = filterSensitiveMemories(await getCriticalMemories(identity.userId));
 
-    // Get relevant memories based on message
+    // Get relevant memories based on message (hybrid: vector + BM25)
     let relevantMemories: typeof criticalMemories = [];
     
     if (message) {
       try {
-        const vector = await embedText(message);
-        const hits = await semanticSearchVectors({
-          userId: identity.userId,
-          query: message,
-          vector,
-          topK: 10,
-        });
+        // Run vector and BM25 search in parallel
+        const [vectorResults, bm25Results] = await Promise.all([
+          (async () => {
+            const vector = await embedText(message);
+            const hits = await semanticSearchVectors({
+              userId: identity.userId,
+              query: message,
+              vector,
+              topK: 20,
+            });
+            return hits.map((h) => ({ id: h.item.id, score: h.score }));
+          })(),
+          (async () => {
+            try {
+              await ensureFtsInitialized();
+              return await bm25Search({
+                userId: identity.userId,
+                query: message,
+                topK: 20,
+              });
+            } catch {
+              return []; // FTS not ready
+            }
+          })(),
+        ]);
 
-        if (hits.length > 0) {
+        // Combine with RRF fusion
+        let memoryIds: string[];
+        if (vectorResults.length > 0 && bm25Results.length > 0) {
+          const fused = rrfFusion(vectorResults, bm25Results, {
+            k: 60,
+            bm25Weight: 1.2,
+          });
+          memoryIds = fused.slice(0, 10).map((r) => r.memoryId);
+        } else if (vectorResults.length > 0) {
+          memoryIds = vectorResults.slice(0, 10).map((r) => r.id);
+        } else {
+          memoryIds = bm25Results.slice(0, 10).map((r) => r.memoryId);
+        }
+
+        if (memoryIds.length > 0) {
           const memories = filterSensitiveMemories(await getAgentMemoriesByIds({
             userId: identity.userId,
-            ids: hits.map((h) => h.item.id),
+            ids: memoryIds,
           }));
           
           relevantMemories = memories.filter(
