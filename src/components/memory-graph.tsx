@@ -227,14 +227,15 @@ export function MemoryGraph({
       weight: edge.weight,
     }));
 
+    // Force params tuned for dense graphs: strong repulsion, long links
     const linkForce = forceLink<GraphNode, GraphLink>(nextEdges)
       .id((node) => node.id)
-      .distance(100)
-      .strength(0.06);
+      .distance(180)
+      .strength(0.03);
 
     const simulation = forceSimulation<GraphNode, GraphLink>(nextNodes)
       .force("link", linkForce)
-      .force("charge", forceManyBody<GraphNode, GraphLink>().strength(-180))
+      .force("charge", forceManyBody<GraphNode, GraphLink>().strength(-400))
       .force("center", forceCenter<GraphNode, GraphLink>(0, 0))
       .setLinks(nextEdges)
       .alphaDecay(0.04)
