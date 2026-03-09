@@ -52,6 +52,43 @@ async function embedWithOpenAI(input: string): Promise<number[] | null> {
   }
 }
 
+// OpenRouter embeddings (same models as OpenAI, different endpoint for load distribution)
+async function embedWithOpenRouter(input: string): Promise<number[] | null> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/embeddings", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+        "HTTP-Referer": "https://fathippo.ai",
+        "X-Title": "FatHippo Memory",
+      },
+      body: JSON.stringify({
+        model: "openai/text-embedding-3-small",
+        input: input.slice(0, 8000),
+        dimensions: EMBEDDING_DIMENSION,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("[Embeddings] OpenRouter error:", response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    return data.data?.[0]?.embedding ?? null;
+  } catch (error) {
+    console.error("[Embeddings] OpenRouter failed:", error);
+    return null;
+  }
+}
+
+// Load balancing counter (simple round-robin)
+let loadBalanceCounter = 0;
+
 // Cohere embeddings
 async function embedWithCohere(input: string): Promise<number[] | null> {
   const apiKey = process.env.COHERE_API_KEY;
@@ -116,13 +153,31 @@ export async function embedText(input: string): Promise<number[]> {
     return persistentCached;
   }
 
-  // 3. Try OpenAI (primary)
-  const openaiResult = await embedWithOpenAI(input);
-  if (openaiResult) {
+  // 3. Try OpenAI with load balancing (alternate between direct and OpenRouter)
+  // This distributes load and provides redundancy if one endpoint is rate-limited
+  const useOpenRouterFirst = (loadBalanceCounter++ % 2) === 1;
+  
+  let result: number[] | null = null;
+  
+  if (useOpenRouterFirst) {
+    // Try OpenRouter first, then direct OpenAI
+    result = await embedWithOpenRouter(input);
+    if (!result) {
+      result = await embedWithOpenAI(input);
+    }
+  } else {
+    // Try direct OpenAI first, then OpenRouter
+    result = await embedWithOpenAI(input);
+    if (!result) {
+      result = await embedWithOpenRouter(input);
+    }
+  }
+  
+  if (result) {
     // Cache in both layers
-    setCachedEmbedding(input, openaiResult);
-    setCachedEmbeddingPersistent(input, openaiResult).catch(() => {}); // Non-blocking
-    return openaiResult;
+    setCachedEmbedding(input, result);
+    setCachedEmbeddingPersistent(input, result).catch(() => {}); // Non-blocking
+    return result;
   }
 
   // 4. Fallback to Cohere
