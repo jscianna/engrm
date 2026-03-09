@@ -247,7 +247,8 @@ const SECRET_QUERY_CATEGORY_HINTS: Array<{ category: SecretCategory; pattern: Re
   { category: "api_key", pattern: /\bapi[_ -]?key|access key|auth key\b/i },
   { category: "password", pattern: /\bpassword|passwd|pwd\b/i },
   { category: "token", pattern: /\btoken|jwt|bearer|oauth\b/i },
-  { category: "connection_string", pattern: /\bconnection string|database url|dsn|postgres|mysql|mongodb|redis|jdbc\b/i },
+  // Only match connection_string when explicitly asking for connection/URL, not just mentioning DB names
+  { category: "connection_string", pattern: /\b(connection string|database url|db url|dsn|jdbc)[:\s]|\b(postgres|mysql|mongodb|redis)\b.*\b(url|string|connection|credentials|password)\b/i },
   { category: "private_key", pattern: /\bprivate key|ssh key|rsa key|certificate|pem\b/i },
   { category: "credentials", pattern: /\bcredential|secret\b/i },
 ];
