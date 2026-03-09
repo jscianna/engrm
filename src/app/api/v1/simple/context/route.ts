@@ -38,9 +38,10 @@ const TRIVIAL_ACKS = new Set([
 ]);
 
 // Default retrieval parameters (can be overridden via request body for testing)
-const DEFAULT_MIN_VECTOR_SIMILARITY = 0.75;
-const DEFAULT_MIN_CRITICAL_RELEVANCE = 0.7;
-const DEFAULT_VECTOR_TOPK = 20;
+// Tuned via autoresearch: sim=0.55 + topK=40 yields 84% MRR (vs 20% with old defaults)
+const DEFAULT_MIN_VECTOR_SIMILARITY = 0.55;
+const DEFAULT_MIN_CRITICAL_RELEVANCE = 0.5;
+const DEFAULT_VECTOR_TOPK = 40;
 const DEFAULT_RRF_K = 60;
 const DEFAULT_BM25_WEIGHT = 1.2;
 
