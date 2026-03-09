@@ -124,6 +124,11 @@ export async function POST(request: Request) {
     const bm25Weight = typeof body.bm25Weight === "number"
       ? Math.max(0.1, Math.min(5.0, body.bm25Weight))
       : DEFAULT_BM25_WEIGHT;
+    
+    // Type boost factor for intent-matched memories (1.0 = no boost, 1.3 = 30% boost)
+    const typeBoostFactor = typeof body.typeBoostFactor === "number"
+      ? Math.max(1.0, Math.min(2.0, body.typeBoostFactor))
+      : 1.3; // Default: 30% boost for type match
 
     // Get critical memories
     const allCriticalMemories = filterSensitiveMemories(
@@ -247,17 +252,20 @@ export async function POST(request: Request) {
         );
 
         // Apply type-based boost when query intent matches memory type
-        if (queryIntent !== 'general' && relevantMemories.length > 1) {
-          // Score each memory based on type match
+        if (queryIntent !== 'general' && relevantMemories.length > 1 && typeBoostFactor > 1.0) {
+          // Score each memory based on type match (tunable via typeBoostFactor)
           const scoredMemories = relevantMemories.map((m, originalIndex) => {
             // Get classified type from metadata if available
             const metadata = m.metadata as Record<string, unknown> | null;
             const classifiedType = (metadata?.classified as Record<string, unknown>)?.type as MemoryType | undefined;
             
-            // Calculate boost based on type match
-            const boost = classifiedType 
-              ? calculateTypeBoost(queryIntent, classifiedType)
-              : 1.0;
+            // Calculate boost: apply typeBoostFactor if memory type matches query intent
+            let boost = 1.0;
+            if (classifiedType) {
+              const baseBoost = calculateTypeBoost(queryIntent, classifiedType);
+              // Scale the boost by the tunable factor (baseBoost is 1.0-1.3, we scale proportionally)
+              boost = baseBoost > 1.0 ? 1.0 + (baseBoost - 1.0) * (typeBoostFactor / 1.3) : 1.0;
+            }
             
             return { memory: m, score: boost * (1 / (originalIndex + 1)), originalIndex };
           });
