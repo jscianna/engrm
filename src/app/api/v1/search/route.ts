@@ -2,7 +2,7 @@ import { embedText } from "@/lib/embeddings";
 import { countEntityOverlap, extractEntities } from "@/lib/entities";
 import { semanticSearchVectors } from "@/lib/qdrant";
 import { bm25Search, rrfFusion, ensureFtsInitialized } from "@/lib/fts";
-import { getAgentMemoriesByIds, recordMemorySearchHits, incrementAccessCounts, checkAndPromoteMemories } from "@/lib/db";
+import { getAgentMemoriesByIds, incrementAccessCounts, checkAndPromoteMemories, logRetrievalEvaluation } from "@/lib/db";
 import { recordInjectionEvent } from "@/lib/memory-analytics";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
@@ -136,12 +136,19 @@ export async function POST(request: Request) {
     // Separate sensitive memories (containing detected secrets) - excluded from LLM context
     const sensitiveResults = allResults.filter((result) => result.memory.sensitive);
     const safeResults = allResults.filter((result) => !result.memory.sensitive).slice(0, topK);
+    const retrievedIds = safeResults.map((result) => result.id);
+
+    const evaluation = await logRetrievalEvaluation({
+      userId: identity.userId,
+      query: queryText,
+      endpoint: "/api/v1/search",
+      namespaceId: resolved.namespaceId,
+      candidateIds: retrievedIds,
+    });
 
     // Non-blocking: increment access counts, record hits, and log injection event
-    const retrievedIds = safeResults.map((result) => result.id);
     Promise.all([
       incrementAccessCounts(identity.userId, retrievedIds),
-      recordMemorySearchHits(identity.userId, retrievedIds),
       checkAndPromoteMemories(identity.userId),
       retrievedIds.length > 0
         ? recordInjectionEvent({
@@ -159,6 +166,9 @@ export async function POST(request: Request) {
     if (sensitiveResults.length > 0) {
       headers["X-FatHippo-Sensitive-Omitted"] = String(sensitiveResults.length);
       headers["X-FatHippo-Sensitive-Hint"] = `${sensitiveResults.length} memory(ies) containing credentials were found but excluded for security. View them in your FatHippo dashboard.`;
+    }
+    if (evaluation) {
+      headers["X-FatHippo-Eval-Id"] = evaluation.id;
     }
 
     return Response.json(safeResults, { headers });

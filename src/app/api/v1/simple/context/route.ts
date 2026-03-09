@@ -14,6 +14,7 @@ import {
   getAgentMemoriesByIds,
   incrementAccessCounts,
   listCriticalSynthesizedMemories,
+  logRetrievalEvaluation,
 } from "@/lib/db";
 import { recordInjectionEvent } from "@/lib/memory-analytics";
 import { validateApiKey } from "@/lib/api-auth";
@@ -150,6 +151,7 @@ export async function POST(request: Request) {
       createdAt: synthesis.synthesizedAt,
     }));
     const allCritical = [...synthesizedCritical, ...allCriticalMemories];
+    const criticalById = new Map(allCritical.map((memory) => [memory.id, memory]));
     
     // Rank critical memories by relevance and only inject when relevant.
     let criticalMemories: typeof allCritical = [];
@@ -162,13 +164,10 @@ export async function POST(request: Request) {
         topK: maxCritical * 2,
       });
       
-      const criticalHitIds = new Set(
-        criticalHits
-          .filter((h) => h.score > minCriticalRelevance)
-          .map((h) => h.item.id),
-      );
-      criticalMemories = allCritical
-        .filter((m) => criticalHitIds.has(m.id))
+      criticalMemories = criticalHits
+        .filter((h) => h.score > minCriticalRelevance)
+        .map((h) => criticalById.get(h.item.id) ?? null)
+        .filter((memory): memory is NonNullable<typeof memory> => Boolean(memory))
         .slice(0, maxCritical);
     }
 
@@ -203,21 +202,18 @@ export async function POST(request: Request) {
         })(),
       ]);
 
-      const qualifyingVectorIds = new Set(vectorResults.map((r) => r.id));
-
-      // Combine with RRF fusion and only keep vector-qualified memories.
+      // Combine with RRF fusion, allowing BM25-only rescues for exact lexical matches.
       let memoryIds: string[] = [];
       if (vectorResults.length > 0 && bm25Results.length > 0) {
         const fused = rrfFusion(vectorResults, bm25Results, {
           k: rrfK,
           bm25Weight: bm25Weight,
         });
-        memoryIds = fused
-          .map((r) => r.memoryId)
-          .filter((id) => qualifyingVectorIds.has(id))
-          .slice(0, 10);
+        memoryIds = fused.map((r) => r.memoryId).slice(0, 10);
       } else if (vectorResults.length > 0) {
         memoryIds = vectorResults.slice(0, 10).map((r) => r.id);
+      } else if (bm25Results.length > 0) {
+        memoryIds = bm25Results.slice(0, 10).map((r) => r.memoryId);
       }
 
       if (memoryIds.length > 0) {
@@ -283,6 +279,13 @@ export async function POST(request: Request) {
       ...criticalMemories.map((m) => m.id),
       ...dedupedRelevant.map((m) => m.id),
     ];
+    const evaluation = await logRetrievalEvaluation({
+      userId: identity.userId,
+      query: message,
+      endpoint: "/api/v1/simple/context",
+      sessionId: conversationId ?? null,
+      candidateIds: allInjectedIds,
+    });
     if (allInjectedIds.length > 0) {
       recordInjectionEvent({
         userId: identity.userId,
@@ -297,6 +300,7 @@ export async function POST(request: Request) {
       status: 200,
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
+        ...(evaluation ? { "X-FatHippo-Eval-Id": evaluation.id } : {}),
       },
     });
   } catch (error) {

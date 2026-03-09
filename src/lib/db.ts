@@ -658,6 +658,20 @@ export type AgentMemoryRecord = {
   createdAt: string;
 };
 
+export type RetrievalEvaluationRecord = {
+  id: string;
+  userId: string;
+  query: string;
+  endpoint: string;
+  namespaceId: string | null;
+  sessionId: string | null;
+  candidateIds: string[];
+  acceptedId: string | null;
+  acceptedRank: number | null;
+  createdAt: string;
+  updatedAt: string | null;
+};
+
 function mapRow(row: Record<string, unknown>): MemoryRecord {
   const entities = parseJsonStringArray((row.entities as string | null) ?? row.entities_json);
   const userId = row.user_id as string;
@@ -2761,7 +2775,15 @@ export async function getAgentMemoriesByIds(params: {
     args,
   });
 
-  return result.rows.map((row) => mapAgentMemoryRow(row as Record<string, unknown>));
+  const rankById = new Map(params.ids.map((id, index) => [id, index]));
+
+  return result.rows
+    .map((row) => mapAgentMemoryRow(row as Record<string, unknown>))
+    .sort((left, right) => {
+      const leftRank = rankById.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+      const rightRank = rankById.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+      return leftRank - rightRank;
+    });
 }
 
 /**
@@ -4173,6 +4195,150 @@ async function ensureMissesTable(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_memory_misses_user_created_at
     ON memory_misses(user_id, created_at DESC)
   `);
+}
+
+async function ensureRetrievalEvaluationTable(): Promise<void> {
+  await ensureInitialized();
+  const client = getDb();
+  await client.executeMultiple(`
+    CREATE TABLE IF NOT EXISTS retrieval_evaluations (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      query TEXT NOT NULL,
+      endpoint TEXT NOT NULL,
+      namespace_id TEXT,
+      session_id TEXT,
+      candidate_ids_json TEXT NOT NULL,
+      accepted_id TEXT,
+      accepted_rank INTEGER,
+      created_at TEXT NOT NULL,
+      updated_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_retrieval_evaluations_user_created_at
+    ON retrieval_evaluations(user_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_retrieval_evaluations_user_endpoint_created_at
+    ON retrieval_evaluations(user_id, endpoint, created_at DESC);
+  `);
+}
+
+function mapRetrievalEvaluationRow(row: Record<string, unknown>): RetrievalEvaluationRecord {
+  const candidateIds = parseJsonStringArray(row.candidate_ids_json);
+
+  return {
+    id: row.id as string,
+    userId: row.user_id as string,
+    query: row.query as string,
+    endpoint: row.endpoint as string,
+    namespaceId: (row.namespace_id as string | null) ?? null,
+    sessionId: (row.session_id as string | null) ?? null,
+    candidateIds,
+    acceptedId: (row.accepted_id as string | null) ?? null,
+    acceptedRank: row.accepted_rank == null ? null : Number(row.accepted_rank),
+    createdAt: row.created_at as string,
+    updatedAt: (row.updated_at as string | null) ?? null,
+  };
+}
+
+export async function logRetrievalEvaluation(params: {
+  userId: string;
+  query: string;
+  endpoint: string;
+  candidateIds: string[];
+  namespaceId?: string | null;
+  sessionId?: string | null;
+}): Promise<RetrievalEvaluationRecord | null> {
+  await ensureRetrievalEvaluationTable();
+
+  const query = params.query.trim();
+  const candidateIds = params.candidateIds.filter(Boolean);
+  if (!query || candidateIds.length === 0) {
+    return null;
+  }
+
+  const client = getDb();
+  const id = `eval_${crypto.randomUUID().replaceAll("-", "")}`;
+  const now = new Date().toISOString();
+
+  await client.execute({
+    sql: `
+      INSERT INTO retrieval_evaluations (
+        id, user_id, query, endpoint, namespace_id, session_id,
+        candidate_ids_json, accepted_id, accepted_rank, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL)
+    `,
+    args: [
+      id,
+      params.userId,
+      query,
+      params.endpoint,
+      params.namespaceId ?? null,
+      params.sessionId ?? null,
+      JSON.stringify(candidateIds),
+      now,
+    ],
+  });
+
+  return {
+    id,
+    userId: params.userId,
+    query,
+    endpoint: params.endpoint,
+    namespaceId: params.namespaceId ?? null,
+    sessionId: params.sessionId ?? null,
+    candidateIds,
+    acceptedId: null,
+    acceptedRank: null,
+    createdAt: now,
+    updatedAt: null,
+  };
+}
+
+export async function markRetrievalEvaluationAccepted(params: {
+  userId: string;
+  evaluationId: string;
+  acceptedId: string;
+}): Promise<RetrievalEvaluationRecord | null> {
+  await ensureRetrievalEvaluationTable();
+
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, query, endpoint, namespace_id, session_id,
+             candidate_ids_json, accepted_id, accepted_rank, created_at, updated_at
+      FROM retrieval_evaluations
+      WHERE id = ? AND user_id = ?
+      LIMIT 1
+    `,
+    args: [params.evaluationId, params.userId],
+  });
+
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  if (!row) {
+    return null;
+  }
+
+  const existing = mapRetrievalEvaluationRow(row);
+  const acceptedRankIndex = existing.candidateIds.findIndex((id) => id === params.acceptedId);
+  const acceptedRank = acceptedRankIndex >= 0 ? acceptedRankIndex + 1 : null;
+  const now = new Date().toISOString();
+
+  await client.execute({
+    sql: `
+      UPDATE retrieval_evaluations
+      SET accepted_id = ?, accepted_rank = ?, updated_at = ?
+      WHERE id = ? AND user_id = ?
+    `,
+    args: [params.acceptedId, acceptedRank, now, params.evaluationId, params.userId],
+  });
+
+  return {
+    ...existing,
+    acceptedId: params.acceptedId,
+    acceptedRank,
+    updatedAt: now,
+  };
 }
 
 /**

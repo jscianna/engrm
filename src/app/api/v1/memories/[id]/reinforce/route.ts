@@ -8,7 +8,7 @@
  * POST /api/v1/memories/{id}/reinforce
  */
 
-import { reinforceMemoryExplicit } from "@/lib/db";
+import { markRetrievalEvaluationAccepted, reinforceMemoryExplicit } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
@@ -37,12 +37,27 @@ export async function POST(
       });
     }
 
+    const evaluationId =
+      typeof body.evaluationId === "string" && body.evaluationId.trim()
+        ? body.evaluationId.trim()
+        : typeof body.evalId === "string" && body.evalId.trim()
+          ? body.evalId.trim()
+          : undefined;
+
     // Apply reinforcement
     const result = await reinforceMemoryExplicit(identity.userId, id, value);
 
     if (!result) {
       throw new MemryError("MEMORY_NOT_FOUND");
     }
+
+    const evaluation = evaluationId
+      ? await markRetrievalEvaluationAccepted({
+          userId: identity.userId,
+          evaluationId,
+          acceptedId: id,
+        })
+      : null;
 
     // Build response message
     let message = `Memory ${value === 1 ? "reinforced" : "weakened"}.`;
@@ -59,6 +74,7 @@ export async function POST(
       newTier: result.newTier,
       promoted: result.promoted,
       demoted: result.demoted,
+      evaluation,
       message,
     });
   } catch (error) {

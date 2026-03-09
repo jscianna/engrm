@@ -42,10 +42,15 @@ export function createFatHippoOpenAIAgentsMemory(options: FatHippoOpenAIAgentsOp
       });
     },
 
-    async feedback(memoryId: string, rating: "positive" | "negative", query?: string) {
+    async feedback(
+      memoryId: string,
+      rating: "positive" | "negative",
+      query?: string,
+      evaluationId?: string,
+    ) {
       return request("/api/v1/feedback", {
         method: "POST",
-        body: JSON.stringify({ memoryId, rating, query }),
+        body: JSON.stringify({ memoryId, rating, query, evaluationId }),
       });
     },
   };

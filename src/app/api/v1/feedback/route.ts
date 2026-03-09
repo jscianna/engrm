@@ -1,4 +1,4 @@
-import { applyMemoryFeedback } from "@/lib/db";
+import { applyMemoryFeedback, markRetrievalEvaluationAccepted } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
@@ -18,6 +18,13 @@ export async function POST(request: Request) {
       throw new MemryError("VALIDATION_ERROR", { field: "rating", reason: "must be positive or negative" });
     }
 
+    const evaluationId =
+      typeof body.evaluationId === "string" && body.evaluationId.trim()
+        ? body.evaluationId.trim()
+        : typeof body.evalId === "string" && body.evalId.trim()
+          ? body.evalId.trim()
+          : undefined;
+
     const memory = await applyMemoryFeedback({
       userId: identity.userId,
       memoryId: body.memoryId.trim(),
@@ -28,12 +35,22 @@ export async function POST(request: Request) {
       throw new MemryError("MEMORY_NOT_FOUND");
     }
 
+    const evaluation = evaluationId
+      ? await markRetrievalEvaluationAccepted({
+          userId: identity.userId,
+          evaluationId,
+          acceptedId: memory.id,
+        })
+      : null;
+
     return Response.json({
       memory,
       feedback: {
         rating: body.rating,
         query: typeof body.query === "string" ? body.query : undefined,
+        evaluationId,
       },
+      evaluation,
     });
   } catch (error) {
     return errorResponse(error);
