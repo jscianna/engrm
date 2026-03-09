@@ -14,10 +14,11 @@ export const EMBEDDING_DIMENSIONS = {
   "all-MiniLM-L6-v2": 384,
   "text-embedding-ada-002": 1536,
   "text-embedding-3-small": 1536,
+  "text-embedding-3-large": 3072,
 } as const;
 
 // Default dimension for validation
-const DEFAULT_DIMENSION = 384; // MiniLM
+const DEFAULT_DIMENSION = 3072; // OpenAI text-embedding-3-large
 
 type MemoryVectorMetadata = {
   userId: string;

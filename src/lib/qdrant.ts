@@ -7,7 +7,7 @@
  * Environment:
  *   QDRANT_URL      - Cluster URL (e.g., https://xxx.us-east4-0.gcp.cloud.qdrant.io:6333)
  *   QDRANT_API_KEY  - API key from Qdrant Cloud dashboard
- *   QDRANT_COLLECTION - Collection name (default: "memories")
+ *   QDRANT_COLLECTION - Collection name (default: "memories_openai_3072")
  * 
  * Migration: Run migrateFromTurso() once to move existing vectors.
  */
@@ -20,13 +20,16 @@ import { getDb } from "./turso";
 
 const QDRANT_URL = process.env.QDRANT_URL;
 const QDRANT_API_KEY = process.env.QDRANT_API_KEY;
-const COLLECTION_NAME = process.env.QDRANT_COLLECTION || "memories";
+const COLLECTION_NAME = process.env.QDRANT_COLLECTION || "memories_openai_3072";
+const MINILM_VECTOR_SIZE = 384;
+const OPENAI_VECTOR_SIZE = 3072;
 
 // Supported embedding dimensions
 export const EMBEDDING_DIMENSIONS = {
   "all-MiniLM-L6-v2": 384,
   "text-embedding-ada-002": 1536,
   "text-embedding-3-small": 1536,
+  "text-embedding-3-large": 3072,
 } as const;
 
 // =============================================================================
@@ -110,10 +113,12 @@ let collectionInitialized = false;
 
 /**
  * Ensure collection exists with correct schema
- * Supports multi-vector (384 + 1536 dim) via named vectors
+ * Supports multi-vector (384 + 3072 dim) via named vectors
  */
 export async function ensureCollection(): Promise<void> {
   if (!isQdrantEnabled() || collectionInitialized) return;
+
+  let shouldCreateCollection = false;
 
   try {
     // Check if collection exists
@@ -121,11 +126,40 @@ export async function ensureCollection(): Promise<void> {
     const checkData = await checkResponse.json();
     
     if (checkData.result) {
+      const vectorsConfig = checkData.result?.config?.params?.vectors as
+        | { openai?: { size?: number }; minilm?: { size?: number }; size?: number }
+        | undefined;
+      const openaiSize = vectorsConfig?.openai?.size ?? vectorsConfig?.size;
+      const minilmSize = vectorsConfig?.minilm?.size;
+
+      if (openaiSize !== OPENAI_VECTOR_SIZE) {
+        throw new Error(
+          `[Qdrant] Collection "${COLLECTION_NAME}" has incompatible openai vector size (${openaiSize ?? "unknown"}). Expected ${OPENAI_VECTOR_SIZE}. ` +
+            "Qdrant vector size cannot be changed in place. Create/use a new collection and run the embedding migration."
+        );
+      }
+
+      if (typeof minilmSize === "number" && minilmSize !== MINILM_VECTOR_SIZE) {
+        throw new Error(
+          `[Qdrant] Collection "${COLLECTION_NAME}" has incompatible minilm vector size (${minilmSize}). Expected ${MINILM_VECTOR_SIZE}.`
+        );
+      }
+
       collectionInitialized = true;
       return;
     }
-  } catch {
-    // Collection doesn't exist, create it
+    shouldCreateCollection = true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("Qdrant error (404)")) {
+      shouldCreateCollection = true;
+    } else {
+      throw error;
+    }
+  }
+
+  if (!shouldCreateCollection) {
+    throw new Error(`[Qdrant] Failed to determine collection state for "${COLLECTION_NAME}".`);
   }
 
   // Create collection with named vectors for both dimensions
@@ -134,8 +168,8 @@ export async function ensureCollection(): Promise<void> {
     body: JSON.stringify({
       vectors: {
         // Named vectors for different embedding models
-        "minilm": { size: 384, distance: "Cosine" },
-        "openai": { size: 1536, distance: "Cosine" },
+        "minilm": { size: MINILM_VECTOR_SIZE, distance: "Cosine" },
+        "openai": { size: OPENAI_VECTOR_SIZE, distance: "Cosine" },
       },
       // Optimize for filtering by user_id
       optimizers_config: {

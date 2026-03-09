@@ -2,7 +2,7 @@
  * Embeddings with fallback chain:
  * 1. Persistent cache (Upstash Redis) - survives deployments
  * 2. In-memory cache (warm lambda) - fast for hot queries  
- * 3. OpenAI text-embedding-3-small (primary)
+ * 3. OpenAI text-embedding-3-large (primary)
  * 4. Cohere embed-english-v3.0 (fallback)
  * 5. Zero vector (last resort)
  * 
@@ -18,7 +18,7 @@
 import { getCachedEmbedding, setCachedEmbedding } from "./embedding-cache";
 import { getCachedEmbeddingPersistent, setCachedEmbeddingPersistent } from "./embedding-cache-redis";
 
-const EMBEDDING_DIMENSION = 384; // Standardized output dimension
+const EMBEDDING_DIMENSION = 3072; // OpenAI text-embedding-3-large dimension
 
 // OpenAI embeddings
 async function embedWithOpenAI(input: string): Promise<number[] | null> {
@@ -33,7 +33,7 @@ async function embedWithOpenAI(input: string): Promise<number[] | null> {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "text-embedding-3-small",
+        model: "text-embedding-3-large",
         input: input.slice(0, 8000),
         dimensions: EMBEDDING_DIMENSION,
       }),
