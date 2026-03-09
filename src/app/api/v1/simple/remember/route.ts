@@ -8,6 +8,7 @@
 import { embedText } from "@/lib/embeddings";
 import { extractEntities } from "@/lib/entities";
 import { classifyMemoryType } from "@/lib/memory-classification";
+import { classifyMemory, type MemoryType } from "@/lib/memory-classifier";
 import { semanticSearchVectors, upsertMemoryVector } from "@/lib/qdrant";
 import { 
   insertAgentMemory, 
@@ -78,7 +79,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Auto-classify memory type
+    // Auto-classify memory type (fast pattern-based)
     const memoryType: MemoryKind = classifyMemoryType(text.slice(0, 60), text);
     
     // Auto-classify importance
@@ -92,10 +93,49 @@ export async function POST(request: Request) {
       // Best effort
     }
 
-    // Generate embedding
+    // LLM-based classification for richer understanding (async, best effort)
+    let classificationResult: Awaited<ReturnType<typeof classifyMemory>> | null = null;
+    let structuredMetadata: Record<string, unknown> | null = null;
+    let textForEmbedding = text; // May be replaced with canonical structured text
+    
+    try {
+      classificationResult = await classifyMemory(text);
+      
+      if (classificationResult.structured) {
+        // Store structured data in metadata
+        structuredMetadata = {
+          classified: {
+            type: classificationResult.type,
+            confidence: classificationResult.confidence,
+            fields: classificationResult.structured.fields,
+            canonical: classificationResult.structured.canonical,
+          },
+        };
+        
+        // Use canonical text for embedding (optimized for search)
+        textForEmbedding = classificationResult.structured.canonical;
+        
+        // Merge extracted entities with classifier entities
+        entities = [...new Set([...entities, ...classificationResult.entities])];
+      } else if (classificationResult.type !== 'general') {
+        // Store basic classification even without structure
+        structuredMetadata = {
+          classified: {
+            type: classificationResult.type,
+            confidence: classificationResult.confidence,
+            entities: classificationResult.entities,
+          },
+        };
+      }
+    } catch (error) {
+      // Classification is best-effort, don't fail the request
+      console.error("Memory classification failed:", error);
+    }
+
+    // Generate embedding (using canonical text if available)
     let embedding: number[] | null = null;
     try {
-      embedding = await embedText(text);
+      embedding = await embedText(textForEmbedding);
     } catch {
       // Embedding failed, continue without consolidation
     }
@@ -160,6 +200,7 @@ export async function POST(request: Request) {
       memoryType,
       importanceTier,
       entities,
+      metadata: structuredMetadata || undefined,
     });
 
     // Store embedding

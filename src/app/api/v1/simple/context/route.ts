@@ -22,6 +22,7 @@ import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 import { detectSecretQueryIntent, VAULT_HINT_MESSAGE } from "@/lib/secrets";
 import { expandQuery, detectQueryIntent, mergeExpandedResults } from "@/lib/query-expansion";
+import { calculateTypeBoost, type MemoryType } from "@/lib/memory-classifier";
 
 export const runtime = "nodejs";
 
@@ -244,6 +245,27 @@ export async function POST(request: Request) {
         relevantMemories = memories.filter(
           (m) => m.importanceTier === "high" || m.importanceTier === "normal"
         );
+
+        // Apply type-based boost when query intent matches memory type
+        if (queryIntent !== 'general' && relevantMemories.length > 1) {
+          // Score each memory based on type match
+          const scoredMemories = relevantMemories.map((m, originalIndex) => {
+            // Get classified type from metadata if available
+            const metadata = m.metadata as Record<string, unknown> | null;
+            const classifiedType = (metadata?.classified as Record<string, unknown>)?.type as MemoryType | undefined;
+            
+            // Calculate boost based on type match
+            const boost = classifiedType 
+              ? calculateTypeBoost(queryIntent, classifiedType)
+              : 1.0;
+            
+            return { memory: m, score: boost * (1 / (originalIndex + 1)), originalIndex };
+          });
+          
+          // Re-sort by boosted score
+          scoredMemories.sort((a, b) => b.score - a.score);
+          relevantMemories = scoredMemories.map((s) => s.memory);
+        }
 
         // Track access
         const accessedIds = memories.map((m) => m.id);
