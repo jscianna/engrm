@@ -28,7 +28,7 @@ const CONSOLIDATION_THRESHOLD = 0.90;
 
 // Patterns that indicate higher importance
 const HIGH_IMPORTANCE_PATTERNS = [
-  /\b(?:always|never|must|required|important|critical|prefer)\b/i,
+  /\b(?:always|never|must|required|important|critical|prefers?|preferred)\b/i,
   /\b(?:my name is|I am|I'm called)\b/i,
   /\b(?:remember|don't forget)\b/i,
 ];

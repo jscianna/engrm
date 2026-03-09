@@ -38,7 +38,7 @@ const TITLE_PATTERNS: Array<{ pattern: RegExp; type: MemoryKind }> = [
   { pattern: /\bI'm a\b/i, type: "identity" },
   
   // Preference patterns
-  { pattern: /\bprefer\b/i, type: "preference" },
+  { pattern: /\bprefers?\b/i, type: "preference" },
   { pattern: /\bpreference\b/i, type: "preference" },
   { pattern: /\bI like\b/i, type: "preference" },
   { pattern: /\bI hate\b/i, type: "preference" },
