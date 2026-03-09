@@ -16,46 +16,45 @@ export default function OpenClawGuidePage() {
 
       <H2 id="plugin">Plugin Installation (Recommended)</H2>
       <P>
-        Install the full-featured <InlineCode>@fathippo/memory</InlineCode> plugin 
-        for automatic recall AND capture.
+        Install the <InlineCode>@fathippo/context-engine</InlineCode> plugin to make FatHippo the active context layer for OpenClaw.
       </P>
 
       <CodeBlock language="bash">{`# Install the plugin
-openclaw plugins install @fathippo/memory
+openclaw plugins install @fathippo/context-engine
+
+# Set as context engine
+openclaw config set plugins.slots.contextEngine=fathippo-context-engine
 
 # Configure your API key
-openclaw config set plugins.entries.fathippo-memory.config.apiKey "mem_your_key"
-
-# Enable as memory slot (replaces default memory)
-openclaw config set plugins.slots.memory fathippo-memory
+openclaw config set plugins.entries.fathippo-context-engine.config.apiKey=mem_your_key
 
 # Restart
 openclaw gateway restart`}</CodeBlock>
 
       <H3>Features</H3>
       <ul className="list-disc list-inside text-zinc-400 space-y-2 mb-4">
-        <li><strong>Auto-Recall:</strong> Injects relevant memories into system prompt before each conversation</li>
-        <li><strong>Auto-Capture:</strong> Stores insights automatically after conversations (preferences, decisions, facts)</li>
-        <li><strong>Tools:</strong> <InlineCode>memory_recall</InlineCode>, <InlineCode>memory_store</InlineCode>, <InlineCode>memory_forget</InlineCode></li>
+        <li><strong>Per-turn context injection:</strong> Retrieves relevant memories for each user turn</li>
+        <li><strong>Auto-capture:</strong> Stores useful user insights while filtering noise</li>
+        <li><strong>Dream Cycle compaction:</strong> Uses FatHippo synthesis on compaction</li>
+        <li><strong>Subagent context handoff:</strong> Preserves context across spawned agents</li>
         <li><strong>Encrypted:</strong> AES-256-GCM at rest</li>
-        <li><strong>Cross-device:</strong> Cloud-native, works everywhere</li>
       </ul>
 
       <H3>Configuration Options</H3>
       <CodeBlock language="json">{`{
   "plugins": {
     "slots": {
-      "memory": "fathippo-memory"
+      "contextEngine": "fathippo-context-engine"
     },
     "entries": {
-      "fathippo-memory": {
+      "fathippo-context-engine": {
         "enabled": true,
         "config": {
           "apiKey": "mem_your_key",
-          "autoRecall": true,
-          "autoCapture": true,
-          "recallLimit": 5,
-          "captureMaxChars": 2000
+          "injectCritical": true,
+          "injectLimit": 20,
+          "captureUserOnly": true,
+          "dreamCycleOnCompact": true
         }
       }
     }
@@ -118,7 +117,7 @@ Persistent memory for cross-session context.
 ### Store Memory
 \`\`\`bash
 curl -X POST "https://www.fathippo.ai/api/v1/simple/remember" \\
-  -H "Authorization: Bearer $ENGRM_API_KEY" \\
+  -H "Authorization: Bearer $FATHIPPO_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"text": "What to remember"}'
 \`\`\`
@@ -126,7 +125,7 @@ curl -X POST "https://www.fathippo.ai/api/v1/simple/remember" \\
 ### Search Memories
 \`\`\`bash
 curl -X POST "https://www.fathippo.ai/api/v1/simple/recall" \\
-  -H "Authorization: Bearer $ENGRM_API_KEY" \\
+  -H "Authorization: Bearer $FATHIPPO_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"query": "what to search for", "limit": 5}'
 \`\`\`
@@ -134,7 +133,7 @@ curl -X POST "https://www.fathippo.ai/api/v1/simple/recall" \\
 ### Get Session Context
 \`\`\`bash
 curl -X POST "https://www.fathippo.ai/api/v1/simple/context" \\
-  -H "Authorization: Bearer $ENGRM_API_KEY" \\
+  -H "Authorization: Bearer $FATHIPPO_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"message": "current user message"}'
 \`\`\`
@@ -142,7 +141,7 @@ curl -X POST "https://www.fathippo.ai/api/v1/simple/context" \\
 ## Environment Variable
 Set in your environment or OpenClaw config:
 \`\`\`bash
-export ENGRM_API_KEY="mem_your_api_key"
+export FATHIPPO_API_KEY="mem_your_api_key"
 \`\`\``}</CodeBlock>
 
       <H2 id="agents-md">Update AGENTS.md</H2>
@@ -206,7 +205,7 @@ Before reaching out to your human about something:
       <H3>1. Session Start</H3>
       <CodeBlock language="bash">{`# When starting a new conversation, get context
 curl -X POST "https://www.fathippo.ai/api/v1/simple/context" \\
-  -H "Authorization: Bearer $ENGRM_API_KEY" \\
+  -H "Authorization: Bearer $FATHIPPO_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"message": "User just asked about the API project"}'
 
@@ -215,7 +214,7 @@ curl -X POST "https://www.fathippo.ai/api/v1/simple/context" \\
       <H3>2. During Conversation</H3>
       <CodeBlock language="bash">{`# When user asks about something that might be in memory
 curl -X POST "https://www.fathippo.ai/api/v1/simple/recall" \\
-  -H "Authorization: Bearer $ENGRM_API_KEY" \\
+  -H "Authorization: Bearer $FATHIPPO_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"query": "database choice for project alpha"}'
 
@@ -224,7 +223,7 @@ curl -X POST "https://www.fathippo.ai/api/v1/simple/recall" \\
       <H3>3. After Important Exchanges</H3>
       <CodeBlock language="bash">{`# When user makes a decision or reveals a preference
 curl -X POST "https://www.fathippo.ai/api/v1/simple/remember" \\
-  -H "Authorization: Bearer $ENGRM_API_KEY" \\
+  -H "Authorization: Bearer $FATHIPPO_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"text": "User decided to use PostgreSQL for Project Alpha because of team familiarity with SQL"}'`}</CodeBlock>
 
@@ -256,7 +255,7 @@ confirming preference for SQL databases over NoSQL"]`}</CodeBlock>
       </P>
       <CodeBlock language="bash">{`# Store in project namespace
 curl -X POST "https://www.fathippo.ai/api/v1/memories" \\
-  -H "Authorization: Bearer $ENGRM_API_KEY" \\
+  -H "Authorization: Bearer $FATHIPPO_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "content": "API uses REST, not GraphQL",
@@ -269,7 +268,7 @@ curl -X POST "https://www.fathippo.ai/api/v1/memories" \\
       </P>
       <CodeBlock language="bash">{`# Start session
 SESSION=$(curl -s -X POST "https://www.fathippo.ai/api/v1/sessions/start" \\
-  -H "Authorization: Bearer $ENGRM_API_KEY" \\
+  -H "Authorization: Bearer $FATHIPPO_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"firstMessage": "Help with API design"}' | jq -r '.sessionId')
 
@@ -277,7 +276,7 @@ SESSION=$(curl -s -X POST "https://www.fathippo.ai/api/v1/sessions/start" \\
 
 # End session
 curl -X POST "https://www.fathippo.ai/api/v1/sessions/$SESSION/end" \\
-  -H "Authorization: Bearer $ENGRM_API_KEY" \\
+  -H "Authorization: Bearer $FATHIPPO_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"outcome": "success"}'`}</CodeBlock>
 
