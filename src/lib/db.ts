@@ -2291,7 +2291,7 @@ export async function listAgentMemories(params: {
 
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, content_encrypted, metadata_json,
+      SELECT id, user_id, title, source_type, memory_type, importance, importance_tier, source_url, file_name, content_text, content_encrypted, metadata_json,
              namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive, created_at
       FROM memories
       ${where}
@@ -2328,7 +2328,7 @@ export async function listConsolidatedMemories(params: {
 
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, content_encrypted, metadata_json,
+      SELECT id, user_id, title, source_type, memory_type, importance, importance_tier, source_url, file_name, content_text, content_encrypted, metadata_json,
              namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive, created_at
       FROM memories
       ${where}
@@ -2346,7 +2346,7 @@ export async function listSessionMemories(userId: string, sessionId: string): Pr
   const client = getDb();
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, content_encrypted, metadata_json,
+      SELECT id, user_id, title, source_type, memory_type, importance, importance_tier, source_url, file_name, content_text, content_encrypted, metadata_json,
              namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive, created_at
       FROM memories
       WHERE user_id = ? AND session_id = ? AND archived_at IS NULL
@@ -2434,7 +2434,7 @@ export async function getAgentMemoryById(
   const excludeSensitive = options?.excludeSensitive !== false;
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, content_encrypted, metadata_json,
+      SELECT id, user_id, title, source_type, memory_type, importance, importance_tier, source_url, file_name, content_text, content_encrypted, metadata_json,
              namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive, created_at
       FROM memories
       WHERE user_id = ? AND id = ?
@@ -3045,7 +3045,7 @@ export async function listMemoryCompactionCandidates(params: {
 
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, title, source_type, memory_type, source_url, file_name, content_text, metadata_json,
+      SELECT id, user_id, title, source_type, memory_type, importance, importance_tier, source_url, file_name, content_text, metadata_json,
              content_encrypted, namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive, created_at,
              embedding, strength, mention_count, archived_at
       FROM memories
