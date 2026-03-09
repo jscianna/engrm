@@ -14,6 +14,11 @@ const DECISION_PATTERNS = [
   /\binstead\s+of\b/i,
   /\bover\s+(the\s+)?(other|alternative)/i,
   /\bwhat\s+(made|led)\s+(us|you|me|them)\s+to\b/i,
+  // "What X do we use" patterns - asking about established decisions
+  /\bwhat\s+(strategy|approach|method|framework|tool|process|workflow|system)\s+(do|did|does)\s+(we|you|they)\s+use\b/i,
+  /\bwhat\s+.+\s+do\s+we\s+use\b/i,
+  /\bhow\s+do\s+(we|you)\s+(handle|manage|do|approach)\b/i,
+  /\bwhat\s+(is|are)\s+our\s+(strategy|approach|process|workflow|policy)\b/i,
 ];
 
 // Technical/config query patterns  
@@ -21,6 +26,10 @@ const TECHNICAL_PATTERNS = [
   /\b(ttl|timeout|expir|config|setting|parameter|threshold)\b/i,
   /\bhow\s+(long|many|much|often)\b/i,
   /\bwhat\s+(is|are)\s+the\s+/i,
+  // "When does X expire" patterns
+  /\bwhen\s+(do|does|did)\s+.+\s+(expire|timeout|reset|refresh)\b/i,
+  /\bwhen\s+(is|are)\s+.+\s+(due|scheduled|set)\b/i,
+  /\b(lifetime|duration|validity)\s+of\b/i,
 ];
 
 export type QueryIntent = 'decision' | 'technical' | 'general';
@@ -93,6 +102,25 @@ function expandDecisionQuery(query: string): string[] {
     variants.push(`rationale: ${subject}`);
   }
   
+  // "What X do we use" → "adopted X", "using X", "switched to X"
+  const useMatch = normalized.match(/what\s+(.+?)\s+do\s+(?:we|you)\s+use/i);
+  if (useMatch) {
+    const [, thing] = useMatch;
+    variants.push(`adopted ${thing}`);
+    variants.push(`using ${thing}`);
+    variants.push(`switched to ${thing}`);
+    variants.push(`${thing} we use`);
+  }
+  
+  // "How do we handle X" → "approach to X", "X process"
+  const handleMatch = normalized.match(/how\s+do\s+(?:we|you)\s+(?:handle|manage|do|approach)\s+(.+?)(?:\?|$)/i);
+  if (handleMatch) {
+    const [, thing] = handleMatch;
+    variants.push(`approach to ${thing}`);
+    variants.push(`${thing} process`);
+    variants.push(`${thing} workflow`);
+  }
+  
   // Add entity-focused variant
   if (entities.length > 0) {
     variants.push(`decision ${entities.join(' ')}`);
@@ -120,6 +148,16 @@ function expandTechnicalQuery(query: string): string[] {
     variants.push(`${thing} duration`);
     variants.push(`${thing} expires after`);
     variants.push(`${thing} lifetime`);
+  }
+  
+  // "When does X expire" → "X expire after", "X expiration"
+  const expireMatch = normalized.match(/when\s+(?:do|does|did)\s+(.+?)\s+(?:expire|timeout|reset)/i);
+  if (expireMatch) {
+    const [, thing] = expireMatch;
+    variants.push(`${thing} expire after`);
+    variants.push(`${thing} expiration`);
+    variants.push(`${thing} lifetime`);
+    variants.push(`${thing} valid for`);
   }
   
   return variants;
