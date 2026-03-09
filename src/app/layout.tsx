@@ -10,22 +10,32 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://fathippo.ai"),
   title: "FatHippo | Memory for AI Agents",
   description:
-    "Persistent, encrypted memory for AI agents. Your agent stores what matters, recalls it when needed, and saves tokens every session.",
+    "Context engine for OpenClaw — save tokens, get better results. Store what matters, automatically recall it when needed. 🦛",
   openGraph: {
     title: "FatHippo | Memory for AI Agents",
     description:
-      "Persistent, encrypted memory for AI agents. Your agent stores what matters, recalls it when needed, and saves tokens every session.",
+      "Context engine for OpenClaw — save tokens, get better results. Store what matters, automatically recall it when needed. 🦛",
     url: "https://fathippo.ai",
     siteName: "FatHippo",
     type: "website",
+    images: [
+      {
+        url: "/hippo.png",
+        width: 512,
+        height: 512,
+        alt: "FatHippo Logo",
+      },
+    ],
   },
   twitter: {
-    card: "summary_large_image",
+    card: "summary",
     title: "FatHippo | Memory for AI Agents",
     description:
-      "Persistent, encrypted memory for AI agents. Your agent stores what matters, recalls it when needed, and saves tokens every session.",
+      "Context engine for OpenClaw — save tokens, get better results. Store what matters, automatically recall it when needed. 🦛",
+    images: ["/hippo.png"],
   },
 };
 
