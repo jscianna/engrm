@@ -21,6 +21,7 @@ import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 import { detectSecretQueryIntent, VAULT_HINT_MESSAGE } from "@/lib/secrets";
+import { expandQuery, detectQueryIntent, mergeExpandedResults } from "@/lib/query-expansion";
 
 export const runtime = "nodejs";
 
@@ -172,35 +173,52 @@ export async function POST(request: Request) {
     }
 
     // Get relevant memories based on message (hybrid: vector + BM25)
+    // Use query expansion for decision/technical queries to improve recall
     let relevantMemories: typeof criticalMemories = [];
     try {
-      // Run vector and BM25 search in parallel
-      const [vectorResults, bm25Results] = await Promise.all([
-        (async () => {
-          const vector = await embedText(message);
-          const hits = await semanticSearchVectors({
-            userId: identity.userId,
-            query: message,
-            vector,
-            topK: vectorTopK,
-          });
-          return hits
-            .map((h) => ({ id: h.item.id, score: h.score }))
-            .filter((h) => h.score >= minVectorSimilarity);
-        })(),
-        (async () => {
-          try {
-            await ensureFtsInitialized();
-            return await bm25Search({
-              userId: identity.userId,
-              query: message,
-              topK: vectorTopK,
-            });
-          } catch {
-            return []; // FTS not ready
-          }
-        })(),
-      ]);
+      const queryIntent = detectQueryIntent(message);
+      const queries = queryIntent !== 'general' ? expandQuery(message) : [message];
+      
+      // Run searches for all query variants in parallel
+      const allSearchResults = await Promise.all(
+        queries.map(async (queryText) => {
+          const [vectorResults, bm25Results] = await Promise.all([
+            (async () => {
+              const vector = await embedText(queryText);
+              const hits = await semanticSearchVectors({
+                userId: identity.userId,
+                query: queryText,
+                vector,
+                topK: vectorTopK,
+              });
+              return hits
+                .map((h) => ({ id: h.item.id, score: h.score }))
+                .filter((h) => h.score >= minVectorSimilarity);
+            })(),
+            (async () => {
+              try {
+                await ensureFtsInitialized();
+                return await bm25Search({
+                  userId: identity.userId,
+                  query: queryText,
+                  topK: vectorTopK,
+                });
+              } catch {
+                return []; // FTS not ready
+              }
+            })(),
+          ]);
+          return { vectorResults, bm25Results };
+        })
+      );
+      
+      // Merge results from all query variants
+      const allVectorResults = mergeExpandedResults(
+        allSearchResults.map((r) => r.vectorResults)
+      );
+      const allBm25Results = allSearchResults.flatMap((r) => r.bm25Results);
+      const vectorResults = allVectorResults;
+      const bm25Results = allBm25Results;
 
       // Combine with RRF fusion, allowing BM25-only rescues for exact lexical matches.
       let memoryIds: string[] = [];
