@@ -37,8 +37,12 @@ const TRIVIAL_ACKS = new Set([
   "thx",
 ]);
 
-const MIN_VECTOR_SIMILARITY = 0.75;
-const MIN_CRITICAL_RELEVANCE = 0.7;
+// Default retrieval parameters (can be overridden via request body for testing)
+const DEFAULT_MIN_VECTOR_SIMILARITY = 0.75;
+const DEFAULT_MIN_CRITICAL_RELEVANCE = 0.7;
+const DEFAULT_VECTOR_TOPK = 20;
+const DEFAULT_RRF_K = 60;
+const DEFAULT_BM25_WEIGHT = 1.2;
 
 function isTrivialQuery(message: string): boolean {
   const trimmed = message.trim();
@@ -100,6 +104,23 @@ export async function POST(request: Request) {
     const maxCritical = typeof body.maxCritical === "number" ? Math.min(body.maxCritical, 10) : 5;
     const maxRelevant = typeof body.maxRelevant === "number" ? Math.min(body.maxRelevant, 10) : 5;
 
+    // Retrieval tuning params (for autoresearch experiments)
+    const minVectorSimilarity = typeof body.minVectorSimilarity === "number" 
+      ? Math.max(0.3, Math.min(0.95, body.minVectorSimilarity)) 
+      : DEFAULT_MIN_VECTOR_SIMILARITY;
+    const minCriticalRelevance = typeof body.minCriticalRelevance === "number"
+      ? Math.max(0.3, Math.min(0.95, body.minCriticalRelevance))
+      : DEFAULT_MIN_CRITICAL_RELEVANCE;
+    const vectorTopK = typeof body.vectorTopK === "number"
+      ? Math.max(5, Math.min(100, body.vectorTopK))
+      : DEFAULT_VECTOR_TOPK;
+    const rrfK = typeof body.rrfK === "number"
+      ? Math.max(10, Math.min(200, body.rrfK))
+      : DEFAULT_RRF_K;
+    const bm25Weight = typeof body.bm25Weight === "number"
+      ? Math.max(0.1, Math.min(5.0, body.bm25Weight))
+      : DEFAULT_BM25_WEIGHT;
+
     // Get critical memories
     const allCriticalMemories = filterSensitiveMemories(
       await getCriticalMemories(identity.userId, {
@@ -142,7 +163,7 @@ export async function POST(request: Request) {
       
       const criticalHitIds = new Set(
         criticalHits
-          .filter((h) => h.score > MIN_CRITICAL_RELEVANCE)
+          .filter((h) => h.score > minCriticalRelevance)
           .map((h) => h.item.id),
       );
       criticalMemories = allCritical
@@ -161,11 +182,11 @@ export async function POST(request: Request) {
             userId: identity.userId,
             query: message,
             vector,
-            topK: 20,
+            topK: vectorTopK,
           });
           return hits
             .map((h) => ({ id: h.item.id, score: h.score }))
-            .filter((h) => h.score >= MIN_VECTOR_SIMILARITY);
+            .filter((h) => h.score >= minVectorSimilarity);
         })(),
         (async () => {
           try {
@@ -173,7 +194,7 @@ export async function POST(request: Request) {
             return await bm25Search({
               userId: identity.userId,
               query: message,
-              topK: 20,
+              topK: vectorTopK,
             });
           } catch {
             return []; // FTS not ready
@@ -187,8 +208,8 @@ export async function POST(request: Request) {
       let memoryIds: string[] = [];
       if (vectorResults.length > 0 && bm25Results.length > 0) {
         const fused = rrfFusion(vectorResults, bm25Results, {
-          k: 60,
-          bm25Weight: 1.2,
+          k: rrfK,
+          bm25Weight: bm25Weight,
         });
         memoryIds = fused
           .map((r) => r.memoryId)
