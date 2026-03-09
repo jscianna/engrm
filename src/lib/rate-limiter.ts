@@ -17,6 +17,19 @@ export const LIMITS = {
   STORAGE_BYTES: 100 * 1024 * 1024, // 100MB
 } as const;
 
+// Per-user limit overrides (for testing/enterprise)
+// userId -> { requestsPerDay?: number, memoriesPerMonth?: number }
+const USER_LIMIT_OVERRIDES: Record<string, Partial<typeof LIMITS>> = {};
+
+// API keys with elevated limits (hash prefix -> limits)
+// Used for autoresearch/testing accounts
+const ELEVATED_API_KEY_PREFIXES = new Set([
+  "mem_e94394c0499b7026c0576d2ddc9db41fe5127c642115ccb1", // Test account for autoresearch
+]);
+const ELEVATED_LIMITS = {
+  REQUESTS_PER_DAY: 100_000,
+};
+
 // TTL settings
 const USAGE_RECORD_TTL_DAYS = 7;
 const CLEANUP_PROBABILITY = 0.01; // 1% of requests trigger cleanup
@@ -77,8 +90,12 @@ export type UsageStats = {
 export async function checkRateLimit(
   userId: string,
   apiKeyId: string,
-  endpoint: string
+  endpoint: string,
+  rawApiKey?: string
 ): Promise<void> {
+  // Check for elevated API keys (testing/enterprise)
+  const isElevated = rawApiKey && ELEVATED_API_KEY_PREFIXES.has(rawApiKey);
+  const dailyLimit = isElevated ? ELEVATED_LIMITS.REQUESTS_PER_DAY : LIMITS.REQUESTS_PER_DAY;
   await ensureRateLimiterInitialized();
   const client = getDb();
   const now = new Date();
@@ -129,9 +146,9 @@ export async function checkRateLimit(
 
     const stats = statsResult.rows[0] as Record<string, unknown> | undefined;
     const apiCallsToday = stats?.last_reset_day === today ? Number(stats.api_calls_today ?? 0) : 0;
-    if (apiCallsToday >= LIMITS.REQUESTS_PER_DAY) {
+    if (apiCallsToday >= dailyLimit) {
       throw new MemryError("RATE_LIMIT_DAILY", {
-        limit: LIMITS.REQUESTS_PER_DAY,
+        limit: dailyLimit,
         resetAt: getTomorrowMidnightUTC(),
       });
     }

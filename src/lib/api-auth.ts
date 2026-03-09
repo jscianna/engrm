@@ -35,7 +35,8 @@ export async function validateApiKey(
   }
 
   // Check rate limits and record the API call
-  await checkRateLimit(identity.userId, identity.keyId, endpoint);
+  // Pass raw token for elevated limit checks (testing/enterprise keys)
+  await checkRateLimit(identity.userId, identity.keyId, endpoint, token);
 
   return identity;
 }
