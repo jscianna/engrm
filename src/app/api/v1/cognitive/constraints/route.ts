@@ -15,24 +15,7 @@ import {
 
 export const runtime = "nodejs";
 
-// Patterns that indicate a constraint is being stated
-const CONSTRAINT_PATTERNS = [
-  /\b(?:don'?t|do not|never|must not|should not|shouldn'?t|cannot|can'?t)\b.*\b(push|commit|share|publish|send|post|expose|leak|upload)/i,
-  /\b(?:keep|make sure|ensure).*\b(private|secret|local|confidential|internal)/i,
-  /\b(?:private|confidential|internal|secret)\b.*\b(?:only|never share)/i,
-  /\balways\b.*\b(ask|check|verify|confirm)\b.*\bbefore\b/i,
-  /\bmust\b.*\b(first|before|always)/i,
-  /\b(?:proprietary|intellectual property|ip)\b/i,
-  /\bdo not (?:open.?source|make public)/i,
-];
-
-const TRIGGER_KEYWORDS: Record<string, string[]> = {
-  'git': ['push', 'commit', 'github', 'repo', 'repository'],
-  'sharing': ['share', 'publish', 'post', 'send', 'upload', 'expose'],
-  'privacy': ['private', 'secret', 'confidential', 'internal'],
-  'code': ['code', 'source', 'algorithm', 'implementation'],
-  'api': ['api', 'key', 'token', 'secret', 'credential'],
-};
+import { CONSTRAINT_PATTERNS, TRIGGER_KEYWORDS } from "@/lib/constraint-patterns";
 
 /**
  * GET /api/v1/cognitive/constraints
@@ -169,24 +152,38 @@ export async function POST(request: Request) {
   }
 }
 
-// Helper: Detect constraint from message
+// Helper: Detect constraint from message using MoA-generated patterns
 function detectConstraint(message: string): {
   isConstraint: boolean;
   rule?: string;
   triggers?: string[];
   severity?: 'critical' | 'warning';
+  category?: string;
 } {
-  for (const pattern of CONSTRAINT_PATTERNS) {
+  for (const { pattern, category, severity } of CONSTRAINT_PATTERNS) {
+    // Reset lastIndex for global patterns
+    pattern.lastIndex = 0;
+    
     if (pattern.test(message)) {
+      // Find the matching sentence
       const sentences = message.split(/[.!?\n]+/).filter(s => s.trim());
-      const matchingSentence = sentences.find(s => pattern.test(s));
+      pattern.lastIndex = 0;
+      const matchingSentence = sentences.find(s => {
+        pattern.lastIndex = 0;
+        return pattern.test(s);
+      });
       
       if (matchingSentence) {
         const rule = matchingSentence.trim();
         const triggers = extractTriggers(message.toLowerCase());
-        const severity = determineSeverity(message.toLowerCase());
         
-        return { isConstraint: true, rule, triggers, severity };
+        return { 
+          isConstraint: true, 
+          rule, 
+          triggers, 
+          severity,
+          category,
+        };
       }
     }
   }
@@ -209,19 +206,4 @@ function extractTriggers(message: string): string[] {
   }
   
   return [...new Set(triggers)];
-}
-
-function determineSeverity(message: string): 'critical' | 'warning' {
-  const criticalWords = [
-    'never', 'must not', 'critical', 'important', 'absolutely',
-    'proprietary', 'confidential', 'secret', 'private'
-  ];
-  
-  for (const word of criticalWords) {
-    if (message.includes(word)) {
-      return 'critical';
-    }
-  }
-  
-  return 'warning';
 }
