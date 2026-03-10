@@ -1,29 +1,26 @@
 {
   "name": "@fathippo/openclaw-hook",
   "version": "0.1.0",
-  "description": "FatHippo memory hook for OpenClaw - auto-recall context on conversations",
-  "type": "module",
-  "main": "dist/handler.js",
-  "files": [
-    "dist/",
-    "hooks/"
-  ],
-  "openclaw": {
-    "hooks": ["./hooks/memory-fathippo"]
-  },
-  "scripts": {
-    "build": "esbuild hooks/memory-fathippo/handler.ts --outfile=hooks/memory-fathippo/handler.js --format=esm --platform=node",
-    "prepublishOnly": "npm run build"
-  },
-  "keywords": ["openclaw", "fathippo", "memory", "ai", "hooks"],
-  "author": "FatHippo",
+  "description": "FatHippo memory auto-recall hook for OpenClaw agents",
+  "author": "FatHippo <hello@fathippo.ai>",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/jscianna/fathippo.git",
     "directory": "packages/openclaw-hook"
   },
-  "devDependencies": {
-    "esbuild": "^0.20.0"
-  }
+  "keywords": [
+    "fathippo",
+    "openclaw",
+    "ai-memory",
+    "agent-memory",
+    "hook"
+  ],
+  "openclaw": {
+    "hooks": ["./hook"]
+  },
+  "files": [
+    "hook",
+    "README.md"
+  ]
 }
