@@ -82,3 +82,20 @@ export interface ProcessingQueueParams {
     | "updateAccessPatterns"
   >;
 }
+
+export interface IndexedMemory {
+  index: string;
+  summary: string;
+  content?: string; // Only present when dereferenced
+  contentType?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  accessCount: number;
+}
+
+export interface IndexedMemoriesResponse {
+  indices: IndexedMemory[];
+  contextFormat: string; // Pre-formatted for agent context
+  count: number;
+}

@@ -144,10 +144,24 @@ export class FatHippoContextEngine {
      */
     async assemble(params) {
         const lastUserMessage = this.findLastUserMessage(params.messages)?.trim() ?? "";
+        // Always fetch indexed summaries (they're compact)
+        let indexedContext = "";
+        try {
+            const indexed = await this.client.getIndexedSummaries();
+            if (indexed.count > 0) {
+                indexedContext = `\n## Indexed Memory (use GET /indexed/:key for full content)\n${indexed.contextFormat}\n`;
+            }
+        }
+        catch {
+            // Indexed memories are optional, don't fail on error
+        }
         if (!lastUserMessage || this.isTrivialQuery(lastUserMessage)) {
+            // Still include indexed summaries even for trivial queries
+            const baseTokens = this.estimateMessageTokens(params.messages);
             return {
                 messages: params.messages,
-                estimatedTokens: this.estimateMessageTokens(params.messages),
+                estimatedTokens: baseTokens + estimateTokens(indexedContext),
+                systemPromptAddition: indexedContext || undefined,
             };
         }
         // Fetch relevant memories based on last user message
@@ -201,13 +215,14 @@ export class FatHippoContextEngine {
             memories = constrained.memories;
             syntheses = constrained.syntheses;
         }
-        // Format memories for injection
+        // Format memories for injection, include indexed summaries
         const memoryBlock = formatMemoriesForInjection(memories, syntheses);
-        const tokens = estimateTokens(memoryBlock) + baseMessageTokens;
+        const fullContext = (memoryBlock ? memoryBlock + "\n" : "") + indexedContext;
+        const tokens = estimateTokens(fullContext) + baseMessageTokens;
         return {
             messages: params.messages,
             estimatedTokens: tokens,
-            systemPromptAddition: memoryBlock || undefined,
+            systemPromptAddition: fullContext.trim() || undefined,
         };
     }
     /**

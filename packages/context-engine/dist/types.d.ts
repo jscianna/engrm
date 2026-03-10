@@ -68,4 +68,19 @@ export interface ProcessingQueueParams {
     userId: string;
     tasks: Array<"extractEntities" | "detectImportance" | "buildRelationships" | "updateAccessPatterns">;
 }
+export interface IndexedMemory {
+    index: string;
+    summary: string;
+    content?: string;
+    contentType?: string;
+    metadata?: Record<string, unknown>;
+    createdAt: string;
+    updatedAt: string;
+    accessCount: number;
+}
+export interface IndexedMemoriesResponse {
+    indices: IndexedMemory[];
+    contextFormat: string;
+    count: number;
+}
 //# sourceMappingURL=types.d.ts.map

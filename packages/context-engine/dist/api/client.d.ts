@@ -1,7 +1,7 @@
 /**
  * FatHippo API Client
  */
-import type { FatHippoConfig, Memory, SearchResult, CriticalMemoriesResponse, RememberParams, SearchParams, DreamCycleParams } from "../types.js";
+import type { FatHippoConfig, Memory, SearchResult, CriticalMemoriesResponse, RememberParams, SearchParams, DreamCycleParams, IndexedMemory, IndexedMemoriesResponse } from "../types.js";
 export declare class FatHippoClient {
     private apiKey;
     private baseUrl;
@@ -48,6 +48,27 @@ export declare class FatHippoClient {
             content: string;
         }>;
         tokenEstimate?: number;
+    }>;
+    /**
+     * Get indexed memory summaries (compact, for agent context)
+     */
+    getIndexedSummaries(): Promise<IndexedMemoriesResponse>;
+    /**
+     * Dereference an indexed memory to get full content
+     */
+    dereferenceIndex(indexKey: string): Promise<IndexedMemory>;
+    /**
+     * Store an indexed memory
+     */
+    storeIndexed(params: {
+        index: string;
+        summary: string;
+        content: string;
+        contentType?: string;
+        metadata?: Record<string, unknown>;
+    }): Promise<{
+        stored: boolean;
+        index: string;
     }>;
 }
 //# sourceMappingURL=client.d.ts.map

@@ -144,5 +144,26 @@ export class FatHippoClient {
             tokenEstimate: response.stats?.totalTokensEstimate,
         };
     }
+    /**
+     * Get indexed memory summaries (compact, for agent context)
+     */
+    async getIndexedSummaries() {
+        return this.request("/v1/indexed");
+    }
+    /**
+     * Dereference an indexed memory to get full content
+     */
+    async dereferenceIndex(indexKey) {
+        return this.request(`/v1/indexed/${encodeURIComponent(indexKey)}`);
+    }
+    /**
+     * Store an indexed memory
+     */
+    async storeIndexed(params) {
+        return this.request("/v1/indexed", {
+            method: "POST",
+            body: JSON.stringify(params),
+        });
+    }
 }
 //# sourceMappingURL=client.js.map

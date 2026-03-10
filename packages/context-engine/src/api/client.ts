@@ -10,6 +10,8 @@ import type {
   RememberParams,
   SearchParams,
   DreamCycleParams,
+  IndexedMemory,
+  IndexedMemoriesResponse,
 } from "../types.js";
 
 const DEFAULT_BASE_URL = "https://www.fathippo.com/api";
@@ -232,5 +234,35 @@ export class FatHippoClient {
       })),
       tokenEstimate: response.stats?.totalTokensEstimate,
     };
+  }
+
+  /**
+   * Get indexed memory summaries (compact, for agent context)
+   */
+  async getIndexedSummaries(): Promise<IndexedMemoriesResponse> {
+    return this.request<IndexedMemoriesResponse>("/v1/indexed");
+  }
+
+  /**
+   * Dereference an indexed memory to get full content
+   */
+  async dereferenceIndex(indexKey: string): Promise<IndexedMemory> {
+    return this.request<IndexedMemory>(`/v1/indexed/${encodeURIComponent(indexKey)}`);
+  }
+
+  /**
+   * Store an indexed memory
+   */
+  async storeIndexed(params: {
+    index: string;
+    summary: string;
+    content: string;
+    contentType?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<{ stored: boolean; index: string }> {
+    return this.request<{ stored: boolean; index: string }>("/v1/indexed", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
   }
 }
