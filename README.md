@@ -38,17 +38,17 @@ Every AI agent wakes up with amnesia. FatHippo fixes that.
 
 ## Quick Start (OpenClaw)
 
-The fastest way to add memory to your AI agent:
+### Option 1: Context Engine (Full Integration)
+
+The most powerful integration — memory on every turn:
 
 ```bash
-# Install the context engine
+# Install the context engine plugin
 openclaw plugins install @fathippo/context-engine
 
 # Configure as context engine
 openclaw config set plugins.slots.contextEngine=fathippo-context-engine
 openclaw config set plugins.entries.fathippo-context-engine.config.apiKey=mem_xxx
-
-# Done. Memory is now automatic.
 ```
 
 Your agent now:
@@ -57,6 +57,21 @@ Your agent now:
 - ✅ Runs Dream Cycle on compaction (synthesis, not lossy summarization)
 - ✅ Inherits context to spawned subagents
 - ✅ Works across all chat surfaces
+
+### Option 2: Bootstrap Hook (Lightweight)
+
+Just want memory recall at session start? Use the hook:
+
+```bash
+# Install the hook
+openclaw hooks install @fathippo/openclaw-hook
+
+# Enable and configure
+openclaw hooks enable fathippo-recall
+openclaw config set hooks.internal.entries.fathippo-recall.env.FATHIPPO_API_KEY=mem_xxx
+```
+
+This writes relevant memories to `FATHIPPO_CONTEXT.md` at session start. Lighter weight, no per-turn overhead.
 
 ---
 
