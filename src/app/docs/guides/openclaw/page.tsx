@@ -65,37 +65,6 @@ openclaw gateway restart`}</CodeBlock>
         With the plugin installed, your agent automatically remembers and recalls — no manual API calls needed.
       </Note>
 
-      <H2 id="hook">Bootstrap Hook (Lightweight)</H2>
-      <P>
-        Want memory recall without per-turn overhead? Use the bootstrap hook instead.
-        It queries FatHippo once at session start and writes context to your workspace.
-      </P>
-
-      <CodeBlock language="bash">{`# Install the hook
-openclaw hooks install @fathippo/openclaw-hook
-
-# Enable it
-openclaw hooks enable fathippo-recall
-
-# Configure your API key
-openclaw config set hooks.internal.entries.fathippo-recall.env.FATHIPPO_API_KEY=mem_your_key
-
-# Restart
-openclaw gateway restart`}</CodeBlock>
-
-      <H3>How It Works</H3>
-      <ul className="list-disc list-inside text-zinc-400 space-y-2 mb-4">
-        <li>Fires on <InlineCode>agent:bootstrap</InlineCode> event (session start)</li>
-        <li>Queries FatHippo with context from your workspace files</li>
-        <li>Writes relevant memories to <InlineCode>FATHIPPO_CONTEXT.md</InlineCode></li>
-        <li>Agent sees pre-fetched context automatically in project files</li>
-      </ul>
-
-      <Note type="info">
-        Choose the <strong>plugin</strong> for full integration (per-turn context, auto-capture, dream cycle).
-        Choose the <strong>hook</strong> for lightweight session-start recall only.
-      </Note>
-
       <H2 id="setup">Manual Setup (Alternative)</H2>
       <P>
         If you prefer manual control, add your FatHippo API key to your agent's <InlineCode>TOOLS.md</InlineCode>:
