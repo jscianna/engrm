@@ -9,7 +9,26 @@ export type ApiKeyIdentity = {
   userId: string;
   agentId: string;
   keyId: string;
+  scopes: string[];
 };
+
+function apiKeyAllowsScope(scopes: string[], requiredScope: string): boolean {
+  if (scopes.includes("*")) {
+    return true;
+  }
+  for (const scope of scopes) {
+    if (scope === requiredScope) {
+      return true;
+    }
+    if (scope.endsWith(".*")) {
+      const prefix = scope.slice(0, -2);
+      if (requiredScope === prefix || requiredScope.startsWith(`${prefix}.`)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
 
 /**
  * Validate API key and check rate limits
@@ -32,6 +51,12 @@ export async function validateApiKey(
   const identity = await validateApiKeyInDb(token);
   if (!identity) {
     throw new MemryError("AUTH_INVALID_KEY");
+  }
+
+  if (!apiKeyAllowsScope(identity.scopes, endpoint)) {
+    throw new MemryError("AUTH_FORBIDDEN", {
+      requiredScope: endpoint,
+    });
   }
 
   // Check rate limits and record the API call

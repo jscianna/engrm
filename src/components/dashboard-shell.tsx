@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
-import { Activity, Brain, Home, KeyRound, Layers, Network, Plus, Search, Settings } from "lucide-react";
+import { Activity, Brain, Home, KeyRound, Layers, Network, Plus, Search, Settings, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { FeedbackWidget } from "@/components/feedback-widget";
 
-const links = [
+const baseLinks = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/dashboard/cognitive", label: "Cognitive", icon: Brain },
   { href: "/dashboard/add", label: "Add", icon: Plus },
@@ -20,9 +20,18 @@ const links = [
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
-export function DashboardShell({ children }: { children: React.ReactNode }) {
+export function DashboardShell({
+  children,
+  isAdmin = false,
+}: {
+  children: React.ReactNode;
+  isAdmin?: boolean;
+}) {
   const pathname = usePathname();
   const router = useRouter();
+  const links = isAdmin
+    ? [...baseLinks, { href: "/dashboard/admin", label: "Admin", icon: Shield }]
+    : baseLinks;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">

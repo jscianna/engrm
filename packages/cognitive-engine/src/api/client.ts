@@ -117,12 +117,24 @@ export class CognitiveClient {
     return response.traces || [];
   }
 
-  async exportEvalFixtures(limit = 100, acceptedOnly = false): Promise<RetrievalEvalDataset> {
+  async exportEvalFixtures(limit = 100, acceptedOnly = false, dataset: "generated" | "curated" = "generated"): Promise<RetrievalEvalDataset> {
     const params = new URLSearchParams({
       limit: String(limit),
       acceptedOnly: acceptedOnly ? "1" : "0",
+      dataset,
     });
     return this.request<RetrievalEvalDataset>(`/cognitive/eval/fixtures?${params.toString()}`);
+  }
+
+  async runBenchmark(dataset: "generated" | "curated", predictions: unknown[], thresholds?: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>("/cognitive/eval/benchmarks", {
+      method: "POST",
+      body: JSON.stringify({ dataset, predictions, thresholds }),
+    });
+  }
+
+  async getBenchmarkRuns(limit = 10): Promise<{ runs: Record<string, unknown>[] }> {
+    return this.request<{ runs: Record<string, unknown>[] }>(`/cognitive/eval/benchmarks?limit=${limit}`);
   }
   
   /**

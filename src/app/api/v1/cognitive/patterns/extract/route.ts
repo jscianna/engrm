@@ -1,6 +1,7 @@
 import { validateApiKey } from "@/lib/api-auth";
 import { errorResponse } from "@/lib/errors";
 import { releaseJobLease, runPatternExtraction, tryAcquireJobLease } from "@/lib/cognitive-db";
+import { logCognitiveAuditEvent } from "@/lib/cognitive-audit";
 
 export const runtime = "nodejs";
 
@@ -43,6 +44,19 @@ export async function POST(request: Request) {
           userId: identity.userId,
           localPatterns: result.localPatterns,
           globalPatterns: result.globalPatterns,
+        },
+      });
+
+      await logCognitiveAuditEvent({
+        request,
+        userId: identity.userId,
+        action: "cognitive.pattern.extract",
+        resourceType: "cognitive_job",
+        resourceId: jobName,
+        metadata: {
+          localPatterns: result.localPatterns,
+          globalPatterns: result.globalPatterns,
+          touchedPatternIds: result.touchedPatternIds.length,
         },
       });
 

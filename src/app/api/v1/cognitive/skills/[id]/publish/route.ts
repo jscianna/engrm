@@ -1,6 +1,8 @@
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { publishSkill } from "@/lib/cognitive-db";
+import { logCognitiveAuditEvent } from "@/lib/cognitive-audit";
+import { assertSkillPublicationEnabled } from "@/lib/cognitive-guards";
 
 export const runtime = "nodejs";
 
@@ -18,6 +20,7 @@ export async function POST(
 ) {
   try {
     const identity = await validateApiKey(request, "cognitive.skills.publish");
+    assertSkillPublicationEnabled();
     const { id } = await context.params;
     const skill = await publishSkill({
       userId: identity.userId,
@@ -28,6 +31,19 @@ export async function POST(
     if (!skill) {
       throw new MemryError("MEMORY_NOT_FOUND", { resource: "skill", id });
     }
+
+    await logCognitiveAuditEvent({
+      request,
+      userId: identity.userId,
+      action: "cognitive.skill.publish",
+      resourceType: "cognitive_skill",
+      resourceId: skill.id,
+      metadata: {
+        scope: skill.scope,
+        published: skill.published,
+        publishedTo: skill.publishedTo,
+      },
+    });
 
     return Response.json({
       skill: {

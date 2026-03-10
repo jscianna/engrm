@@ -64,6 +64,35 @@ export type PatternEvidenceSummary = {
   effectiveEvidence: number;
 };
 
+export type BaselineSnapshot = {
+  successRate: number;
+  medianTimeToResolutionMs: number | null;
+  medianRetries: number | null;
+  verificationPassRate: number;
+  sampleSize: number;
+};
+
+export type ImpactObservation = {
+  accepted: boolean;
+  explicitNegative?: boolean;
+  finalOutcome?: string | null;
+  timeToResolutionMs?: number | null;
+  retryCount?: number | null;
+  verificationPassed?: boolean;
+  baseline?: BaselineSnapshot | null;
+};
+
+export type EntityImpactSummary = {
+  applications: number;
+  acceptedApplications: number;
+  successfulApplications: number;
+  medianTimeToResolutionMs: number | null;
+  medianRetries: number | null;
+  verificationPassRate: number;
+  impactScore: number;
+  promotionReason: string;
+};
+
 export type PatternLifecycleStatus =
   | "candidate"
   | "active_local"
@@ -697,4 +726,145 @@ function stringValue(value: unknown): string | null {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) {
+    return null;
+  }
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1] + sorted[middle]) / 2
+    : sorted[middle];
+}
+
+export function summarizeEntityImpact(observations: ImpactObservation[]): EntityImpactSummary {
+  const applications = observations.length;
+  if (applications === 0) {
+    return {
+      applications: 0,
+      acceptedApplications: 0,
+      successfulApplications: 0,
+      medianTimeToResolutionMs: null,
+      medianRetries: null,
+      verificationPassRate: 0,
+      impactScore: 0,
+      promotionReason: "no_attribution_data",
+    };
+  }
+
+  const acceptedApplications = observations.filter((observation) => observation.accepted).length;
+  const successfulApplications = observations.filter((observation) => observation.finalOutcome === "success").length;
+  const resolvedDurations = observations
+    .map((observation) => observation.timeToResolutionMs)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const resolvedRetries = observations
+    .map((observation) => observation.retryCount)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const verificationOutcomes = observations.filter((observation) => observation.verificationPassed != null);
+  const verificationPassRate =
+    verificationOutcomes.length === 0
+      ? 0
+      : verificationOutcomes.filter((observation) => observation.verificationPassed).length / verificationOutcomes.length;
+
+  const impactScore =
+    observations.reduce((total, observation) => {
+      let score = 0;
+      if (observation.accepted) {
+        score += 0.15;
+      }
+      if (observation.finalOutcome === "success") {
+        score += 0.45;
+      } else if (observation.finalOutcome === "failed" || observation.finalOutcome === "abandoned") {
+        score -= 0.45;
+      }
+      if (observation.verificationPassed === true) {
+        score += 0.2;
+      } else if (observation.verificationPassed === false) {
+        score -= 0.2;
+      }
+      if (observation.explicitNegative) {
+        score -= 0.25;
+      }
+      if (observation.baseline?.medianRetries != null && observation.retryCount != null) {
+        const retryDelta = (observation.baseline.medianRetries - observation.retryCount) / Math.max(1, observation.baseline.medianRetries);
+        score += clamp(retryDelta, -1, 1) * 0.1;
+      }
+      if (observation.baseline?.medianTimeToResolutionMs != null && observation.timeToResolutionMs != null) {
+        const timeDelta =
+          (observation.baseline.medianTimeToResolutionMs - observation.timeToResolutionMs) /
+          Math.max(1, observation.baseline.medianTimeToResolutionMs);
+        score += clamp(timeDelta, -1, 1) * 0.1;
+      }
+      return total + clamp(score, -1, 1);
+    }, 0) / applications;
+
+  let promotionReason = "insufficient_impact_data";
+  if (impactScore >= 0.2 && verificationPassRate >= 0.65 && successfulApplications >= Math.max(2, Math.ceil(applications * 0.6))) {
+    promotionReason = "verified_outcomes_above_baseline";
+  } else if (impactScore <= -0.05 || verificationPassRate < 0.35) {
+    promotionReason = "negative_or_unverified_recent_outcomes";
+  } else if (acceptedApplications === 0) {
+    promotionReason = "shown_but_not_accepted";
+  }
+
+  return {
+    applications,
+    acceptedApplications,
+    successfulApplications,
+    medianTimeToResolutionMs: median(resolvedDurations),
+    medianRetries: median(resolvedRetries),
+    verificationPassRate,
+    impactScore,
+    promotionReason,
+  };
+}
+
+export function classifyPatternLifecycle(params: {
+  scope: "local" | "global";
+  effectiveEvidence: number;
+  confidence: number;
+  impact: EntityImpactSummary;
+}): PatternLifecycleStatus {
+  const evidenceReady = params.effectiveEvidence >= 2.5 && params.confidence >= 0.7;
+  const impactReady =
+    params.impact.applications >= 2 &&
+    params.impact.successfulApplications >= 1 &&
+    params.impact.impactScore >= 0.05 &&
+    params.impact.verificationPassRate >= 0.5;
+
+  if (evidenceReady && impactReady) {
+    return params.scope === "global" ? "active_global" : "active_local";
+  }
+  if (
+    params.impact.applications >= 3 &&
+    (params.impact.impactScore <= -0.05 || params.impact.verificationPassRate < 0.35)
+  ) {
+    return "deprecated";
+  }
+  return "candidate";
+}
+
+export function deriveSkillLifecycle(params: {
+  patternStatus: string;
+  confidence: number;
+  impact: EntityImpactSummary;
+  minConfidence?: number;
+}): SkillLifecycleStatus {
+  const minConfidence = params.minConfidence ?? 0.8;
+  if (params.patternStatus === "deprecated") {
+    return "stale";
+  }
+  if (
+    !isInjectablePatternStatus(params.patternStatus) ||
+    params.confidence < minConfidence ||
+    params.impact.acceptedApplications < 3 ||
+    params.impact.successfulApplications < 3 ||
+    params.impact.impactScore < 0.1 ||
+    params.impact.verificationPassRate < 0.6
+  ) {
+    return params.impact.applications >= 3 && params.impact.impactScore < 0 ? "stale" : "draft";
+  }
+  return "active";
 }

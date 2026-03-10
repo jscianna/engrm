@@ -8,6 +8,7 @@
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { createTrace, getMatchingPatterns, getRecentTraces, syncTracePatternMatches, updateApplicationOutcome } from "@/lib/cognitive-db";
+import { logCognitiveAuditEvent } from "@/lib/cognitive-audit";
 
 export const runtime = "nodejs";
 
@@ -54,6 +55,12 @@ export async function POST(request: Request) {
       retryCount: typeof body.retryCount === "number" ? body.retryCount : undefined,
       resolutionKind: typeof body.resolutionKind === "string" ? body.resolutionKind : undefined,
     };
+    const repoProfile =
+      body.repoProfile && typeof body.repoProfile === "object" && !Array.isArray(body.repoProfile)
+        ? body.repoProfile
+        : normalizedContext.repoSignals && typeof normalizedContext.repoSignals === "object"
+          ? normalizedContext.repoSignals
+          : null;
     
     const trace = await createTrace({
       userId: identity.userId,
@@ -100,14 +107,35 @@ export async function POST(request: Request) {
         applicationId: body.applicationId,
         traceId: trace.id,
         finalOutcome: trace.outcome,
+        repoProfile,
+        materializedPatternId: typeof body.materializedPatternId === "string" ? body.materializedPatternId : null,
+        materializedSkillId: typeof body.materializedSkillId === "string" ? body.materializedSkillId : null,
+        retryCount: typeof body.retryCount === "number" ? body.retryCount : null,
+        baselineGroupKey: typeof body.baselineGroupKey === "string" ? body.baselineGroupKey : null,
         acceptedTraceId: typeof body.acceptedTraceId === "string" ? body.acceptedTraceId : null,
         timeToResolutionMs: typeof body.durationMs === "number" ? body.durationMs : null,
         verificationSummary:
-          body.verificationSummary && typeof body.verificationSummary === "object" && !Array.isArray(body.verificationSummary)
-            ? body.verificationSummary
+          body.verificationResults && typeof body.verificationResults === "object" && !Array.isArray(body.verificationResults)
+            ? body.verificationResults
+            : body.verificationSummary && typeof body.verificationSummary === "object" && !Array.isArray(body.verificationSummary)
+              ? body.verificationSummary
             : null,
       });
     }
+
+    await logCognitiveAuditEvent({
+      request,
+      userId: identity.userId,
+      action: "cognitive.trace.create",
+      resourceType: "cognitive_trace",
+      resourceId: trace.id,
+      metadata: {
+        sessionId: trace.sessionId,
+        outcome: trace.outcome,
+        shareEligible: trace.shareEligible,
+        applicationId: typeof body.applicationId === "string" ? body.applicationId : null,
+      },
+    });
     
     return Response.json({
       trace: {

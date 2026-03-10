@@ -7,6 +7,7 @@ export type ErrorCode =
   | "AUTH_MISSING"
   | "AUTH_INVALID"
   | "AUTH_INVALID_KEY"
+  | "AUTH_FORBIDDEN"
   | "RATE_LIMIT_MINUTE"
   | "RATE_LIMIT_DAILY"
   | "QUOTA_MEMORIES"
@@ -39,6 +40,11 @@ const ERROR_DETAILS: Record<ErrorCode, { status: number; message: string; userMe
     status: 401,
     message: "Invalid API key",
     userMessage: "API key not found or revoked. Generate a new key in Settings.",
+  },
+  AUTH_FORBIDDEN: {
+    status: 403,
+    message: "Forbidden",
+    userMessage: "You do not have permission to perform this action.",
   },
   RATE_LIMIT_MINUTE: {
     status: 429,

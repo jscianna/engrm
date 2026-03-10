@@ -33,7 +33,16 @@ export type AuditAction =
   | "vault.delete"
   | "settings.update"
   | "admin.migrate"
-  | "admin.maintenance";
+  | "admin.maintenance"
+  | "cognitive.settings.update"
+  | "cognitive.trace.create"
+  | "cognitive.trace.outcome"
+  | "cognitive.pattern.create"
+  | "cognitive.pattern.extract"
+  | "cognitive.pattern.feedback"
+  | "cognitive.skill.synthesize"
+  | "cognitive.skill.publish"
+  | "cognitive.eval.benchmark_run";
 
 export type AuditLogEntry = {
   id: string;

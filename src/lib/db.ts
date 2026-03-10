@@ -214,6 +214,7 @@ async function ensureInitialized(): Promise<void> {
       user_id TEXT NOT NULL,
       key_hash TEXT NOT NULL UNIQUE,
       key_suffix TEXT,
+      scopes_json TEXT NOT NULL DEFAULT '["*"]',
       agent_id TEXT NOT NULL,
       agent_name TEXT,
       created_at TEXT NOT NULL,
@@ -467,6 +468,7 @@ async function ensureMemoriesColumns(client: Client): Promise<void> {
 async function ensureApiKeysColumns(client: Client): Promise<void> {
   const requiredColumns: Array<{ name: string; ddl: string }> = [
     { name: "key_suffix", ddl: "TEXT" },
+    { name: "scopes_json", ddl: `TEXT NOT NULL DEFAULT '["*"]'` },
   ];
 
   const tableInfo = await client.execute("PRAGMA table_info(api_keys)");
@@ -590,7 +592,72 @@ export type ApiKeyIdentity = {
   userId: string;
   agentId: string;
   keyId: string;
+  scopes: string[];
 };
+
+export const DEFAULT_AGENT_API_KEY_SCOPES = [
+  "analytics",
+  "chatbots.*",
+  "compact.create",
+  "context",
+  "context.refresh",
+  "cognitive.constraints.*",
+  "cognitive.eval.fixtures",
+  "cognitive.patterns.feedback",
+  "cognitive.patterns.list",
+  "cognitive.patterns.match",
+  "cognitive.patterns.skill-candidates",
+  "cognitive.settings.*",
+  "cognitive.skills.get",
+  "cognitive.skills.list",
+  "cognitive.traces.*",
+  "edges.*",
+  "edges.listForMemory",
+  "explain",
+  "extract",
+  "feedback.create",
+  "fts.stats",
+  "graph.get",
+  "indexed.*",
+  "lifecycle.restore",
+  "lifecycle.stats",
+  "memories.*",
+  "namespaces.*",
+  "reflect.create",
+  "search",
+  "sessions.*",
+  "simple.*",
+  "syntheses.*",
+] as const;
+
+function normalizeApiKeyScopes(scopes?: string[] | null): string[] {
+  const source = Array.isArray(scopes) ? scopes : [...DEFAULT_AGENT_API_KEY_SCOPES];
+  const normalized = Array.from(
+    new Set(
+      source
+        .filter((scope): scope is string => typeof scope === "string")
+        .map((scope) => scope.trim())
+        .filter(Boolean),
+    ),
+  );
+  return normalized.length > 0 ? normalized : [...DEFAULT_AGENT_API_KEY_SCOPES];
+}
+
+function parseApiKeyScopes(raw: unknown): string[] {
+  if (typeof raw !== "string" || raw.trim().length === 0) {
+    return ["*"];
+  }
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      return ["*"];
+    }
+    const scopes = parsed.filter((scope): scope is string => typeof scope === "string" && scope.trim().length > 0);
+    return scopes.length > 0 ? scopes : ["*"];
+  } catch {
+    return ["*"];
+  }
+}
 
 export type NamespaceRecord = {
   id: string;
@@ -1713,7 +1780,11 @@ export function filterSensitiveMemories<T extends { sensitive: boolean }>(memori
   return memories.filter((memory) => !memory.sensitive);
 }
 
-export async function createApiKey(userId: string, agentName?: string): Promise<{ apiKey: string; agentId: string }> {
+export async function createApiKey(
+  userId: string,
+  agentName?: string,
+  scopes?: string[],
+): Promise<{ apiKey: string; agentId: string; scopes: string[] }> {
   await ensureInitialized();
   const client = getDb();
   const id = crypto.randomUUID();
@@ -1722,17 +1793,18 @@ export async function createApiKey(userId: string, agentName?: string): Promise<
   const apiKey = `mem_${token}`;
   const keyHash = hashApiKey(apiKey);
   const keySuffix = apiKey.slice(-3); // Store last 3 chars for identification
+  const normalizedScopes = normalizeApiKeyScopes(scopes);
   const now = new Date().toISOString();
 
   await client.execute({
     sql: `
-      INSERT INTO api_keys (id, user_id, key_hash, key_suffix, agent_id, agent_name, created_at, last_used)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO api_keys (id, user_id, key_hash, key_suffix, scopes_json, agent_id, agent_name, created_at, last_used)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
-    args: [id, userId, keyHash, keySuffix, agentId, agentName ?? null, now, now],
+    args: [id, userId, keyHash, keySuffix, JSON.stringify(normalizedScopes), agentId, agentName ?? null, now, now],
   });
 
-  return { apiKey, agentId };
+  return { apiKey, agentId, scopes: normalizedScopes };
 }
 
 export async function validateApiKey(rawApiKey: string): Promise<ApiKeyIdentity | null> {
@@ -1742,7 +1814,7 @@ export async function validateApiKey(rawApiKey: string): Promise<ApiKeyIdentity 
 
   const result = await client.execute({
     sql: `
-      SELECT id, user_id, agent_id, revoked_at, expires_at
+      SELECT id, user_id, agent_id, scopes_json, revoked_at, expires_at
       FROM api_keys
       WHERE key_hash = ?
       LIMIT 1
@@ -1781,6 +1853,7 @@ export async function validateApiKey(rawApiKey: string): Promise<ApiKeyIdentity 
     userId: row.user_id as string,
     agentId: row.agent_id as string,
     keyId: row.id as string,
+    scopes: parseApiKeyScopes(row.scopes_json),
   };
 }
 
@@ -1795,13 +1868,14 @@ export async function listApiKeys(userId: string): Promise<Array<{
   revokedAt: string | null;
   expiresAt: string | null;
   isActive: boolean;
+  scopes: string[];
 }>> {
   await ensureInitialized();
   const client = getDb();
 
   const result = await client.execute({
     sql: `
-      SELECT id, agent_id, agent_name, key_suffix, created_at, last_used, revoked_at, expires_at
+      SELECT id, agent_id, agent_name, key_suffix, scopes_json, created_at, last_used, revoked_at, expires_at
       FROM api_keys
       WHERE user_id = ?
       ORDER BY created_at DESC
@@ -1828,8 +1902,153 @@ export async function listApiKeys(userId: string): Promise<Array<{
       revokedAt,
       expiresAt,
       isActive,
+      scopes: parseApiKeyScopes(row.scopes_json),
     };
   });
+}
+
+export async function setApiKeyScopes(userId: string, keyId: string, scopes: string[]): Promise<boolean> {
+  await ensureInitialized();
+  const client = getDb();
+  const normalizedScopes = normalizeApiKeyScopes(scopes);
+  const result = await client.execute({
+    sql: `
+      UPDATE api_keys
+      SET scopes_json = ?
+      WHERE user_id = ? AND id = ?
+    `,
+    args: [JSON.stringify(normalizedScopes), userId, keyId],
+  });
+  return (result.rowsAffected ?? 0) > 0;
+}
+
+function isLegacyApiKeyScopeValue(raw: unknown): boolean {
+  return typeof raw !== "string" || raw.trim().length === 0;
+}
+
+function isWildcardScopeSet(scopes: string[]): boolean {
+  return scopes.includes("*");
+}
+
+export async function getApiKeyScopeMigrationStatus(params?: {
+  userId?: string;
+}): Promise<{
+  totalKeys: number;
+  activeKeys: number;
+  scopedKeys: number;
+  wildcardKeys: number;
+  legacyKeysMissingScopes: number;
+  revocableWildcardKeys: number;
+}> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT id, scopes_json, revoked_at, expires_at
+      FROM api_keys
+      ${params?.userId ? "WHERE user_id = ?" : ""}
+    `,
+    args: params?.userId ? [params.userId] : [],
+  });
+  const now = Date.now();
+  let activeKeys = 0;
+  let scopedKeys = 0;
+  let wildcardKeys = 0;
+  let legacyKeysMissingScopes = 0;
+  let revocableWildcardKeys = 0;
+
+  for (const row of result.rows as Array<Record<string, unknown>>) {
+    const revoked = typeof row.revoked_at === "string" && row.revoked_at.length > 0;
+    const expired =
+      typeof row.expires_at === "string" && row.expires_at.length > 0
+        ? new Date(row.expires_at).getTime() < now
+        : false;
+    const active = !revoked && !expired;
+    if (active) {
+      activeKeys += 1;
+    }
+
+    const legacy = isLegacyApiKeyScopeValue(row.scopes_json);
+    if (legacy) {
+      legacyKeysMissingScopes += 1;
+    }
+    const scopes = parseApiKeyScopes(row.scopes_json);
+    if (isWildcardScopeSet(scopes)) {
+      wildcardKeys += 1;
+      if (active) {
+        revocableWildcardKeys += 1;
+      }
+    } else {
+      scopedKeys += 1;
+    }
+  }
+
+  return {
+    totalKeys: result.rows.length,
+    activeKeys,
+    scopedKeys,
+    wildcardKeys,
+    legacyKeysMissingScopes,
+    revocableWildcardKeys,
+  };
+}
+
+export async function backfillApiKeyScopes(params: {
+  userId?: string;
+  scopes?: string[];
+  dryRun?: boolean;
+  includeWildcardKeys?: boolean;
+}): Promise<{
+  candidates: number;
+  updated: number;
+  appliedScopes: string[];
+  keyIds: string[];
+}> {
+  await ensureInitialized();
+  const client = getDb();
+  const appliedScopes = normalizeApiKeyScopes(params.scopes);
+  const result = await client.execute({
+    sql: `
+      SELECT id, scopes_json
+      FROM api_keys
+      ${params.userId ? "WHERE user_id = ?" : ""}
+      ORDER BY created_at ASC
+    `,
+    args: params.userId ? [params.userId] : [],
+  });
+
+  const candidateIds = (result.rows as Array<Record<string, unknown>>)
+    .filter((row) => {
+      const legacy = isLegacyApiKeyScopeValue(row.scopes_json);
+      if (legacy) {
+        return true;
+      }
+      return params.includeWildcardKeys === true && isWildcardScopeSet(parseApiKeyScopes(row.scopes_json));
+    })
+    .map((row) => row.id as string);
+
+  if (params.dryRun !== false || candidateIds.length === 0) {
+    return {
+      candidates: candidateIds.length,
+      updated: 0,
+      appliedScopes,
+      keyIds: candidateIds,
+    };
+  }
+
+  for (const keyId of candidateIds) {
+    await client.execute({
+      sql: `UPDATE api_keys SET scopes_json = ? WHERE id = ?`,
+      args: [JSON.stringify(appliedScopes), keyId],
+    });
+  }
+
+  return {
+    candidates: candidateIds.length,
+    updated: candidateIds.length,
+    appliedScopes,
+    keyIds: candidateIds,
+  };
 }
 
 export async function deleteApiKey(userId: string, keyId: string): Promise<boolean> {

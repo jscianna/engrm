@@ -1,6 +1,7 @@
 import { validateApiKey } from "@/lib/api-auth";
 import { errorResponse } from "@/lib/errors";
 import { releaseJobLease, synthesizeEligibleSkills, tryAcquireJobLease } from "@/lib/cognitive-db";
+import { logCognitiveAuditEvent } from "@/lib/cognitive-audit";
 
 export const runtime = "nodejs";
 
@@ -38,6 +39,18 @@ export async function POST(request: Request) {
         checkpoint: {
           userId: identity.userId,
           synthesized: skills.length,
+        },
+      });
+
+      await logCognitiveAuditEvent({
+        request,
+        userId: identity.userId,
+        action: "cognitive.skill.synthesize",
+        resourceType: "cognitive_job",
+        resourceId: jobName,
+        metadata: {
+          synthesizedCount: skills.length,
+          skillIds: skills.map((skill) => skill.id),
         },
       });
 

@@ -23,6 +23,10 @@ export async function POST(request: Request) {
     const limit = Math.min(Number(body.limit) || 5, 20);
     const sessionId = typeof body.sessionId === "string" ? body.sessionId : `session_${Date.now()}`;
     const endpoint = typeof body.endpoint === "string" ? body.endpoint : "context-engine";
+    const repoProfile =
+      body.context?.repoProfile && typeof body.context.repoProfile === "object" && !Array.isArray(body.context.repoProfile)
+        ? body.context.repoProfile
+        : null;
     
     if (!problem) {
       throw new MemryError("VALIDATION_ERROR", { field: "problem", reason: "required" });
@@ -51,6 +55,7 @@ export async function POST(request: Request) {
       sessionId,
       problem,
       endpoint,
+      repoProfile,
       traces: traces.map((trace, index) => ({
         id: trace.id,
         scope: "local",

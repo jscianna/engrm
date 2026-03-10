@@ -7,7 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import {
   getCognitiveJobHealth,
   getCognitiveMetrics,
+  getCognitiveUserSettings,
   getPatterns,
+  getRecentBenchmarkRuns,
   getRecentApplications,
   getRecentTraces,
   getSkills,
@@ -51,13 +53,15 @@ export default async function CognitiveDashboardPage() {
     redirect("/");
   }
 
-  const [metrics, traces, patterns, skills, applications, jobs] = await Promise.all([
+  const [metrics, settings, traces, patterns, skills, applications, jobs, benchmarkRuns] = await Promise.all([
     getCognitiveMetrics(userId, 14),
+    getCognitiveUserSettings(userId),
     getRecentTraces(userId, 12),
     getPatterns(userId),
     getSkills(userId),
     getRecentApplications(userId, 12),
     getCognitiveJobHealth(),
+    getRecentBenchmarkRuns(userId, 6),
   ]);
 
   const lowConfidenceApps = applications.filter(
@@ -95,8 +99,9 @@ export default async function CognitiveDashboardPage() {
         </Card>
         <Card className="border-zinc-800 bg-zinc-900/60">
           <CardHeader>
-            <CardDescription>Shared trace opt-in rate</CardDescription>
-            <CardTitle className="flex items-center gap-2 text-zinc-100"><CheckCircle2 className="h-4 w-4 text-cyan-300" />{Math.round(metrics.sharedTraceOptInRate * 100)}%</CardTitle>
+            <CardDescription>Shared learning</CardDescription>
+            <CardTitle className="flex items-center gap-2 text-zinc-100"><CheckCircle2 className="h-4 w-4 text-cyan-300" />{settings.sharedLearningEnabled ? "Enabled" : "Disabled"}</CardTitle>
+            <p className="text-xs text-zinc-500">{Math.round(metrics.sharedTraceOptInRate * 100)}% of recent traces were share-eligible.</p>
           </CardHeader>
         </Card>
       </section>
@@ -150,6 +155,59 @@ export default async function CognitiveDashboardPage() {
                 <p className="mt-1 text-xs text-zinc-500">Lease expires {formatDate(job.leaseExpiresAt)}</p>
               </div>
             ))}
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+        <Card className="border-zinc-800 bg-zinc-900/60">
+          <CardHeader>
+            <CardTitle>Benchmark Gates</CardTitle>
+            <CardDescription>Recent curated/generated benchmark runs and release gate status.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {benchmarkRuns.length === 0 ? (
+              <p className="text-sm text-zinc-500">No benchmark runs recorded yet.</p>
+            ) : benchmarkRuns.map((run) => (
+              <div key={run.id} className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-zinc-100">{run.dataset} · {run.fixtureCount} fixtures</p>
+                    <p className="mt-1 text-xs text-zinc-400">
+                      trace MRR {Number(run.result.traceMrr ?? 0).toFixed(2)} · success {Math.round(Number(run.result.successRate ?? 0) * 100)}%
+                    </p>
+                  </div>
+                  <Badge variant={run.gate?.passed === true ? "default" : "destructive"}>
+                    {run.gate?.passed === true ? "passed" : "failed"}
+                  </Badge>
+                </div>
+                {Array.isArray(run.gate?.reasons) && run.gate.reasons.length > 0 ? (
+                  <p className="mt-2 text-xs text-zinc-500">{run.gate.reasons.join(", ")}</p>
+                ) : null}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card className="border-zinc-800 bg-zinc-900/60">
+          <CardHeader>
+            <CardTitle>Impact Leaders</CardTitle>
+            <CardDescription>Patterns and skills with the strongest verified impact.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {patterns
+              .filter((pattern) => pattern.applicationCount > 0)
+              .sort((left, right) => right.impactScore - left.impactScore)
+              .slice(0, 6)
+              .map((pattern) => (
+                <div key={pattern.id} className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-3">
+                  <p className="text-sm font-medium text-zinc-100">{pattern.domain}</p>
+                  <p className="mt-1 text-xs text-zinc-400">
+                    impact {pattern.impactScore.toFixed(2)} · {Math.round(pattern.verificationPassRate * 100)}% verified · {pattern.acceptedApplicationCount}/{pattern.applicationCount} accepted
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-500">{pattern.promotionReason ?? "No promotion reason yet."}</p>
+                </div>
+              ))}
           </CardContent>
         </Card>
       </section>

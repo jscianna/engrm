@@ -7,6 +7,7 @@
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { updatePatternFeedback } from "@/lib/cognitive-db";
+import { logCognitiveAuditEvent } from "@/lib/cognitive-audit";
 
 export const runtime = "nodejs";
 
@@ -39,6 +40,18 @@ export async function POST(request: Request) {
       traceId,
       outcome,
       notes: typeof body.notes === "string" ? body.notes : null,
+    });
+
+    await logCognitiveAuditEvent({
+      request,
+      userId: identity.userId,
+      action: "cognitive.pattern.feedback",
+      resourceType: "cognitive_pattern",
+      resourceId: patternId,
+      metadata: {
+        traceId,
+        outcome,
+      },
     });
     
     return Response.json({

@@ -2,6 +2,8 @@
 
 import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
+import { logAuditEvent } from "@/lib/audit-log";
+import { assertSkillPublicationEnabled } from "@/lib/cognitive-guards";
 import {
   publishSkill,
   refreshSkillDraftById,
@@ -53,15 +55,28 @@ export async function disablePublishAction(formData: FormData): Promise<void> {
 
 export async function publishSkillAction(formData: FormData): Promise<void> {
   const userId = await requireUser();
+  assertSkillPublicationEnabled();
   const skillId = String(formData.get("skillId") ?? "");
   if (!skillId) {
     return;
   }
-  await publishSkill({
+  const skill = await publishSkill({
     userId,
     skillId,
     allowGlobal: false,
     publishedTo: "clawhub",
   });
+  if (skill) {
+    await logAuditEvent({
+      userId,
+      action: "cognitive.skill.publish",
+      resourceType: "cognitive_skill",
+      resourceId: skill.id,
+      metadata: {
+        scope: skill.scope,
+        publishedTo: skill.publishedTo,
+      },
+    });
+  }
   revalidatePath("/dashboard/cognitive");
 }

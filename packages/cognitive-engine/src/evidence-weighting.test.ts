@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyPatternLifecycle,
+  deriveSkillLifecycle,
   extractPatternCandidate,
   scoreTraceEvidence,
+  summarizeEntityImpact,
   summarizePatternEvidence,
   type ClusteredTraceGroup,
   type LearningTrace,
@@ -157,5 +160,87 @@ describe("extractPatternCandidate", () => {
     expect(candidate?.confidence).toBeLessThan(0.5);
     expect(candidate?.sourceTraceCount).toBe(2);
     expect(candidate?.pitfalls).toContain("Build failed because env vars were missing");
+  });
+});
+
+describe("summarizeEntityImpact", () => {
+  it("rewards accepted verified successes that beat baseline", () => {
+    const impact = summarizeEntityImpact([
+      {
+        accepted: true,
+        finalOutcome: "success",
+        retryCount: 1,
+        timeToResolutionMs: 180000,
+        verificationPassed: true,
+        baseline: {
+          successRate: 0.5,
+          medianTimeToResolutionMs: 420000,
+          medianRetries: 4,
+          verificationPassRate: 0.4,
+          sampleSize: 10,
+        },
+      },
+      {
+        accepted: true,
+        finalOutcome: "success",
+        retryCount: 2,
+        timeToResolutionMs: 240000,
+        verificationPassed: true,
+        baseline: {
+          successRate: 0.5,
+          medianTimeToResolutionMs: 420000,
+          medianRetries: 4,
+          verificationPassRate: 0.4,
+          sampleSize: 10,
+        },
+      },
+    ]);
+
+    expect(impact.acceptedApplications).toBe(2);
+    expect(impact.successfulApplications).toBe(2);
+    expect(impact.verificationPassRate).toBe(1);
+    expect(impact.impactScore).toBeGreaterThan(0.5);
+    expect(impact.promotionReason).toBe("verified_outcomes_above_baseline");
+  });
+});
+
+describe("impact-driven lifecycle", () => {
+  it("keeps patterns as candidates until both evidence and impact thresholds are met", () => {
+    const status = classifyPatternLifecycle({
+      scope: "local",
+      effectiveEvidence: 4,
+      confidence: 0.85,
+      impact: {
+        applications: 1,
+        acceptedApplications: 1,
+        successfulApplications: 1,
+        medianTimeToResolutionMs: 180000,
+        medianRetries: 1,
+        verificationPassRate: 1,
+        impactScore: 0.7,
+        promotionReason: "not_enough_apps",
+      },
+    });
+
+    expect(status).toBe("candidate");
+  });
+
+  it("activates skills only after accepted, verified impact clears threshold", () => {
+    const status = deriveSkillLifecycle({
+      patternStatus: "active_local",
+      confidence: 0.91,
+      impact: {
+        applications: 4,
+        acceptedApplications: 3,
+        successfulApplications: 3,
+        medianTimeToResolutionMs: 210000,
+        medianRetries: 1,
+        verificationPassRate: 0.8,
+        impactScore: 0.35,
+        promotionReason: "verified_outcomes_above_baseline",
+      },
+    });
+
+    expect(status).toBe("active");
   });
 });

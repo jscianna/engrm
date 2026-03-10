@@ -75,6 +75,12 @@ describe("application attribution end-to-end", () => {
       sessionId,
       problem: "Fix Next.js auth middleware redirect loop",
       endpoint: "context-engine.assemble",
+      repoProfile: {
+        workspaceRoot: "/workspace/apps/web",
+        workspaceType: "web-app",
+        projectType: "nextjs",
+        languages: ["typescript"],
+      },
       traces: [{ id: historicalTrace.id, scope: "local", rank: 1 }],
       patterns: [{ id: localPattern.id, scope: "local", rank: 1 }],
       skills: [{ id: "skill-auth-loop", scope: "local", rank: 1 }],
@@ -119,9 +125,14 @@ describe("application attribution end-to-end", () => {
       acceptedTraceId: historicalTrace.id,
       acceptedPatternId: localPattern.id,
       acceptedSkillId: "skill-auth-loop",
+      materializedPatternId: localPattern.id,
+      materializedSkillId: "skill-auth-loop",
+      retryCount: 1,
       timeToResolutionMs: 240000,
       verificationSummary: {
         testsPassed: ["middleware.spec.ts"],
+        resolutionKind: "tests_passed",
+        verified: true,
         notes: "Redirect loop resolved",
       },
     });
@@ -137,6 +148,9 @@ describe("application attribution end-to-end", () => {
     expect(bundle.application.acceptedPatternId).toBe(localPattern.id);
     expect(bundle.application.acceptedSkillId).toBe("skill-auth-loop");
     expect(bundle.application.finalOutcome).toBe("success");
+    expect(bundle.application.retryCount).toBe(1);
+    expect(bundle.application.baselineGroupKey).toBeTruthy();
+    expect(bundle.application.baselineSnapshotJson).toBeTruthy();
 
     const acceptedTraceMatch = bundle.matches.find((match) => match.entityType === "trace" && match.entityId === historicalTrace.id);
     const acceptedPatternMatch = bundle.matches.find((match) => match.entityType === "pattern" && match.entityId === localPattern.id);
@@ -161,10 +175,18 @@ describe("application attribution end-to-end", () => {
       applicationId: application.application.id,
       sessionId,
       endpoint: "context-engine.assemble",
+      repoProfile: {
+        workspaceRoot: "/workspace/apps/web",
+        workspaceType: "web-app",
+        projectType: "nextjs",
+        languages: ["typescript"],
+      },
       expectedTraceIds: [historicalTrace.id],
       expectedPatternIds: [localPattern.id],
       expectedSkillIds: ["skill-auth-loop"],
       acceptedId: historicalTrace.id,
+      expectedOutcome: "success",
+      targetResolutionKind: "tests_passed",
     });
     expect(dataset.predictions[0]).toMatchObject({
       applicationId: application.application.id,
@@ -176,6 +198,12 @@ describe("application attribution end-to-end", () => {
       acceptedTraceId: historicalTrace.id,
       acceptedPatternId: localPattern.id,
       acceptedSkillId: "skill-auth-loop",
+      retryCount: 1,
+      timeToResolutionMs: 240000,
+      verificationResults: {
+        verified: true,
+        resolutionKind: "tests_passed",
+      },
     });
 
     const result = evaluateRetrievalFixtures(dataset);
@@ -184,5 +212,139 @@ describe("application attribution end-to-end", () => {
     expect(result.patternRecallAtK).toBe(1);
     expect(result.skillHitRate).toBe(1);
     expect(result.weakOutcomeLift).toBe(1);
+    expect(result.successRate).toBe(1);
+    expect(result.verificationCompletionRate).toBe(1);
+
+    const secondApplication = await cognitiveDb.logCognitiveApplication({
+      userId,
+      sessionId: "session-e2e-2",
+      problem: "Fix Next.js auth middleware redirect loop",
+      endpoint: "context-engine.assemble",
+      repoProfile: {
+        workspaceRoot: "/workspace/apps/web",
+        workspaceType: "web-app",
+        projectType: "nextjs",
+        languages: ["typescript"],
+      },
+      traces: [{ id: historicalTrace.id, scope: "local", rank: 1 }],
+      patterns: [{ id: localPattern.id, scope: "local", rank: 1 }],
+      skills: [{ id: "skill-auth-loop", scope: "local", rank: 1 }],
+    });
+
+    const secondTrace = await cognitiveDb.createTrace({
+      userId,
+      sessionId: "session-e2e-2",
+      type: "debugging",
+      problem: "Fix Next.js auth middleware redirect loop",
+      context: {
+        technologies: ["nextjs", "clerk"],
+        files: ["middleware.ts"],
+        errorMessages: ["ERR_TOO_MANY_REDIRECTS"],
+      },
+      reasoning: "Applied the known redirect loop pattern immediately.",
+      approaches: [],
+      solution: "Reused the middleware exemption fix.",
+      outcome: "success",
+      automatedOutcome: "success",
+      automatedSignals: { strongestSuccessSignal: "tests passed" },
+      toolsUsed: ["rg", "npm test"],
+      filesModified: ["middleware.ts"],
+      durationMs: 180000,
+      sanitized: true,
+      shareEligible: true,
+      applicationId: secondApplication.application.id,
+    });
+
+    await cognitiveDb.syncTracePatternMatches({
+      userId,
+      traceId: secondTrace.id,
+      patterns: [{ id: localPattern.id, score: 0.96 }],
+      matchSource: "trace_capture",
+    });
+
+    await cognitiveDb.updateTraceOutcome({
+      userId,
+      traceId: secondTrace.id,
+      outcome: "success",
+      applicationId: secondApplication.application.id,
+      acceptedPatternId: localPattern.id,
+      materializedPatternId: localPattern.id,
+      retryCount: 1,
+      timeToResolutionMs: 180000,
+      verificationSummary: {
+        testsPassed: ["middleware.spec.ts"],
+        resolutionKind: "tests_passed",
+        verified: true,
+      },
+    });
+
+    const thirdApplication = await cognitiveDb.logCognitiveApplication({
+      userId,
+      sessionId: "session-e2e-3",
+      problem: "Fix Next.js auth middleware redirect loop",
+      endpoint: "context-engine.assemble",
+      repoProfile: {
+        workspaceRoot: "/workspace/apps/web",
+        workspaceType: "web-app",
+        projectType: "nextjs",
+        languages: ["typescript"],
+      },
+      traces: [{ id: historicalTrace.id, scope: "local", rank: 1 }],
+      patterns: [{ id: localPattern.id, scope: "local", rank: 1 }],
+      skills: [{ id: "skill-auth-loop", scope: "local", rank: 1 }],
+    });
+
+    const thirdTrace = await cognitiveDb.createTrace({
+      userId,
+      sessionId: "session-e2e-3",
+      type: "debugging",
+      problem: "Fix Next.js auth middleware redirect loop",
+      context: {
+        technologies: ["nextjs", "clerk"],
+        files: ["middleware.ts"],
+        errorMessages: ["ERR_TOO_MANY_REDIRECTS"],
+      },
+      reasoning: "Applied the same pattern in a third similar session and verified the callback exemption.",
+      approaches: [],
+      solution: "Kept the auth callback public and confirmed tests passed.",
+      outcome: "success",
+      automatedOutcome: "success",
+      automatedSignals: { strongestSuccessSignal: "tests passed" },
+      toolsUsed: ["rg", "npm test"],
+      filesModified: ["middleware.ts"],
+      durationMs: 150000,
+      sanitized: true,
+      shareEligible: true,
+      applicationId: thirdApplication.application.id,
+    });
+
+    await cognitiveDb.syncTracePatternMatches({
+      userId,
+      traceId: thirdTrace.id,
+      patterns: [{ id: localPattern.id, score: 0.97 }],
+      matchSource: "trace_capture",
+    });
+
+    await cognitiveDb.updateTraceOutcome({
+      userId,
+      traceId: thirdTrace.id,
+      outcome: "success",
+      applicationId: thirdApplication.application.id,
+      acceptedPatternId: localPattern.id,
+      materializedPatternId: localPattern.id,
+      retryCount: 0,
+      timeToResolutionMs: 150000,
+      verificationSummary: {
+        testsPassed: ["middleware.spec.ts"],
+        resolutionKind: "tests_passed",
+        verified: true,
+      },
+    });
+
+    const refreshedPatterns = await cognitiveDb.getPatterns(userId);
+    const refreshedPattern = refreshedPatterns.find((pattern) => pattern.id === localPattern.id);
+    expect(refreshedPattern?.applicationCount).toBeGreaterThanOrEqual(3);
+    expect(refreshedPattern?.impactScore).toBeGreaterThan(0);
+    expect(refreshedPattern?.status).toBe("active_local");
   });
 });

@@ -8,6 +8,8 @@
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { getPatterns, createPattern } from "@/lib/cognitive-db";
+import { logCognitiveAuditEvent } from "@/lib/cognitive-audit";
+import { assertGlobalCognitiveArtifactAccess } from "@/lib/cognitive-guards";
 
 export const runtime = "nodejs";
 
@@ -38,6 +40,14 @@ export async function GET(request: Request) {
         failCount: p.failCount,
         sourceTraceCount: p.sourceTraceCount,
         status: p.status,
+        applicationCount: p.applicationCount,
+        acceptedApplicationCount: p.acceptedApplicationCount,
+        successfulApplicationCount: p.successfulApplicationCount,
+        medianTimeToResolutionMs: p.medianTimeToResolutionMs,
+        medianRetries: p.medianRetries,
+        verificationPassRate: p.verificationPassRate,
+        impactScore: p.impactScore,
+        promotionReason: p.promotionReason,
         createdAt: p.createdAt,
         updatedAt: p.updatedAt,
       })),
@@ -68,6 +78,10 @@ export async function POST(request: Request) {
       throw new MemryError("VALIDATION_ERROR", { field: "approach", reason: "required" });
     }
     
+    if (body.scope === "global") {
+      assertGlobalCognitiveArtifactAccess(identity.agentId);
+    }
+
     const pattern = await createPattern({
       userId: body.scope === "global" ? null : identity.userId,
       scope: body.scope === "global" ? "global" : "local",
@@ -85,6 +99,19 @@ export async function POST(request: Request) {
       sourceTraceCount: body.sourceTraceCount,
       status: body.status,
     });
+
+    await logCognitiveAuditEvent({
+      request,
+      userId: identity.userId,
+      action: "cognitive.pattern.create",
+      resourceType: "cognitive_pattern",
+      resourceId: pattern.id,
+      metadata: {
+        scope: pattern.scope,
+        domain: pattern.domain,
+        status: pattern.status,
+      },
+    });
     
     return Response.json({
       pattern: {
@@ -94,6 +121,14 @@ export async function POST(request: Request) {
         approach: pattern.approach,
         confidence: pattern.confidence,
         status: pattern.status,
+        applicationCount: pattern.applicationCount,
+        acceptedApplicationCount: pattern.acceptedApplicationCount,
+        successfulApplicationCount: pattern.successfulApplicationCount,
+        medianTimeToResolutionMs: pattern.medianTimeToResolutionMs,
+        medianRetries: pattern.medianRetries,
+        verificationPassRate: pattern.verificationPassRate,
+        impactScore: pattern.impactScore,
+        promotionReason: pattern.promotionReason,
         createdAt: pattern.createdAt,
       },
     }, { status: 201 });

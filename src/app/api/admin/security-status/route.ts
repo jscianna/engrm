@@ -7,31 +7,26 @@
 
 import { NextResponse } from "next/server";
 import { getQdrantStatus } from "@/lib/qdrant";
-import crypto from "node:crypto";
+import { assertAdminAccess } from "@/lib/admin-auth";
+import { getOperationalAlertDeliveryConfig } from "@/lib/alert-delivery";
+import { getApiKeyScopeMigrationStatus } from "@/lib/db";
+import { getOperationalAlertsSummary } from "@/lib/operational-alerts";
 
 export const runtime = "nodejs";
 
-function isAdmin(request: Request): boolean {
-  const authHeader = request.headers.get("authorization");
-  const adminKey = process.env.ADMIN_API_KEY;
-  if (!adminKey || !authHeader?.startsWith("Bearer ")) return false;
-
-  const provided = authHeader.slice("Bearer ".length);
-  const expected = adminKey;
-  const providedBuffer = Buffer.from(provided, "utf8");
-  const expectedBuffer = Buffer.from(expected, "utf8");
-  if (providedBuffer.length !== expectedBuffer.length) {
-    return false;
-  }
-  return crypto.timingSafeEqual(providedBuffer, expectedBuffer);
-}
-
 export async function GET(request: Request) {
-  if (!isAdmin(request)) {
+  try {
+    await assertAdminAccess(request);
+  } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const qdrantStatus = getQdrantStatus();
+  const [apiKeyScopeStatus, operationalAlerts, alertDelivery] = await Promise.all([
+    getApiKeyScopeMigrationStatus(),
+    getOperationalAlertsSummary(),
+    Promise.resolve(getOperationalAlertDeliveryConfig()),
+  ]);
 
   const securityStatus = {
     timestamp: new Date().toISOString(),
@@ -77,6 +72,8 @@ export async function GET(request: Request) {
       apiAuth: {
         method: "Bearer token",
         keyStorage: "SHA-256 hashed in database",
+        scopesEnforced: true,
+        migration: apiKeyScopeStatus,
       },
     },
 
@@ -105,8 +102,8 @@ export async function GET(request: Request) {
     // Compliance Readiness
     compliance: {
       auditLogging: {
-        enabled: false,
-        status: "Implemented in code but not wired into live request flows",
+        enabled: true,
+        status: "Wired into cognitive mutations, API key management, and benchmark runs",
         retention: "90 days when enabled",
       },
       gdpr: {
@@ -133,10 +130,21 @@ export async function GET(request: Request) {
       },
     },
 
+    monitoring: {
+      alerts: operationalAlerts.alerts,
+      alertCount: operationalAlerts.alerts.length,
+      generatedAt: operationalAlerts.generatedAt,
+      delivery: alertDelivery,
+    },
+
     // Recommendations
     recommendations: [
       !process.env.CLOUDFLARE_WAF_ENABLED && "Enable Cloudflare WAF for enhanced protection",
       !qdrantStatus.enabled && "Configure Qdrant Cloud for scalable vector search",
+      apiKeyScopeStatus.legacyKeysMissingScopes > 0 && "Backfill legacy API keys with explicit scopes",
+      apiKeyScopeStatus.revocableWildcardKeys > 0 && "Rotate or scope down wildcard API keys before launch",
+      !alertDelivery.configured && "Configure OPS_ALERT_WEBHOOK_URL before launch so critical alerts can be delivered",
+      operationalAlerts.alerts.length > 0 && "Clear current operational alerts before launch",
     ].filter(Boolean),
   };
 

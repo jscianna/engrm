@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { deleteApiKey, revokeApiKey, setApiKeyExpiration } from "@/lib/db";
+import { deleteApiKey, revokeApiKey, setApiKeyExpiration, setApiKeyScopes } from "@/lib/db";
 import { extractRequestInfo, logAuditEvent } from "@/lib/audit-log";
 
 export const runtime = "nodejs";
@@ -38,7 +38,7 @@ export async function DELETE(
 
 /**
  * PATCH - Revoke or set expiration on an API key
- * Body: { action: "revoke" } or { action: "expire", expiresAt: "ISO-8601" } or { action: "clearExpiration" }
+ * Body: { action: "revoke" } or { action: "expire", expiresAt: "ISO-8601" } or { action: "clearExpiration" } or { action: "setScopes", scopes: string[] }
  */
 export async function PATCH(
   request: Request,
@@ -108,7 +108,30 @@ export async function PATCH(
       return NextResponse.json({ success: true, message: "Expiration cleared" });
     }
 
-    return NextResponse.json({ error: "Invalid action. Use: revoke, expire, clearExpiration" }, { status: 400 });
+    if (action === "setScopes") {
+      const scopes = Array.isArray(body.scopes)
+        ? body.scopes.filter((scope: unknown): scope is string => typeof scope === "string")
+        : null;
+      if (!scopes || scopes.length === 0) {
+        return NextResponse.json({ error: "At least one scope is required" }, { status: 400 });
+      }
+      const updated = await setApiKeyScopes(userId, id, scopes);
+      if (!updated) {
+        return NextResponse.json({ error: "API key not found" }, { status: 404 });
+      }
+      const requestInfo = extractRequestInfo(request);
+      logAuditEvent({
+        userId,
+        action: "settings.update",
+        resourceType: "api_key",
+        resourceId: id,
+        metadata: { scopes },
+        ...requestInfo,
+      }).catch(() => {});
+      return NextResponse.json({ success: true, message: "Scopes updated", scopes });
+    }
+
+    return NextResponse.json({ error: "Invalid action. Use: revoke, expire, clearExpiration, setScopes" }, { status: 400 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update API key";
     return NextResponse.json({ error: message }, { status: 500 });

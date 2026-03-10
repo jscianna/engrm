@@ -4,8 +4,8 @@ import { embedText } from "@/lib/embeddings";
 import {
   buildSharedSignature,
   buildSkillDraft,
-  classifyPatternStatus,
-  deriveSkillStatus,
+  classifyPatternLifecycle,
+  deriveSkillLifecycle,
   clusterLearningTraces,
   extractPatternCandidate,
   extractProblemKeywords,
@@ -16,7 +16,10 @@ import {
   resolveOutcome,
   scoreTraceEvidence,
   synthesizedPatternStatus,
+  summarizeEntityImpact,
   summarizePatternEvidence,
+  type BaselineSnapshot,
+  type ImpactObservation,
   type LearningTrace,
 } from "@/lib/cognitive-learning";
 
@@ -57,6 +60,12 @@ export interface CognitiveApplication {
   traceId: string | null;
   problem: string;
   endpoint: string;
+  repoProfileJson: string | null;
+  materializedPatternId: string | null;
+  materializedSkillId: string | null;
+  retryCount: number | null;
+  baselineGroupKey: string | null;
+  baselineSnapshotJson: string | null;
   acceptedTraceId: string | null;
   acceptedPatternId: string | null;
   acceptedSkillId: string | null;
@@ -100,6 +109,14 @@ export interface Pattern {
   sourceTraceCount: number;
   lastApplied: string | null;
   sourceTraceIdsJson: string;
+  applicationCount: number;
+  acceptedApplicationCount: number;
+  successfulApplicationCount: number;
+  medianTimeToResolutionMs: number | null;
+  medianRetries: number | null;
+  verificationPassRate: number;
+  impactScore: number;
+  promotionReason: string | null;
   status: string;
   synthesizedIntoSkill: string | null;
   createdAt: string;
@@ -131,6 +148,13 @@ export interface SynthesizedSkill {
   qualityScore: number;
   usageCount: number;
   successRate: number;
+  acceptedApplicationCount: number;
+  successfulApplicationCount: number;
+  medianTimeToResolutionMs: number | null;
+  medianRetries: number | null;
+  verificationPassRate: number;
+  impactScore: number;
+  promotionReason: string | null;
   status: string;
   published: boolean;
   publishedTo: string | null;
@@ -209,10 +233,15 @@ export interface RetrievalEvalDatasetRecord {
     endpoint: string;
     problem: string;
     technologies: string[];
+    repoProfile?: Record<string, unknown>;
     expectedTraceIds: string[];
     expectedPatternIds: string[];
     expectedSkillIds: string[];
     acceptedId?: string;
+    expectedOutcome?: "success" | "partial" | "failed" | "abandoned";
+    maxRetries?: number;
+    targetResolutionKind?: "tests_passed" | "build_passed" | "lint_passed" | "manual_only" | "failed";
+    baseline?: BaselineSnapshot;
   };
   prediction: {
     applicationId: string;
@@ -224,6 +253,14 @@ export interface RetrievalEvalDatasetRecord {
     acceptedTraceId?: string;
     acceptedPatternId?: string;
     acceptedSkillId?: string;
+    retryCount?: number;
+    timeToResolutionMs?: number;
+    verificationResults?: {
+      verified: boolean;
+      resolutionKind?: "tests_passed" | "build_passed" | "lint_passed" | "manual_only" | "failed";
+      passedChecks?: string[];
+      failedChecks?: string[];
+    };
   };
 }
 
@@ -231,6 +268,12 @@ export interface RetrievalEvalDataset {
   fixtures: RetrievalEvalDatasetRecord["fixture"][];
   predictions: RetrievalEvalDatasetRecord["prediction"][];
   records: RetrievalEvalDatasetRecord[];
+}
+
+export interface CognitiveUserSettings {
+  userId: string;
+  sharedLearningEnabled: boolean;
+  updatedAt: string;
 }
 
 let initialized = false;
@@ -296,6 +339,14 @@ async function ensureInitialized(): Promise<void> {
       source_trace_count INTEGER NOT NULL DEFAULT 0,
       last_applied TEXT,
       source_trace_ids_json TEXT NOT NULL DEFAULT '[]',
+      application_count INTEGER NOT NULL DEFAULT 0,
+      accepted_application_count INTEGER NOT NULL DEFAULT 0,
+      successful_application_count INTEGER NOT NULL DEFAULT 0,
+      median_time_to_resolution_ms INTEGER,
+      median_retries REAL,
+      verification_pass_rate REAL NOT NULL DEFAULT 0,
+      impact_score REAL NOT NULL DEFAULT 0,
+      promotion_reason TEXT,
       status TEXT NOT NULL DEFAULT 'candidate',
       synthesized_into_skill TEXT,
       created_at TEXT NOT NULL,
@@ -337,6 +388,13 @@ async function ensureInitialized(): Promise<void> {
       quality_score REAL NOT NULL DEFAULT 0,
       usage_count INTEGER NOT NULL DEFAULT 0,
       success_rate REAL NOT NULL DEFAULT 0,
+      accepted_application_count INTEGER NOT NULL DEFAULT 0,
+      successful_application_count INTEGER NOT NULL DEFAULT 0,
+      median_time_to_resolution_ms INTEGER,
+      median_retries REAL,
+      verification_pass_rate REAL NOT NULL DEFAULT 0,
+      impact_score REAL NOT NULL DEFAULT 0,
+      promotion_reason TEXT,
       status TEXT NOT NULL DEFAULT 'draft',
       published INTEGER NOT NULL DEFAULT 0,
       published_to TEXT,
@@ -368,6 +426,12 @@ async function ensureInitialized(): Promise<void> {
       trace_id TEXT,
       problem TEXT NOT NULL,
       endpoint TEXT NOT NULL,
+      repo_profile_json TEXT,
+      materialized_pattern_id TEXT,
+      materialized_skill_id TEXT,
+      retry_count INTEGER,
+      baseline_group_key TEXT,
+      baseline_snapshot_json TEXT,
       accepted_trace_id TEXT,
       accepted_pattern_id TEXT,
       accepted_skill_id TEXT,
@@ -380,6 +444,7 @@ async function ensureInitialized(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_cognitive_applications_user ON cognitive_applications(user_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_cognitive_applications_session ON cognitive_applications(session_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_cognitive_applications_baseline ON cognitive_applications(user_id, baseline_group_key, created_at DESC);
 
     CREATE TABLE IF NOT EXISTS pattern_applications (
       id TEXT PRIMARY KEY,
@@ -400,6 +465,24 @@ async function ensureInitialized(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_pattern_applications_application ON pattern_applications(application_id, rank ASC);
     CREATE INDEX IF NOT EXISTS idx_pattern_applications_entity ON pattern_applications(entity_type, entity_id, updated_at DESC);
     CREATE UNIQUE INDEX IF NOT EXISTS uq_pattern_applications ON pattern_applications(application_id, entity_type, entity_id);
+
+    CREATE TABLE IF NOT EXISTS cognitive_benchmark_runs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      dataset TEXT NOT NULL,
+      fixture_count INTEGER NOT NULL DEFAULT 0,
+      result_json TEXT NOT NULL,
+      gate_json TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_cognitive_benchmark_runs_user ON cognitive_benchmark_runs(user_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS cognitive_user_settings (
+      user_id TEXT PRIMARY KEY,
+      shared_learning_enabled INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   await client.execute(`ALTER TABLE coding_traces ADD COLUMN updated_at TEXT`).catch(() => {});
@@ -416,13 +499,43 @@ async function ensureInitialized(): Promise<void> {
   await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN pattern_key TEXT`).catch(() => {});
   await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN shared_signature TEXT`).catch(() => {});
   await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN source_trace_count INTEGER DEFAULT 0`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN application_count INTEGER DEFAULT 0`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN accepted_application_count INTEGER DEFAULT 0`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN successful_application_count INTEGER DEFAULT 0`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN median_time_to_resolution_ms INTEGER`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN median_retries REAL`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN verification_pass_rate REAL DEFAULT 0`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN impact_score REAL DEFAULT 0`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN promotion_reason TEXT`).catch(() => {});
   await client.execute(`ALTER TABLE trace_pattern_matches ADD COLUMN explicit_outcome TEXT`).catch(() => {});
   await client.execute(`ALTER TABLE trace_pattern_matches ADD COLUMN feedback_notes TEXT`).catch(() => {});
   await client.execute(`ALTER TABLE trace_pattern_matches ADD COLUMN updated_at TEXT`).catch(() => {});
   await client.execute(`ALTER TABLE synthesized_skills ADD COLUMN source_trace_count INTEGER DEFAULT 0`).catch(() => {});
+  await client.execute(`ALTER TABLE synthesized_skills ADD COLUMN accepted_application_count INTEGER DEFAULT 0`).catch(() => {});
+  await client.execute(`ALTER TABLE synthesized_skills ADD COLUMN successful_application_count INTEGER DEFAULT 0`).catch(() => {});
+  await client.execute(`ALTER TABLE synthesized_skills ADD COLUMN median_time_to_resolution_ms INTEGER`).catch(() => {});
+  await client.execute(`ALTER TABLE synthesized_skills ADD COLUMN median_retries REAL`).catch(() => {});
+  await client.execute(`ALTER TABLE synthesized_skills ADD COLUMN verification_pass_rate REAL DEFAULT 0`).catch(() => {});
+  await client.execute(`ALTER TABLE synthesized_skills ADD COLUMN impact_score REAL DEFAULT 0`).catch(() => {});
+  await client.execute(`ALTER TABLE synthesized_skills ADD COLUMN promotion_reason TEXT`).catch(() => {});
   await client.execute(`ALTER TABLE cognitive_applications ADD COLUMN accepted_trace_id TEXT`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_applications ADD COLUMN repo_profile_json TEXT`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_applications ADD COLUMN materialized_pattern_id TEXT`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_applications ADD COLUMN materialized_skill_id TEXT`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_applications ADD COLUMN retry_count INTEGER`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_applications ADD COLUMN baseline_group_key TEXT`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_applications ADD COLUMN baseline_snapshot_json TEXT`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_user_settings ADD COLUMN shared_learning_enabled INTEGER DEFAULT 0`).catch(() => {});
 
   initialized = true;
+}
+
+function rowToCognitiveUserSettings(row: Record<string, unknown>): CognitiveUserSettings {
+  return {
+    userId: row.user_id as string,
+    sharedLearningEnabled: Number(row.shared_learning_enabled ?? 0) === 1,
+    updatedAt: (row.updated_at as string) ?? new Date(0).toISOString(),
+  };
 }
 
 function parseStringArray(raw: unknown): string[] {
@@ -465,6 +578,17 @@ function parseNumberArray(raw: unknown): number[] | null {
   } catch {
     return null;
   }
+}
+
+function medianValue(values: number[]): number | null {
+  if (values.length === 0) {
+    return null;
+  }
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1] + sorted[middle]) / 2
+    : sorted[middle];
 }
 
 function hashTrace(input: {
@@ -538,6 +662,14 @@ function rowToPattern(row: Record<string, unknown>): Pattern {
     sourceTraceCount: Number(row.source_trace_count ?? 0),
     lastApplied: (row.last_applied as string | null) ?? null,
     sourceTraceIdsJson: (row.source_trace_ids_json as string) ?? "[]",
+    applicationCount: Number(row.application_count ?? 0),
+    acceptedApplicationCount: Number(row.accepted_application_count ?? 0),
+    successfulApplicationCount: Number(row.successful_application_count ?? 0),
+    medianTimeToResolutionMs: row.median_time_to_resolution_ms == null ? null : Number(row.median_time_to_resolution_ms),
+    medianRetries: row.median_retries == null ? null : Number(row.median_retries),
+    verificationPassRate: Number(row.verification_pass_rate ?? 0),
+    impactScore: Number(row.impact_score ?? 0),
+    promotionReason: (row.promotion_reason as string | null) ?? null,
     status: (row.status as string) ?? "candidate",
     synthesizedIntoSkill: (row.synthesized_into_skill as string | null) ?? null,
     createdAt: row.created_at as string,
@@ -559,6 +691,13 @@ function rowToSkill(row: Record<string, unknown>): SynthesizedSkill {
     qualityScore: Number(row.quality_score ?? 0),
     usageCount: Number(row.usage_count ?? 0),
     successRate: Number(row.success_rate ?? 0),
+    acceptedApplicationCount: Number(row.accepted_application_count ?? 0),
+    successfulApplicationCount: Number(row.successful_application_count ?? 0),
+    medianTimeToResolutionMs: row.median_time_to_resolution_ms == null ? null : Number(row.median_time_to_resolution_ms),
+    medianRetries: row.median_retries == null ? null : Number(row.median_retries),
+    verificationPassRate: Number(row.verification_pass_rate ?? 0),
+    impactScore: Number(row.impact_score ?? 0),
+    promotionReason: (row.promotion_reason as string | null) ?? null,
     status: (row.status as string) ?? "draft",
     published: Number(row.published ?? 0) === 1,
     publishedTo: (row.published_to as string | null) ?? null,
@@ -579,6 +718,12 @@ function rowToApplication(row: Record<string, unknown>): CognitiveApplication {
     traceId: (row.trace_id as string | null) ?? null,
     problem: row.problem as string,
     endpoint: row.endpoint as string,
+    repoProfileJson: (row.repo_profile_json as string | null) ?? null,
+    materializedPatternId: (row.materialized_pattern_id as string | null) ?? null,
+    materializedSkillId: (row.materialized_skill_id as string | null) ?? null,
+    retryCount: row.retry_count == null ? null : Number(row.retry_count),
+    baselineGroupKey: (row.baseline_group_key as string | null) ?? null,
+    baselineSnapshotJson: (row.baseline_snapshot_json as string | null) ?? null,
     acceptedTraceId: (row.accepted_trace_id as string | null) ?? null,
     acceptedPatternId: (row.accepted_pattern_id as string | null) ?? null,
     acceptedSkillId: (row.accepted_skill_id as string | null) ?? null,
@@ -587,6 +732,62 @@ function rowToApplication(row: Record<string, unknown>): CognitiveApplication {
     verificationSummaryJson: (row.verification_summary_json as string | null) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
+  };
+}
+
+export async function getCognitiveUserSettings(userId: string): Promise<CognitiveUserSettings> {
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+  await client.execute({
+    sql: `
+      INSERT INTO cognitive_user_settings (user_id, shared_learning_enabled, updated_at)
+      VALUES (?, 0, ?)
+      ON CONFLICT(user_id) DO NOTHING
+    `,
+    args: [userId, now],
+  });
+  const result = await client.execute({
+    sql: `
+      SELECT user_id, shared_learning_enabled, updated_at
+      FROM cognitive_user_settings
+      WHERE user_id = ?
+      LIMIT 1
+    `,
+    args: [userId],
+  });
+  return rowToCognitiveUserSettings((result.rows[0] as Record<string, unknown>) ?? {
+    user_id: userId,
+    shared_learning_enabled: 0,
+    updated_at: now,
+  });
+}
+
+export async function updateCognitiveUserSettings(params: {
+  userId: string;
+  sharedLearningEnabled?: boolean;
+}): Promise<CognitiveUserSettings> {
+  await ensureInitialized();
+  const client = getDb();
+  const existing = await getCognitiveUserSettings(params.userId);
+  const now = new Date().toISOString();
+  const next = {
+    sharedLearningEnabled: params.sharedLearningEnabled ?? existing.sharedLearningEnabled,
+  };
+  await client.execute({
+    sql: `
+      INSERT INTO cognitive_user_settings (user_id, shared_learning_enabled, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        shared_learning_enabled = excluded.shared_learning_enabled,
+        updated_at = excluded.updated_at
+    `,
+    args: [params.userId, next.sharedLearningEnabled ? 1 : 0, now],
+  });
+  return {
+    userId: params.userId,
+    sharedLearningEnabled: next.sharedLearningEnabled,
+    updatedAt: now,
   };
 }
 
@@ -750,6 +951,7 @@ export async function logCognitiveApplication(params: {
   sessionId: string;
   problem: string;
   endpoint: string;
+  repoProfile?: Record<string, unknown> | null;
   traces: ApplicationEntityInput[];
   patterns: ApplicationEntityInput[];
   skills: ApplicationEntityInput[];
@@ -763,11 +965,21 @@ export async function logCognitiveApplication(params: {
     sql: `
       INSERT INTO cognitive_applications (
         id, user_id, session_id, trace_id, problem, endpoint,
+        repo_profile_json, materialized_pattern_id, materialized_skill_id, retry_count, baseline_group_key, baseline_snapshot_json,
         accepted_trace_id, accepted_pattern_id, accepted_skill_id, final_outcome, time_to_resolution_ms,
         verification_summary_json, created_at, updated_at
-      ) VALUES (?, ?, ?, NULL, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?)
+      ) VALUES (?, ?, ?, NULL, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?)
     `,
-    args: [applicationId, params.userId, params.sessionId, params.problem, params.endpoint, now, now],
+    args: [
+      applicationId,
+      params.userId,
+      params.sessionId,
+      params.problem,
+      params.endpoint,
+      params.repoProfile ? JSON.stringify(params.repoProfile) : null,
+      now,
+      now,
+    ],
   });
 
   const matches: ApplicationMatch[] = [];
@@ -824,6 +1036,12 @@ export async function logCognitiveApplication(params: {
       traceId: null,
       problem: params.problem,
       endpoint: params.endpoint,
+      repoProfileJson: params.repoProfile ? JSON.stringify(params.repoProfile) : null,
+      materializedPatternId: null,
+      materializedSkillId: null,
+      retryCount: null,
+      baselineGroupKey: null,
+      baselineSnapshotJson: null,
       acceptedTraceId: null,
       acceptedPatternId: null,
       acceptedSkillId: null,
@@ -871,7 +1089,8 @@ export async function createTrace(input: CreateTraceInput): Promise<CodingTrace>
   const now = new Date().toISOString();
   const normalizedContext = input.context ?? {};
   const automatedSignals = input.automatedSignals ?? {};
-  const shareEligible = input.shareEligible ?? true;
+  const userSettings = input.shareEligible == null ? await getCognitiveUserSettings(input.userId) : null;
+  const shareEligible = input.shareEligible ?? userSettings?.sharedLearningEnabled ?? false;
   const traceHash = hashTrace({
     sessionId: input.sessionId,
     type: input.type,
@@ -1131,6 +1350,11 @@ export async function updateTraceOutcome(params: {
   notes?: string | null;
   automatedSignals?: Record<string, unknown> | null;
   applicationId?: string | null;
+  repoProfile?: Record<string, unknown> | null;
+  materializedPatternId?: string | null;
+  materializedSkillId?: string | null;
+  retryCount?: number | null;
+  baselineGroupKey?: string | null;
   acceptedTraceId?: string | null;
   acceptedPatternId?: string | null;
   acceptedSkillId?: string | null;
@@ -1175,6 +1399,11 @@ export async function updateTraceOutcome(params: {
       applicationId: params.applicationId,
       traceId: params.traceId,
       finalOutcome: params.outcome,
+      repoProfile: params.repoProfile,
+      materializedPatternId: params.materializedPatternId,
+      materializedSkillId: params.materializedSkillId,
+      retryCount: params.retryCount,
+      baselineGroupKey: params.baselineGroupKey,
       acceptedTraceId: params.acceptedTraceId,
       acceptedPatternId: params.acceptedPatternId,
       acceptedSkillId: params.acceptedSkillId,
@@ -1575,11 +1804,18 @@ export async function recomputePatternStats(patternIds: string[]): Promise<void>
     return;
   }
 
+  await recomputePatternImpactStats(uniquePatternIds);
   const client = getDb();
   const now = new Date().toISOString();
   for (const patternId of uniquePatternIds) {
     const patternResult = await client.execute({
-      sql: `SELECT scope, status FROM cognitive_patterns WHERE id = ? LIMIT 1`,
+      sql: `
+        SELECT scope, status, application_count, accepted_application_count, successful_application_count,
+               median_time_to_resolution_ms, median_retries, verification_pass_rate, impact_score, promotion_reason
+        FROM cognitive_patterns
+        WHERE id = ?
+        LIMIT 1
+      `,
       args: [patternId],
     });
     const patternRow = patternResult.rows[0] as Record<string, unknown> | undefined;
@@ -1618,12 +1854,22 @@ export async function recomputePatternStats(patternIds: string[]): Promise<void>
       (latest, item) => (!latest || item.updatedAt > latest ? item.updatedAt : latest),
       null,
     );
-    const status =
-      classifyPatternStatus({
-        effectiveEvidence: summary.effectiveEvidence,
-        confidence: summary.confidence,
-        scope: patternScope,
-      });
+    const status = classifyPatternLifecycle({
+      effectiveEvidence: summary.effectiveEvidence,
+      confidence: summary.confidence,
+      scope: patternScope,
+      impact: {
+        applications: Number(patternRow.application_count ?? 0),
+        acceptedApplications: Number(patternRow.accepted_application_count ?? 0),
+        successfulApplications: Number(patternRow.successful_application_count ?? 0),
+        medianTimeToResolutionMs:
+          patternRow.median_time_to_resolution_ms == null ? null : Number(patternRow.median_time_to_resolution_ms),
+        medianRetries: patternRow.median_retries == null ? null : Number(patternRow.median_retries),
+        verificationPassRate: Number(patternRow.verification_pass_rate ?? 0),
+        impactScore: Number(patternRow.impact_score ?? 0),
+        promotionReason: (patternRow.promotion_reason as string | null) ?? "pattern_impact_refresh",
+      },
+    });
     const nextStatus =
       currentStatus.startsWith("synthesized_") && status !== "deprecated"
         ? synthesizedPatternStatus(patternScope)
@@ -1676,7 +1922,10 @@ export async function runPatternExtraction(params: {
   const localCandidates = localClusters
     .filter((cluster) => cluster.traces.length >= minTraces)
     .map(extractPatternCandidate)
-    .filter((pattern): pattern is NonNullable<typeof pattern> => Boolean(pattern));
+    .filter(
+      (pattern): pattern is NonNullable<typeof pattern> =>
+        pattern != null && pattern.confidence >= minSuccessRate,
+    );
 
   let localPatterns = 0;
   const touchedPatternIds: string[] = [];
@@ -1685,12 +1934,20 @@ export async function runPatternExtraction(params: {
     localCandidateKeys.add(candidate.key);
     const pattern = await upsertPatternCandidate({
       ...candidate,
-      status: classifyPatternStatus({
+      status: classifyPatternLifecycle({
         effectiveEvidence: candidate.sourceTraceCount,
         confidence: candidate.confidence,
         scope: candidate.scope,
-        activationEvidence: minTraces,
-        activationConfidence: minSuccessRate,
+        impact: {
+          applications: 0,
+          acceptedApplications: 0,
+          successfulApplications: 0,
+          medianTimeToResolutionMs: null,
+          medianRetries: null,
+          verificationPassRate: 0,
+          impactScore: 0,
+          promotionReason: "pending_application_impact",
+        },
       }),
     });
     await syncPatternExtractionMatches({
@@ -1735,19 +1992,30 @@ export async function runPatternExtraction(params: {
     const globalCandidates = globalClusters
       .filter((cluster) => cluster.traces.length >= minTraces)
       .map(extractPatternCandidate)
-      .filter((pattern): pattern is NonNullable<typeof pattern> => Boolean(pattern));
+      .filter(
+        (pattern): pattern is NonNullable<typeof pattern> =>
+          pattern != null && pattern.confidence >= minSuccessRate,
+      );
 
     const globalCandidateKeys = new Set<string>();
     for (const candidate of globalCandidates) {
       globalCandidateKeys.add(candidate.key);
       const pattern = await upsertPatternCandidate({
         ...candidate,
-        status: classifyPatternStatus({
+        status: classifyPatternLifecycle({
           effectiveEvidence: candidate.sourceTraceCount,
           confidence: candidate.confidence,
           scope: candidate.scope,
-          activationEvidence: minTraces,
-          activationConfidence: minSuccessRate,
+          impact: {
+            applications: 0,
+            acceptedApplications: 0,
+            successfulApplications: 0,
+            medianTimeToResolutionMs: null,
+            medianRetries: null,
+            verificationPassRate: 0,
+            impactScore: 0,
+            promotionReason: "pending_application_impact",
+          },
         }),
       });
       await syncPatternExtractionMatches({
@@ -1901,9 +2169,19 @@ export async function synthesizeEligibleSkills(params: { userId: string }): Prom
       sql: `SELECT * FROM synthesized_skills WHERE pattern_key = ? LIMIT 1`,
       args: [pattern.patternKey],
     });
-    const skillStatus = deriveSkillStatus({
+    const skillStatus = deriveSkillLifecycle({
       patternStatus: pattern.status,
       confidence: pattern.confidence,
+      impact: {
+        applications: pattern.applicationCount,
+        acceptedApplications: pattern.acceptedApplicationCount,
+        successfulApplications: pattern.successfulApplicationCount,
+        medianTimeToResolutionMs: pattern.medianTimeToResolutionMs,
+        medianRetries: pattern.medianRetries,
+        verificationPassRate: pattern.verificationPassRate,
+        impactScore: pattern.impactScore,
+        promotionReason: pattern.promotionReason ?? "pattern_impact_carryover",
+      },
     });
     const sourceTraceIdsJson = pattern.scope === "local" ? pattern.sourceTraceIdsJson : "[]";
 
@@ -1989,6 +2267,197 @@ export async function synthesizeEligibleSkills(params: { userId: string }): Prom
   return skills;
 }
 
+function verificationPassed(summary: Record<string, unknown> | null): boolean | null {
+  if (!summary) {
+    return null;
+  }
+  if (summary.verified === true) {
+    return true;
+  }
+  const passedChecks = parseStringArray(summary.passedChecks);
+  const testsPassed = parseStringArray(summary.testsPassed);
+  if (passedChecks.length > 0 || testsPassed.length > 0) {
+    return true;
+  }
+  const failedChecks = parseStringArray(summary.failedChecks);
+  const testsFailed = parseStringArray(summary.testsFailed);
+  if (failedChecks.length > 0 || testsFailed.length > 0) {
+    return false;
+  }
+  const resolutionKind = typeof summary.resolutionKind === "string" ? summary.resolutionKind : null;
+  if (resolutionKind && resolutionKind !== "failed") {
+    return true;
+  }
+  if (resolutionKind === "failed") {
+    return false;
+  }
+  return null;
+}
+
+function deriveRepoFamily(profile: Record<string, unknown>, trace: CodingTrace | null): string | null {
+  const workspaceRoot = typeof profile.workspaceRoot === "string" ? profile.workspaceRoot : null;
+  if (workspaceRoot) {
+    const segments = workspaceRoot.split(/[\\/]/).filter(Boolean);
+    return segments.slice(-2).join("/").toLowerCase() || null;
+  }
+  const context = trace ? parseObject(trace.contextJson) : {};
+  const projectType = typeof context.projectType === "string" ? context.projectType : null;
+  return projectType ? normalizeForFingerprint(projectType) : null;
+}
+
+function deriveBaselineGroupKey(params: {
+  explicitGroupKey?: string | null;
+  application: CognitiveApplication;
+  trace: CodingTrace | null;
+}): string | null {
+  if (params.explicitGroupKey) {
+    return params.explicitGroupKey;
+  }
+  const traceContext = params.trace ? parseObject(params.trace.contextJson) : {};
+  const technologies = parseStringArray(traceContext.technologies);
+  const errorMessages = parseStringArray(traceContext.errorMessages);
+  const repoProfile = parseObject(params.application.repoProfileJson);
+  const sharedSignature =
+    params.trace?.sharedSignature ??
+    buildSharedSignature({
+      type: params.trace?.type ?? "debugging",
+      problem: params.application.problem,
+      technologies,
+      errorMessages,
+    });
+  const repoFamily = deriveRepoFamily(repoProfile, params.trace);
+  return [
+    normalizeForFingerprint(params.application.endpoint),
+    sharedSignature,
+    repoFamily ?? "",
+  ]
+    .filter(Boolean)
+    .join(":");
+}
+
+async function computeBaselineSnapshot(params: {
+  userId: string;
+  baselineGroupKey: string;
+  excludeApplicationId?: string;
+}): Promise<BaselineSnapshot> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT final_outcome, time_to_resolution_ms, retry_count, verification_summary_json
+      FROM cognitive_applications
+      WHERE user_id = ?
+        AND baseline_group_key = ?
+        AND id != COALESCE(?, id)
+        AND final_outcome IS NOT NULL
+        AND accepted_pattern_id IS NULL
+        AND accepted_skill_id IS NULL
+        AND materialized_pattern_id IS NULL
+        AND materialized_skill_id IS NULL
+      ORDER BY created_at DESC
+      LIMIT 50
+    `,
+    args: [params.userId, params.baselineGroupKey, params.excludeApplicationId ?? null],
+  });
+
+  const rows = result.rows;
+  const timeValues = rows
+    .map((row) => (row.time_to_resolution_ms == null ? null : Number(row.time_to_resolution_ms)))
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const retryValues = rows
+    .map((row) => (row.retry_count == null ? null : Number(row.retry_count)))
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const successRate =
+    rows.length === 0
+      ? 0
+      : rows.filter((row) => row.final_outcome === "success").length / rows.length;
+  const verificationPassRate =
+    rows.length === 0
+      ? 0
+      : rows.filter((row) => verificationPassed(parseObject(row.verification_summary_json)) === true).length / rows.length;
+
+  return {
+    successRate,
+    medianTimeToResolutionMs: medianValue(timeValues),
+    medianRetries: medianValue(retryValues),
+    verificationPassRate,
+    sampleSize: rows.length,
+  };
+}
+
+function applicationObservation(row: Record<string, unknown>): ImpactObservation {
+  return {
+    accepted: Number(row.accepted ?? 0) === 1,
+    explicitNegative: Number(row.explicit_negative ?? 0) === 1,
+    finalOutcome: (row.final_outcome as string | null) ?? null,
+    timeToResolutionMs: row.time_to_resolution_ms == null ? null : Number(row.time_to_resolution_ms),
+    retryCount: row.retry_count == null ? null : Number(row.retry_count),
+    verificationPassed: verificationPassed(parseObject(row.verification_summary_json)) ?? undefined,
+    baseline: row.baseline_snapshot_json ? (parseObject(row.baseline_snapshot_json) as BaselineSnapshot) : null,
+  };
+}
+
+async function recomputePatternImpactStats(patternIds: string[]): Promise<void> {
+  await ensureInitialized();
+  const uniquePatternIds = Array.from(new Set(patternIds.filter(Boolean)));
+  if (uniquePatternIds.length === 0) {
+    return;
+  }
+  const client = getDb();
+  const now = new Date().toISOString();
+
+  for (const patternId of uniquePatternIds) {
+    const stats = await client.execute({
+      sql: `
+        SELECT
+               CASE
+                 WHEN a.accepted_pattern_id = ? OR a.materialized_pattern_id = ? THEN 1
+                 ELSE 0
+               END as accepted,
+               a.final_outcome,
+               CASE WHEN m.match_source = 'explicit_feedback' AND m.explicit_outcome = 'failure' THEN 1 ELSE 0 END as explicit_negative,
+               a.time_to_resolution_ms,
+               a.retry_count,
+               a.verification_summary_json,
+               a.baseline_snapshot_json
+        FROM trace_pattern_matches m
+        JOIN coding_traces t ON t.id = m.trace_id
+        LEFT JOIN cognitive_applications a ON a.trace_id = t.id
+        WHERE m.pattern_id = ?
+      `,
+      args: [patternId, patternId, patternId],
+    });
+    const impact = summarizeEntityImpact(stats.rows.map((row) => applicationObservation(row as Record<string, unknown>)));
+    await client.execute({
+      sql: `
+        UPDATE cognitive_patterns
+        SET application_count = ?,
+            accepted_application_count = ?,
+            successful_application_count = ?,
+            median_time_to_resolution_ms = ?,
+            median_retries = ?,
+            verification_pass_rate = ?,
+            impact_score = ?,
+            promotion_reason = ?,
+            updated_at = ?
+        WHERE id = ?
+      `,
+      args: [
+        impact.applications,
+        impact.acceptedApplications,
+        impact.successfulApplications,
+        impact.medianTimeToResolutionMs,
+        impact.medianRetries,
+        impact.verificationPassRate,
+        impact.impactScore,
+        impact.promotionReason,
+        now,
+        patternId,
+      ],
+    });
+  }
+}
+
 export async function recomputeSkillStats(skillIds: string[]): Promise<void> {
   await ensureInitialized();
   const uniqueSkillIds = Array.from(new Set(skillIds.filter(Boolean)));
@@ -2001,31 +2470,49 @@ export async function recomputeSkillStats(skillIds: string[]): Promise<void> {
   for (const skillId of uniqueSkillIds) {
     const stats = await client.execute({
       sql: `
-        SELECT final_outcome
-        FROM pattern_applications
-        WHERE entity_type = 'skill' AND entity_id = ?
+        SELECT
+               p.accepted as accepted,
+               a.final_outcome,
+               a.time_to_resolution_ms,
+               a.retry_count,
+               a.verification_summary_json,
+               a.baseline_snapshot_json
+        FROM pattern_applications p
+        LEFT JOIN cognitive_applications a ON a.id = p.application_id
+        WHERE p.entity_type = 'skill' AND p.entity_id = ?
       `,
       args: [skillId],
     });
-    const rows = stats.rows.map((row) => (row.final_outcome as string | null) ?? null);
-    const resolved = rows.filter((value): value is string => Boolean(value));
-    const successCount = resolved.filter((value) => value === "success").length;
-    const usageCount = rows.length;
-    const successRate = resolved.length === 0 ? null : successCount / resolved.length;
+    const impact = summarizeEntityImpact(stats.rows.map((row) => applicationObservation(row as Record<string, unknown>)));
+    const successRate = impact.applications === 0 ? 0 : impact.successfulApplications / impact.applications;
 
     await client.execute({
       sql: `
         UPDATE synthesized_skills
         SET usage_count = ?,
-            success_rate = COALESCE(?, success_rate),
-            quality_score = COALESCE(?, quality_score),
+            success_rate = ?,
+            quality_score = ?,
+            accepted_application_count = ?,
+            successful_application_count = ?,
+            median_time_to_resolution_ms = ?,
+            median_retries = ?,
+            verification_pass_rate = ?,
+            impact_score = ?,
+            promotion_reason = ?,
             updated_at = ?
         WHERE id = ?
       `,
       args: [
-        usageCount,
+        impact.applications,
         successRate,
-        successRate,
+        Math.max(successRate, impact.impactScore),
+        impact.acceptedApplications,
+        impact.successfulApplications,
+        impact.medianTimeToResolutionMs,
+        impact.medianRetries,
+        impact.verificationPassRate,
+        impact.impactScore,
+        impact.promotionReason,
         now,
         skillId,
       ],
@@ -2038,7 +2525,19 @@ async function refreshSkillStatuses(userId: string): Promise<void> {
   const client = getDb();
   const rows = await client.execute({
     sql: `
-      SELECT s.id as skill_id, s.status as skill_status, p.status as pattern_status, s.quality_score
+      SELECT
+        s.id as skill_id,
+        s.status as skill_status,
+        p.status as pattern_status,
+        s.quality_score,
+        s.usage_count,
+        s.accepted_application_count,
+        s.successful_application_count,
+        s.median_time_to_resolution_ms,
+        s.median_retries,
+        s.verification_pass_rate,
+        s.impact_score,
+        s.promotion_reason
       FROM synthesized_skills s
       JOIN cognitive_patterns p ON p.id = s.pattern_id
       WHERE s.user_id = ? OR s.scope = 'global' OR s.user_id IS NULL
@@ -2047,9 +2546,19 @@ async function refreshSkillStatuses(userId: string): Promise<void> {
   });
   const now = new Date().toISOString();
   for (const row of rows.rows) {
-    const nextStatus = deriveSkillStatus({
+    const nextStatus = deriveSkillLifecycle({
       patternStatus: (row.pattern_status as string | undefined) ?? "candidate",
       confidence: Number(row.quality_score ?? 0),
+      impact: {
+        applications: Number(row.usage_count ?? 0),
+        acceptedApplications: Number(row.accepted_application_count ?? 0),
+        successfulApplications: Number(row.successful_application_count ?? 0),
+        medianTimeToResolutionMs: row.median_time_to_resolution_ms == null ? null : Number(row.median_time_to_resolution_ms),
+        medianRetries: row.median_retries == null ? null : Number(row.median_retries),
+        verificationPassRate: Number(row.verification_pass_rate ?? 0),
+        impactScore: Number(row.impact_score ?? 0),
+        promotionReason: (row.promotion_reason as string | null) ?? "skill_impact_refresh",
+      },
     });
     if (nextStatus !== ((row.skill_status as string | undefined) ?? "draft")) {
       await client.execute({
@@ -2065,6 +2574,11 @@ export async function updateApplicationOutcome(params: {
   applicationId: string;
   traceId?: string | null;
   finalOutcome?: string | null;
+  repoProfile?: Record<string, unknown> | null;
+  materializedPatternId?: string | null;
+  materializedSkillId?: string | null;
+  retryCount?: number | null;
+  baselineGroupKey?: string | null;
   acceptedTraceId?: string | null;
   acceptedPatternId?: string | null;
   acceptedSkillId?: string | null;
@@ -2086,11 +2600,38 @@ export async function updateApplicationOutcome(params: {
   if (!existing.rows[0]) {
     return null;
   }
+  const existingApplication = rowToApplication(existing.rows[0] as Record<string, unknown>);
+  const trace =
+    params.traceId != null
+      ? await getTraceById(params.traceId, params.userId)
+      : existingApplication.traceId
+        ? await getTraceById(existingApplication.traceId, params.userId)
+        : null;
+  const repoProfile = params.repoProfile ?? parseObject(existingApplication.repoProfileJson);
+  const baselineGroupKey = deriveBaselineGroupKey({
+    explicitGroupKey: params.baselineGroupKey ?? existingApplication.baselineGroupKey,
+    application: existingApplication,
+    trace,
+  });
+  const baselineSnapshot =
+    baselineGroupKey == null
+      ? null
+      : await computeBaselineSnapshot({
+          userId: params.userId,
+          baselineGroupKey,
+          excludeApplicationId: params.applicationId,
+        });
 
   await client.execute({
     sql: `
       UPDATE cognitive_applications
       SET trace_id = COALESCE(?, trace_id),
+          repo_profile_json = COALESCE(?, repo_profile_json),
+          materialized_pattern_id = COALESCE(?, materialized_pattern_id),
+          materialized_skill_id = COALESCE(?, materialized_skill_id),
+          retry_count = COALESCE(?, retry_count),
+          baseline_group_key = COALESCE(?, baseline_group_key),
+          baseline_snapshot_json = COALESCE(?, baseline_snapshot_json),
           accepted_trace_id = COALESCE(?, accepted_trace_id),
           accepted_pattern_id = COALESCE(?, accepted_pattern_id),
           accepted_skill_id = COALESCE(?, accepted_skill_id),
@@ -2102,6 +2643,12 @@ export async function updateApplicationOutcome(params: {
     `,
     args: [
       params.traceId ?? null,
+      repoProfile && Object.keys(repoProfile).length > 0 ? JSON.stringify(repoProfile) : null,
+      params.materializedPatternId ?? null,
+      params.materializedSkillId ?? null,
+      params.retryCount ?? null,
+      baselineGroupKey ?? null,
+      baselineSnapshot ? JSON.stringify(baselineSnapshot) : null,
       params.acceptedTraceId ?? null,
       params.acceptedPatternId ?? null,
       params.acceptedSkillId ?? null,
@@ -2192,6 +2739,27 @@ export async function updateApplicationOutcome(params: {
       .map((row) => row.entity_id)
       .filter((value): value is string => typeof value === "string"),
   );
+  const patternIdsToRefresh = new Set<string>();
+  const traceForPatterns = params.traceId ?? existingApplication.traceId ?? null;
+  if (traceForPatterns) {
+    const patternRows = await client.execute({
+      sql: `
+        SELECT DISTINCT pattern_id
+        FROM trace_pattern_matches
+        WHERE trace_id = ?
+      `,
+      args: [traceForPatterns],
+    });
+    for (const row of patternRows.rows) {
+      if (typeof row.pattern_id === "string") {
+        patternIdsToRefresh.add(row.pattern_id);
+      }
+    }
+  }
+  if (params.materializedPatternId) {
+    patternIdsToRefresh.add(params.materializedPatternId);
+  }
+  await recomputePatternStats([...patternIdsToRefresh]);
 
   const refreshed = await client.execute({
     sql: `SELECT * FROM cognitive_applications WHERE id = ? LIMIT 1`,
@@ -2481,6 +3049,12 @@ export async function generateRetrievalEvalDataset(params: {
     const applicationContext = applicationTrace ? parseObject(applicationTrace.contextJson) : {};
     const technologies = parseStringArray(applicationContext.technologies);
     const labelSource: RetrievalEvalDatasetRecord["labelSource"] = explicitAcceptedId ? "explicit" : "weak";
+    const verificationSummary = parseObject(application.verificationSummaryJson);
+    const targetResolutionKind =
+      typeof verificationSummary.resolutionKind === "string" ? verificationSummary.resolutionKind : undefined;
+    const baselineSnapshot = application.baselineSnapshotJson
+      ? (parseObject(application.baselineSnapshotJson) as BaselineSnapshot)
+      : undefined;
 
     const fixture: RetrievalEvalDatasetRecord["fixture"] = {
       applicationId: application.id,
@@ -2488,6 +3062,7 @@ export async function generateRetrievalEvalDataset(params: {
       endpoint: application.endpoint,
       problem: application.problem,
       technologies,
+      repoProfile: parseObject(application.repoProfileJson),
       expectedTraceIds: application.acceptedTraceId
         ? [application.acceptedTraceId]
         : labelSource === "weak" && traceMatches.length === 1
@@ -2504,6 +3079,23 @@ export async function generateRetrievalEvalDataset(params: {
           ? skillMatches.map((match) => match.entityId)
           : [],
       acceptedId: explicitAcceptedId,
+      expectedOutcome:
+        application.finalOutcome === "success" ||
+        application.finalOutcome === "partial" ||
+        application.finalOutcome === "failed" ||
+        application.finalOutcome === "abandoned"
+          ? application.finalOutcome
+          : undefined,
+      maxRetries: baselineSnapshot?.medianRetries != null ? Math.max(1, Math.round(baselineSnapshot.medianRetries)) : undefined,
+      targetResolutionKind:
+        targetResolutionKind === "tests_passed" ||
+        targetResolutionKind === "build_passed" ||
+        targetResolutionKind === "lint_passed" ||
+        targetResolutionKind === "manual_only" ||
+        targetResolutionKind === "failed"
+          ? targetResolutionKind
+          : undefined,
+      baseline: baselineSnapshot,
     };
 
     const prediction: RetrievalEvalDatasetRecord["prediction"] = {
@@ -2522,6 +3114,24 @@ export async function generateRetrievalEvalDataset(params: {
       acceptedTraceId: application.acceptedTraceId ?? undefined,
       acceptedPatternId: application.acceptedPatternId ?? undefined,
       acceptedSkillId: application.acceptedSkillId ?? undefined,
+      retryCount: application.retryCount ?? undefined,
+      timeToResolutionMs: application.timeToResolutionMs ?? undefined,
+      verificationResults:
+        application.verificationSummaryJson
+          ? {
+              verified: verificationPassed(verificationSummary) === true,
+              resolutionKind:
+                targetResolutionKind === "tests_passed" ||
+                targetResolutionKind === "build_passed" ||
+                targetResolutionKind === "lint_passed" ||
+                targetResolutionKind === "manual_only" ||
+                targetResolutionKind === "failed"
+                  ? targetResolutionKind
+                  : undefined,
+              passedChecks: parseStringArray(verificationSummary.passedChecks).concat(parseStringArray(verificationSummary.testsPassed)),
+              failedChecks: parseStringArray(verificationSummary.failedChecks).concat(parseStringArray(verificationSummary.testsFailed)),
+            }
+          : undefined,
     };
 
     records.push({
@@ -2539,6 +3149,95 @@ export async function generateRetrievalEvalDataset(params: {
     predictions: records.map((record) => record.prediction),
     records,
   };
+}
+
+export async function recordBenchmarkRun(params: {
+  userId: string;
+  dataset: string;
+  fixtureCount: number;
+  result: Record<string, unknown>;
+  gate?: Record<string, unknown> | null;
+}): Promise<void> {
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+  await client.execute({
+    sql: `
+      INSERT INTO cognitive_benchmark_runs (id, user_id, dataset, fixture_count, result_json, gate_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `,
+    args: [
+      crypto.randomUUID(),
+      params.userId,
+      params.dataset,
+      params.fixtureCount,
+      JSON.stringify(params.result),
+      params.gate ? JSON.stringify(params.gate) : null,
+      now,
+    ],
+  });
+}
+
+export async function getRecentBenchmarkRuns(userId: string, limit = 10): Promise<Array<{
+  id: string;
+  dataset: string;
+  fixtureCount: number;
+  result: Record<string, unknown>;
+  gate: Record<string, unknown> | null;
+  createdAt: string;
+}>> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT id, dataset, fixture_count, result_json, gate_json, created_at
+      FROM cognitive_benchmark_runs
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `,
+    args: [userId, Math.max(1, Math.min(limit, 50))],
+  });
+  return result.rows.map((row) => ({
+    id: row.id as string,
+    dataset: row.dataset as string,
+    fixtureCount: Number(row.fixture_count ?? 0),
+    result: parseObject(row.result_json),
+    gate: row.gate_json ? parseObject(row.gate_json) : null,
+    createdAt: row.created_at as string,
+  }));
+}
+
+export async function getFailedBenchmarkRunsSince(since: string, limit = 20): Promise<Array<{
+  id: string;
+  userId: string;
+  dataset: string;
+  fixtureCount: number;
+  gate: Record<string, unknown> | null;
+  createdAt: string;
+}>> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT id, user_id, dataset, fixture_count, gate_json, created_at
+      FROM cognitive_benchmark_runs
+      WHERE created_at >= ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `,
+    args: [since, Math.max(1, Math.min(limit, 100))],
+  });
+  return result.rows
+    .map((row) => ({
+      id: row.id as string,
+      userId: row.user_id as string,
+      dataset: row.dataset as string,
+      fixtureCount: Number(row.fixture_count ?? 0),
+      gate: row.gate_json ? parseObject(row.gate_json) : null,
+      createdAt: row.created_at as string,
+    }))
+    .filter((run) => run.gate?.passed === false);
 }
 
 export async function getCognitiveJobHealth(): Promise<Array<{

@@ -172,6 +172,37 @@ export type SkillStatus = 'draft' | 'active' | 'stale' | 'deprecated';
 // API TYPES
 // ============================================================================
 
+export type ResolutionKind =
+  | 'tests_passed'
+  | 'build_passed'
+  | 'lint_passed'
+  | 'manual_only'
+  | 'failed';
+
+export interface RepoProfile {
+  workspaceRoot?: string;
+  workspaceType?: string;
+  projectType?: string;
+  languages?: string[];
+  repoFamily?: string;
+  sharedSignature?: string;
+}
+
+export interface BaselineSnapshot {
+  successRate: number;
+  medianTimeToResolutionMs: number | null;
+  medianRetries: number | null;
+  verificationPassRate: number;
+  sampleSize: number;
+}
+
+export interface VerificationResults {
+  verified: boolean;
+  resolutionKind?: ResolutionKind;
+  passedChecks?: string[];
+  failedChecks?: string[];
+}
+
 export interface StoreTraceRequest {
   sessionId: string;
   type: TraceType;
@@ -211,10 +242,15 @@ export interface RetrievalEvalFixture {
   endpoint?: string;
   problem: string;
   technologies?: string[];
+  repoProfile?: RepoProfile;
   expectedTraceIds: string[];
   expectedPatternIds: string[];
   expectedSkillIds: string[];
   acceptedId?: string;
+  expectedOutcome?: TraceOutcome;
+  maxRetries?: number;
+  targetResolutionKind?: ResolutionKind;
+  baseline?: BaselineSnapshot;
 }
 
 export interface RetrievalEvalPrediction {
@@ -227,6 +263,9 @@ export interface RetrievalEvalPrediction {
   acceptedTraceId?: string;
   acceptedPatternId?: string;
   acceptedSkillId?: string;
+  retryCount?: number;
+  timeToResolutionMs?: number;
+  verificationResults?: VerificationResults;
 }
 
 export interface RetrievalEvalDatasetRecord {
@@ -249,7 +288,33 @@ export interface RetrievalEvalResult {
   patternRecallAtK: number;
   skillHitRate: number;
   weakOutcomeLift: number;
+  successRate: number;
+  retryDelta: number;
+  timeToResolutionDelta: number;
+  verificationCompletionRate: number;
   cases: number;
+}
+
+export interface BenchmarkGateThresholds {
+  minTraceMrr?: number;
+  minPatternRecallAtK?: number;
+  minSkillHitRate?: number;
+  minWeakOutcomeLift?: number;
+  minSuccessRate?: number;
+  minVerificationCompletionRate?: number;
+  maxTraceMrrRegression?: number;
+  maxPatternRecallAtKRegression?: number;
+  maxSkillHitRateRegression?: number;
+  maxWeakOutcomeLiftRegression?: number;
+  maxSuccessRateRegression?: number;
+  maxVerificationCompletionRateRegression?: number;
+  maxRetryDeltaRegression?: number;
+  maxTimeToResolutionDeltaRegressionMs?: number;
+}
+
+export interface BenchmarkGateResult {
+  passed: boolean;
+  reasons: string[];
 }
 
 export interface PatternFeedbackRequest {
