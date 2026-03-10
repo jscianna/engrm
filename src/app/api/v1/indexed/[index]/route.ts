@@ -7,7 +7,7 @@
 
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
-import { getDb, ensureInitialized } from "@/lib/db";
+import { getDb } from "@/lib/turso";
 
 export const runtime = "nodejs";
 
@@ -28,7 +28,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       throw new MemryError("VALIDATION_ERROR", { field: "index", reason: "required" });
     }
     
-    await ensureInitialized();
+    
     const client = getDb();
     const now = new Date().toISOString();
     
@@ -44,7 +44,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     
     const row = result.rows[0];
     if (!row) {
-      throw new MemryError("NOT_FOUND", { resource: "indexed_memory", index: indexKey });
+      throw new MemryError("MEMORY_NOT_FOUND", { resource: "indexed_memory", index: indexKey });
     }
     
     // Update access count and last accessed time
@@ -88,7 +88,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       throw new MemryError("VALIDATION_ERROR", { field: "index", reason: "required" });
     }
     
-    await ensureInitialized();
+    
     const client = getDb();
     
     const result = await client.execute({
@@ -97,7 +97,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     });
     
     if (result.rowsAffected === 0) {
-      throw new MemryError("NOT_FOUND", { resource: "indexed_memory", index: indexKey });
+      throw new MemryError("MEMORY_NOT_FOUND", { resource: "indexed_memory", index: indexKey });
     }
     
     // Also remove from regular memories
@@ -153,7 +153,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     args.push(identity.userId);
     args.push(indexKey);
     
-    await ensureInitialized();
+    
     const client = getDb();
     
     const result = await client.execute({
@@ -162,7 +162,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     });
     
     if (result.rowsAffected === 0) {
-      throw new MemryError("NOT_FOUND", { resource: "indexed_memory", index: indexKey });
+      throw new MemryError("MEMORY_NOT_FOUND", { resource: "indexed_memory", index: indexKey });
     }
     
     return Response.json({ updated: true, index: indexKey });

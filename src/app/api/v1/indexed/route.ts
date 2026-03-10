@@ -10,14 +10,13 @@
 
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
-import { getDb, ensureInitialized } from "@/lib/db";
+import { getDb } from "@/lib/turso";
 import { embedText } from "@/lib/embeddings";
 
 export const runtime = "nodejs";
 
 // Ensure indexed_memories table exists
 async function ensureIndexedTable() {
-  await ensureInitialized();
   const client = getDb();
   
   await client.execute(`
