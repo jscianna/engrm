@@ -9,6 +9,8 @@ export interface FatHippoConfig {
     captureUserOnly?: boolean;
     dreamCycleOnCompact?: boolean;
     conversationId?: string | null;
+    /** Enable cognitive engine features (trace capture, pattern injection). Default: true */
+    cognitiveEnabled?: boolean;
 }
 export interface Memory {
     id: string;

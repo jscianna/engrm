@@ -19,6 +19,9 @@ export class FatHippoContextEngine {
     client;
     config;
     cachedCritical = null;
+    // Cognitive engine state
+    sessionStartTimes = new Map();
+    cognitiveEnabled;
     static TRIVIAL_ACKS = new Set([
         "ok",
         "thanks",
@@ -37,6 +40,8 @@ export class FatHippoContextEngine {
     constructor(config) {
         this.config = config;
         this.client = new FatHippoClient(config);
+        // Enable cognitive features if configured (default: true)
+        this.cognitiveEnabled = config.cognitiveEnabled !== false;
     }
     /**
      * Initialize engine state for a session
@@ -138,6 +143,185 @@ export class FatHippoContextEngine {
             // 5 minute cache
             this.cachedCritical = null;
         }
+        // Capture cognitive trace for coding sessions
+        if (this.cognitiveEnabled) {
+            await this.maybeCaptureTrace(params.sessionId, params.messages);
+        }
+    }
+    /**
+     * Capture a trace if this looks like a completed coding task
+     */
+    async maybeCaptureTrace(sessionId, messages) {
+        // Need at least 4 messages (user, assistant, maybe more back-and-forth)
+        if (messages.length < 4)
+            return;
+        // Check if this looks like a coding conversation
+        const allText = messages.map(m => this.getMessageText(m)).join(' ').toLowerCase();
+        if (!this.looksLikeCodingQuery(allText))
+            return;
+        // Extract problem from first user message
+        const firstUserMsg = messages.find(m => m.role === 'user');
+        if (!firstUserMsg)
+            return;
+        const problem = this.getMessageText(firstUserMsg).slice(0, 500);
+        // Extract reasoning from assistant thinking blocks
+        const reasoning = this.extractReasoning(messages);
+        if (!reasoning || reasoning.length < 50)
+            return; // Skip if no meaningful reasoning
+        // Detect outcome from last messages
+        const outcome = this.detectOutcome(messages);
+        // Extract solution from last assistant message if success
+        let solution;
+        if (outcome === 'success') {
+            const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
+            if (lastAssistant) {
+                solution = this.getMessageText(lastAssistant).slice(0, 1000);
+            }
+        }
+        // Detect technologies
+        const technologies = this.detectTechnologies(allText);
+        // Get session start time or set it
+        if (!this.sessionStartTimes.has(sessionId)) {
+            this.sessionStartTimes.set(sessionId, Date.now() - 60000); // Estimate 1 min ago
+        }
+        const startTime = this.sessionStartTimes.get(sessionId);
+        const durationMs = Date.now() - startTime;
+        // Skip very short sessions
+        if (durationMs < 10000)
+            return; // Less than 10 seconds
+        // Capture the trace
+        try {
+            const baseUrl = this.config.baseUrl?.replace('/v1', '') || 'https://fathippo.ai/api';
+            await fetch(`${baseUrl}/v1/cognitive/traces`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${this.config.apiKey}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    sessionId,
+                    type: this.detectProblemType(allText),
+                    problem: this.sanitizeForStorage(problem),
+                    context: { technologies },
+                    reasoning: this.sanitizeForStorage(reasoning),
+                    approaches: [],
+                    solution: solution ? this.sanitizeForStorage(solution) : undefined,
+                    outcome,
+                    toolsUsed: this.detectToolsUsed(messages),
+                    filesModified: [],
+                    durationMs,
+                    sanitized: true,
+                    sanitizedAt: new Date().toISOString(),
+                }),
+            });
+            // Reset session start time
+            this.sessionStartTimes.delete(sessionId);
+        }
+        catch (error) {
+            console.error('[FatHippo] Trace capture error:', error);
+        }
+    }
+    extractReasoning(messages) {
+        const thinkingBlocks = [];
+        for (const message of messages) {
+            if (message.role !== 'assistant')
+                continue;
+            const content = message.content;
+            if (Array.isArray(content)) {
+                for (const block of content) {
+                    if (typeof block === 'object' && 'thinking' in block && block.thinking) {
+                        thinkingBlocks.push(String(block.thinking));
+                    }
+                }
+            }
+        }
+        return thinkingBlocks.join('\n\n').slice(0, 3000);
+    }
+    detectOutcome(messages) {
+        const recentText = messages.slice(-3).map(m => this.getMessageText(m)).join(' ').toLowerCase();
+        const successWords = ['fixed', 'works', 'done', 'complete', 'success', 'resolved', 'passing'];
+        const failWords = ['still broken', 'not working', 'failed', 'error persists', 'stuck'];
+        const successScore = successWords.filter(w => recentText.includes(w)).length;
+        const failScore = failWords.filter(w => recentText.includes(w)).length;
+        if (successScore > failScore)
+            return 'success';
+        if (failScore > successScore)
+            return 'failed';
+        return 'partial';
+    }
+    detectProblemType(text) {
+        if (/debug|bug|error|fix|broken/.test(text))
+            return 'debugging';
+        if (/refactor|clean|reorganize/.test(text))
+            return 'refactoring';
+        if (/review|check|audit/.test(text))
+            return 'reviewing';
+        if (/config|setup|install/.test(text))
+            return 'configuring';
+        return 'building';
+    }
+    detectTechnologies(text) {
+        const techs = [];
+        const patterns = {
+            typescript: /typescript|\.tsx?/i,
+            javascript: /javascript|\.jsx?/i,
+            react: /react|jsx|usestate/i,
+            nextjs: /next\.?js|app router/i,
+            turso: /turso|libsql/i,
+            postgres: /postgres|psql/i,
+            python: /python|\.py/i,
+            docker: /docker|container/i,
+        };
+        for (const [tech, pattern] of Object.entries(patterns)) {
+            if (pattern.test(text))
+                techs.push(tech);
+        }
+        return techs;
+    }
+    detectToolsUsed(messages) {
+        const tools = new Set();
+        for (const message of messages) {
+            // Check for tool result messages
+            const msg = message;
+            if (msg.role === 'toolResult' || msg.type === 'toolResult') {
+                if (typeof msg.toolName === 'string') {
+                    tools.add(msg.toolName);
+                }
+            }
+        }
+        return [...tools];
+    }
+    sanitizeForStorage(text) {
+        // Basic secret sanitization
+        const patterns = [
+            /sk-[a-zA-Z0-9]{32,}/g,
+            /ghp_[a-zA-Z0-9]{36,}/g,
+            /mem_[a-zA-Z0-9]{32,}/g,
+            /AKIA[A-Z0-9]{16}/g,
+            /(['"]?)(?:api[_-]?key|secret|password|token)(['"]?\s*[:=]\s*)(['"]?)[\w\-\.]+\3/gi,
+        ];
+        let result = text;
+        for (const pattern of patterns) {
+            result = result.replace(pattern, '[REDACTED]');
+        }
+        return result;
+    }
+    getMessageText(message) {
+        const msg = message;
+        // Handle string content directly
+        if (typeof msg.content === 'string')
+            return msg.content;
+        // Handle array content (with text blocks)
+        if (Array.isArray(msg.content)) {
+            return msg.content
+                .filter(b => typeof b === 'object' && b !== null && typeof b.text === 'string')
+                .map(b => String(b.text))
+                .join('\n');
+        }
+        // Handle text field directly
+        if (typeof msg.text === 'string')
+            return msg.text;
+        return '';
     }
     /**
      * Assemble context for the model
@@ -217,13 +401,73 @@ export class FatHippoContextEngine {
         }
         // Format memories for injection, include indexed summaries
         const memoryBlock = formatMemoriesForInjection(memories, syntheses);
-        const fullContext = (memoryBlock ? memoryBlock + "\n" : "") + indexedContext;
+        // Fetch cognitive context (traces + patterns) for coding sessions
+        let cognitiveContext = "";
+        if (this.cognitiveEnabled && this.looksLikeCodingQuery(lastUserMessage)) {
+            try {
+                const cognitive = await this.fetchCognitiveContext(lastUserMessage);
+                if (cognitive) {
+                    cognitiveContext = cognitive;
+                }
+            }
+            catch (error) {
+                console.error("[FatHippo] Cognitive context error:", error);
+            }
+        }
+        const fullContext = (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + cognitiveContext;
         const tokens = estimateTokens(fullContext) + baseMessageTokens;
         return {
             messages: params.messages,
             estimatedTokens: tokens,
             systemPromptAddition: fullContext.trim() || undefined,
         };
+    }
+    /**
+     * Check if query looks like a coding task
+     */
+    looksLikeCodingQuery(query) {
+        const codingKeywords = [
+            'bug', 'error', 'fix', 'debug', 'implement', 'build', 'create', 'refactor',
+            'function', 'class', 'api', 'endpoint', 'database', 'query', 'test',
+            'deploy', 'config', 'install', 'code', 'script', 'compile', 'run'
+        ];
+        const queryLower = query.toLowerCase();
+        return codingKeywords.some(kw => queryLower.includes(kw));
+    }
+    /**
+     * Fetch relevant traces and patterns from cognitive API
+     */
+    async fetchCognitiveContext(problem) {
+        const baseUrl = this.config.baseUrl?.replace('/v1', '') || 'https://fathippo.ai/api';
+        const response = await fetch(`${baseUrl}/v1/cognitive/traces/relevant`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${this.config.apiKey}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ problem, limit: 3 }),
+        });
+        if (!response.ok)
+            return null;
+        const data = await response.json();
+        const sections = [];
+        // Format patterns (most actionable)
+        if (data.patterns && data.patterns.length > 0) {
+            const patternLines = data.patterns.map(p => `• [${p.domain}] ${p.approach.slice(0, 200)} (${Math.round(p.confidence * 100)}% confidence)`).join('\n');
+            sections.push(`## Learned Coding Patterns\n${patternLines}`);
+        }
+        // Format traces
+        if (data.traces && data.traces.length > 0) {
+            const traceLines = data.traces.map(t => {
+                const icon = t.outcome === 'success' ? '✓' : t.outcome === 'failed' ? '✗' : '~';
+                const solution = t.solution ? ` → ${t.solution.slice(0, 80)}...` : '';
+                return `• ${icon} ${t.problem.slice(0, 80)}${solution}`;
+            }).join('\n');
+            sections.push(`## Past Similar Problems\n${traceLines}`);
+        }
+        if (sections.length === 0)
+            return null;
+        return '\n' + sections.join('\n\n') + '\n';
     }
     /**
      * Handle compaction via Dream Cycle

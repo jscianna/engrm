@@ -14,6 +14,8 @@ export declare class FatHippoContextEngine implements ContextEngine {
     private client;
     private config;
     private cachedCritical;
+    private sessionStartTimes;
+    private cognitiveEnabled;
     private static readonly TRIVIAL_ACKS;
     private static readonly MIN_VECTOR_SIMILARITY;
     private static readonly MIN_CRITICAL_RELEVANCE;
@@ -55,6 +57,17 @@ export declare class FatHippoContextEngine implements ContextEngine {
         legacyCompactionParams?: Record<string, unknown>;
     }): Promise<void>;
     /**
+     * Capture a trace if this looks like a completed coding task
+     */
+    private maybeCaptureTrace;
+    private extractReasoning;
+    private detectOutcome;
+    private detectProblemType;
+    private detectTechnologies;
+    private detectToolsUsed;
+    private sanitizeForStorage;
+    private getMessageText;
+    /**
      * Assemble context for the model
      */
     assemble(params: {
@@ -62,6 +75,14 @@ export declare class FatHippoContextEngine implements ContextEngine {
         messages: AgentMessage[];
         tokenBudget?: number;
     }): Promise<AssembleResult>;
+    /**
+     * Check if query looks like a coding task
+     */
+    private looksLikeCodingQuery;
+    /**
+     * Fetch relevant traces and patterns from cognitive API
+     */
+    private fetchCognitiveContext;
     /**
      * Handle compaction via Dream Cycle
      */
