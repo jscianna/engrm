@@ -80,6 +80,14 @@ export declare class FatHippoContextEngine implements ContextEngine {
      */
     private looksLikeCodingQuery;
     /**
+     * Fetch active constraints (always injected)
+     */
+    private fetchConstraints;
+    /**
+     * Auto-detect and store constraints from user message
+     */
+    private maybeStoreConstraint;
+    /**
      * Fetch relevant traces and patterns from cognitive API
      */
     private fetchCognitiveContext;

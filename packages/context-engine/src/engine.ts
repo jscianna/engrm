@@ -152,6 +152,11 @@ export class FatHippoContextEngine implements ContextEngine {
       return { ingested: false };
     }
 
+    // Auto-detect constraints from user messages
+    if (this.cognitiveEnabled && this.isRoleMessage(params.message) && params.message.role === "user") {
+      this.maybeStoreConstraint(content).catch(() => {}); // Fire and forget
+    }
+
     // Filter prompt injection attempts
     if (detectPromptInjection(content)) {
       console.warn("[FatHippo] Blocked prompt injection attempt");
@@ -521,6 +526,16 @@ export class FatHippoContextEngine implements ContextEngine {
     // Format memories for injection, include indexed summaries
     const memoryBlock = formatMemoriesForInjection(memories, syntheses);
     
+    // Fetch constraints (always inject - these are critical rules)
+    let constraintsContext = "";
+    if (this.cognitiveEnabled) {
+      try {
+        constraintsContext = await this.fetchConstraints();
+      } catch (error) {
+        console.error("[FatHippo] Constraints fetch error:", error);
+      }
+    }
+    
     // Fetch cognitive context (traces + patterns) for coding sessions
     let cognitiveContext = "";
     if (this.cognitiveEnabled && this.looksLikeCodingQuery(lastUserMessage)) {
@@ -534,7 +549,7 @@ export class FatHippoContextEngine implements ContextEngine {
       }
     }
     
-    const fullContext = (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + cognitiveContext;
+    const fullContext = constraintsContext + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + cognitiveContext;
     const tokens = estimateTokens(fullContext) + baseMessageTokens;
 
     return {
@@ -555,6 +570,45 @@ export class FatHippoContextEngine implements ContextEngine {
     ];
     const queryLower = query.toLowerCase();
     return codingKeywords.some(kw => queryLower.includes(kw));
+  }
+  
+  /**
+   * Fetch active constraints (always injected)
+   */
+  private async fetchConstraints(): Promise<string> {
+    const baseUrl = this.config.baseUrl?.replace('/v1', '') || 'https://fathippo.ai/api';
+    
+    const response = await fetch(`${baseUrl}/v1/cognitive/constraints`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${this.config.apiKey}`,
+      },
+    });
+    
+    if (!response.ok) return '';
+    
+    const data = await response.json() as { contextFormat?: string };
+    return data.contextFormat || '';
+  }
+  
+  /**
+   * Auto-detect and store constraints from user message
+   */
+  private async maybeStoreConstraint(message: string): Promise<void> {
+    const baseUrl = this.config.baseUrl?.replace('/v1', '') || 'https://fathippo.ai/api';
+    
+    try {
+      await fetch(`${baseUrl}/v1/cognitive/constraints`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ message }),
+      });
+    } catch {
+      // Constraint detection is best-effort
+    }
   }
   
   /**
