@@ -141,6 +141,50 @@ const STOP_WORDS = new Set([
   "work",
 ]);
 
+const SHARED_PROBLEM_CLASSES = [
+  "auth",
+  "middleware",
+  "build",
+  "test",
+  "lint",
+  "routing",
+  "render",
+  "schema",
+  "migration",
+  "query",
+  "database",
+  "vector",
+  "embedding",
+  "config",
+  "deploy",
+  "permission",
+  "timeout",
+  "session",
+  "api",
+  "cache",
+  "state",
+  "validation",
+] as const;
+
+const SHARED_TECH_FAMILIES: Array<{ pattern: RegExp; family: string }> = [
+  { pattern: /\bnext(js)?\b/, family: "nextjs" },
+  { pattern: /\breact\b/, family: "react" },
+  { pattern: /\btypescript|ts\b/, family: "typescript" },
+  { pattern: /\bjavascript|node(js)?\b/, family: "nodejs" },
+  { pattern: /\bpython|pytest|django|flask\b/, family: "python" },
+  { pattern: /\bpostgres|postgresql|sql\b/, family: "sql-database" },
+  { pattern: /\bmysql|mariadb\b/, family: "sql-database" },
+  { pattern: /\bsqlite|libsql|turso\b/, family: "sqlite-family" },
+  { pattern: /\bprisma|drizzle|typeorm\b/, family: "orm" },
+  { pattern: /\bredis\b/, family: "cache" },
+  { pattern: /\bdocker|container|compose\b/, family: "container" },
+  { pattern: /\bkubernetes|k8s\b/, family: "orchestration" },
+  { pattern: /\bclerk|auth0|oauth|jwt\b/, family: "auth" },
+  { pattern: /\bopenai|anthropic|llm|embedding|vector|qdrant|pinecone\b/, family: "ai-retrieval" },
+  { pattern: /\bwebpack|vite|babel|rollup|esbuild\b/, family: "bundler" },
+  { pattern: /\bjest|vitest|playwright|cypress\b/, family: "test-framework" },
+];
+
 export function normalizeForFingerprint(value: string): string {
   return value
     .toLowerCase()
@@ -164,23 +208,37 @@ export function extractProblemKeywords(problem: string, limit = 8): string[] {
     .map(([token]) => token);
 }
 
+export function extractSharedProblemClasses(problem: string, limit = 4): string[] {
+  const normalized = normalizeForFingerprint(problem);
+  const matches = SHARED_PROBLEM_CLASSES.filter((token) => normalized.includes(token));
+  return matches.slice(0, limit);
+}
+
+export function coarsenSharedTechnologies(technologies?: string[]): string[] {
+  const families = new Set<string>();
+  for (const technology of technologies ?? []) {
+    const normalized = normalizeForFingerprint(technology);
+    const match = SHARED_TECH_FAMILIES.find((candidate) => candidate.pattern.test(normalized));
+    if (match) {
+      families.add(match.family);
+    }
+  }
+  return Array.from(families).sort().slice(0, 4);
+}
+
 export function buildSharedSignature(params: {
   type: string;
   problem: string;
   technologies?: string[];
   errorMessages?: string[];
 }): string {
-  const technologies = [...(params.technologies ?? [])]
-    .map((tech) => normalizeForFingerprint(tech))
-    .filter(Boolean)
-    .sort()
-    .slice(0, 4);
-  const keywords = extractProblemKeywords(params.problem, 6);
-  const errorSignature = normalizeErrorPattern(params.errorMessages?.[0] ?? "");
+  const technologies = coarsenSharedTechnologies(params.technologies);
+  const problemClasses = extractSharedProblemClasses(params.problem, 4);
+  const errorSignature = coarsenSharedErrorFamily(params.errorMessages?.[0] ?? "");
   const parts = [
     normalizeForFingerprint(params.type),
     technologies.join(","),
-    keywords.join(","),
+    problemClasses.join(","),
     errorSignature,
   ].filter(Boolean);
 
@@ -195,6 +253,53 @@ export function normalizeErrorPattern(errorMessage: string): string {
 
   const match = normalized.match(/^(typeerror|referenceerror|syntaxerror|cannot [a-z0-9_]+|failed to [a-z0-9_]+)/);
   return match?.[1] ?? normalized.split(" ").slice(0, 4).join(" ");
+}
+
+export function coarsenSharedErrorFamily(errorMessage: string): string {
+  const normalized = normalizeErrorPattern(errorMessage);
+  if (!normalized) {
+    return "";
+  }
+  if (normalized.startsWith("typeerror")) {
+    return "typeerror";
+  }
+  if (normalized.startsWith("referenceerror")) {
+    return "referenceerror";
+  }
+  if (normalized.startsWith("syntaxerror")) {
+    return "syntaxerror";
+  }
+  if (normalized.includes("module") || normalized.includes("import")) {
+    return "module-resolution";
+  }
+  if (normalized.includes("timeout")) {
+    return "timeout";
+  }
+  if (normalized.includes("auth") || normalized.includes("session") || normalized.includes("token")) {
+    return "auth";
+  }
+  if (normalized.includes("permission") || normalized.includes("forbidden") || normalized.includes("unauthorized")) {
+    return "permission";
+  }
+  if (normalized.includes("schema") || normalized.includes("migration")) {
+    return "schema";
+  }
+  if (normalized.includes("query") || normalized.includes("sql")) {
+    return "query";
+  }
+  if (normalized.includes("build")) {
+    return "build";
+  }
+  if (normalized.includes("test")) {
+    return "test";
+  }
+  if (normalized.includes("cannot ")) {
+    return "runtime";
+  }
+  if (normalized.includes("failed to ")) {
+    return "operation-failed";
+  }
+  return normalized.split(" ").slice(0, 2).join(" ");
 }
 
 export function cosineSimilarity(left: number[] | null | undefined, right: number[] | null | undefined): number {
@@ -330,12 +435,18 @@ export function extractPatternCandidate(cluster: ClusteredTraceGroup): Extracted
     return null;
   }
 
-  const keywords = mergeCommonKeywords(cluster.traces.map((trace) => extractProblemKeywords(trace.problem, 8)));
-  const technologies = mergeCommonValues(cluster.traces.flatMap((trace) => trace.context.technologies ?? []));
+  const keywords =
+    cluster.scope === "global"
+      ? mergeCommonValues(cluster.traces.flatMap((trace) => extractSharedProblemClasses(trace.problem, 4)))
+      : mergeCommonKeywords(cluster.traces.map((trace) => extractProblemKeywords(trace.problem, 8)));
+  const technologies =
+    cluster.scope === "global"
+      ? mergeCommonValues(cluster.traces.flatMap((trace) => coarsenSharedTechnologies(trace.context.technologies)))
+      : mergeCommonValues(cluster.traces.flatMap((trace) => trace.context.technologies ?? []));
   const errorPatterns = mergeCommonValues(
     cluster.traces
       .flatMap((trace) => trace.context.errorMessages ?? [])
-      .map((error) => normalizeErrorPattern(error))
+      .map((error) => (cluster.scope === "global" ? coarsenSharedErrorFamily(error) : normalizeErrorPattern(error)))
       .filter(Boolean),
   );
   const steps = summarizeStepsFromText(approachSource);

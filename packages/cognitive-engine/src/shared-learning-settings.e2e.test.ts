@@ -73,6 +73,48 @@ describe("shared learning settings", () => {
       sanitized: true,
     });
     expect(sharedTrace.shareEligible).toBe(true);
-    expect(sharedTrace.sharedSignature).toBeTruthy();
+    expect(sharedTrace.sharedSignature).toBeNull();
+  });
+
+  it("builds global patterns without persisting reusable shared signatures", async () => {
+    const userId = "user-global";
+    await cognitiveDb.updateCognitiveUserSettings({
+      userId,
+      sharedLearningEnabled: true,
+    });
+
+    for (const sessionId of ["global-1", "global-2", "global-3"]) {
+      const trace = await cognitiveDb.createTrace({
+        userId,
+        sessionId,
+        type: "debugging",
+        problem: "Next.js middleware matcher breaks auth on static assets",
+        context: { technologies: ["nextjs", "typescript"], errorMessages: ["Auth middleware blocks _next/static"] },
+        reasoning: "Reviewed matcher configuration and narrowed the auth middleware scope.",
+        approaches: [],
+        solution: "Exclude static assets from the middleware matcher.",
+        outcome: "success",
+        automatedOutcome: "success",
+        automatedSignals: { resolutionKind: "tests_passed" },
+        toolsUsed: ["npm test"],
+        filesModified: ["middleware.ts"],
+        durationMs: 90000,
+        sanitized: true,
+      });
+      expect(trace.shareEligible).toBe(true);
+      expect(trace.sharedSignature).toBeNull();
+    }
+
+    const extraction = await cognitiveDb.runPatternExtraction({
+      userId,
+      includeGlobal: true,
+    });
+    expect(extraction.globalPatterns).toBeGreaterThan(0);
+
+    const patterns = await cognitiveDb.getPatterns(userId);
+    const globalPattern = patterns.find((pattern) => pattern.scope === "global");
+    expect(globalPattern).toBeTruthy();
+    expect(globalPattern?.sharedSignature).toBeNull();
+    expect(globalPattern?.sourceTraceIdsJson).toBe("[]");
   });
 });

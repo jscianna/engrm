@@ -9,19 +9,19 @@ type UsageData = {
   usage: {
     apiCallsToday: number;
     apiCallsThisMonth: number;
-    memoriesThisMonth: number;
+    memoriesTotal: number;
     storageBytes: number;
     estimatedStorageCost: number;
   };
   limits: {
     requestsPerMinute: number;
     requestsPerDay: number;
-    memoriesPerMonth: number;
+    memoriesTotal: number;
     storageBytes: number;
   };
   percentages: {
     apiCallsToday: number;
-    memoriesThisMonth: number;
+    memoriesTotal: number;
     storageBytes: number;
   };
 };
@@ -150,7 +150,7 @@ export function UsageCard() {
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="flex items-center gap-2 text-lg text-zinc-100">
           <Activity className="h-5 w-5 text-cyan-400" />
-          Usage This Month
+          Usage
         </CardTitle>
         <Button
           variant="ghost"
@@ -174,10 +174,10 @@ export function UsageCard() {
 
         <UsageStat
           icon={Database}
-          label="Memories Created"
-          value={formatNumber(data.usage.memoriesThisMonth)}
-          limit={formatNumber(data.limits.memoriesPerMonth)}
-          percent={data.percentages.memoriesThisMonth}
+          label="Memories Created Total"
+          value={formatNumber(data.usage.memoriesTotal)}
+          limit={formatNumber(data.limits.memoriesTotal)}
+          percent={data.percentages.memoriesTotal}
           color="bg-violet-500"
         />
 
@@ -191,7 +191,7 @@ export function UsageCard() {
         />
 
         <p className="text-xs text-zinc-600">
-          Limits reset at the start of each month (UTC). Rate limit: {data.limits.requestsPerMinute} req/min.
+          Daily API calls reset at midnight UTC. Memory quota is a total lifetime cap. Rate limit: {data.limits.requestsPerMinute} req/min.
         </p>
       </CardContent>
     </Card>

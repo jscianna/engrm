@@ -12,14 +12,10 @@ import { MemryError } from "./errors";
 // Beta limits - generous but protective
 export const LIMITS = {
   REQUESTS_PER_MINUTE: 60,
-  REQUESTS_PER_DAY: 10_000,
-  MEMORIES_PER_MONTH: 5_000,
+  REQUESTS_PER_DAY: 1_000,
+  MEMORIES_TOTAL: 1_000,
   STORAGE_BYTES: 100 * 1024 * 1024, // 100MB
 } as const;
-
-// Per-user limit overrides (for testing/enterprise)
-// userId -> { requestsPerDay?: number, memoriesPerMonth?: number }
-const USER_LIMIT_OVERRIDES: Record<string, Partial<typeof LIMITS>> = {};
 
 // API keys with elevated limits (hash prefix -> limits)
 // Used for autoresearch/testing accounts
@@ -58,6 +54,7 @@ export async function ensureRateLimiterInitialized(): Promise<void> {
     CREATE TABLE IF NOT EXISTS usage_stats (
       user_id TEXT PRIMARY KEY,
       memories_this_month INTEGER DEFAULT 0,
+      memories_total INTEGER DEFAULT 0,
       storage_bytes INTEGER DEFAULT 0,
       api_calls_today INTEGER DEFAULT 0,
       api_calls_this_month INTEGER DEFAULT 0,
@@ -67,18 +64,28 @@ export async function ensureRateLimiterInitialized(): Promise<void> {
     );
   `);
 
+  await client.execute(`ALTER TABLE usage_stats ADD COLUMN memories_total INTEGER DEFAULT 0`).catch(() => {});
+  await client.execute(`
+    UPDATE usage_stats
+    SET memories_total = CASE
+      WHEN memories_total < memories_this_month THEN memories_this_month
+      ELSE memories_total
+    END
+    WHERE memories_this_month > 0
+  `).catch(() => {});
+
   initialized = true;
 }
 
 export type UsageStats = {
   apiCallsToday: number;
   apiCallsThisMonth: number;
-  memoriesThisMonth: number;
+  memoriesTotal: number;
   storageBytes: number;
   limits: {
     requestsPerMinute: number;
     requestsPerDay: number;
-    memoriesPerMonth: number;
+    memoriesTotal: number;
     storageBytes: number;
   };
 };
@@ -110,10 +117,10 @@ export async function checkRateLimit(
     await tx.execute({
       sql: `
         INSERT INTO usage_stats (
-          user_id, memories_this_month, storage_bytes, api_calls_today,
+          user_id, memories_this_month, memories_total, storage_bytes, api_calls_today,
           api_calls_this_month, last_reset_day, last_reset_month, updated_at
         )
-        VALUES (?, 0, 0, 0, 0, ?, ?, ?)
+        VALUES (?, 0, 0, 0, 0, 0, ?, ?, ?)
         ON CONFLICT(user_id) DO NOTHING
       `,
       args: [userId, today, thisMonth, nowIso],
@@ -197,10 +204,10 @@ export async function checkRateLimit(
  */
 export async function checkMemoryQuota(userId: string): Promise<void> {
   const stats = await getOrCreateStats(userId);
-  if (stats.memoriesThisMonth >= LIMITS.MEMORIES_PER_MONTH) {
+  if (stats.memoriesTotal >= LIMITS.MEMORIES_TOTAL) {
     throw new MemryError("QUOTA_MEMORIES", {
-      limit: LIMITS.MEMORIES_PER_MONTH,
-      current: stats.memoriesThisMonth,
+      limit: LIMITS.MEMORIES_TOTAL,
+      current: stats.memoriesTotal,
     });
   }
 }
@@ -228,7 +235,7 @@ export async function recordMemoryCreated(userId: string, sizeBytes: number): Pr
   const now = new Date().toISOString();
 
   await client.execute({
-    sql: `UPDATE usage_stats SET memories_this_month = memories_this_month + 1, storage_bytes = storage_bytes + ?, updated_at = ? WHERE user_id = ?`,
+    sql: `UPDATE usage_stats SET memories_this_month = memories_this_month + 1, memories_total = memories_total + 1, storage_bytes = storage_bytes + ?, updated_at = ? WHERE user_id = ?`,
     args: [sizeBytes, now, userId],
   });
 }
@@ -257,7 +264,7 @@ export async function getUsageStats(userId: string): Promise<UsageStats> {
     limits: {
       requestsPerMinute: LIMITS.REQUESTS_PER_MINUTE,
       requestsPerDay: LIMITS.REQUESTS_PER_DAY,
-      memoriesPerMonth: LIMITS.MEMORIES_PER_MONTH,
+      memoriesTotal: LIMITS.MEMORIES_TOTAL,
       storageBytes: LIMITS.STORAGE_BYTES,
     },
   };
@@ -266,7 +273,7 @@ export async function getUsageStats(userId: string): Promise<UsageStats> {
 async function getOrCreateStats(userId: string): Promise<{
   apiCallsToday: number;
   apiCallsThisMonth: number;
-  memoriesThisMonth: number;
+  memoriesTotal: number;
   storageBytes: number;
 }> {
   await ensureRateLimiterInitialized();
@@ -279,21 +286,24 @@ async function getOrCreateStats(userId: string): Promise<{
   // Upsert with date reset logic
   await client.execute({
     sql: `
-      INSERT INTO usage_stats (user_id, memories_this_month, storage_bytes, api_calls_today, api_calls_this_month, last_reset_day, last_reset_month, updated_at)
-      VALUES (?, 0, 0, 0, 0, ?, ?, ?)
+      INSERT INTO usage_stats (user_id, memories_this_month, memories_total, storage_bytes, api_calls_today, api_calls_this_month, last_reset_day, last_reset_month, updated_at)
+      VALUES (?, 0, 0, 0, 0, 0, ?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
         api_calls_today = CASE WHEN last_reset_day != ? THEN 0 ELSE api_calls_today END,
         api_calls_this_month = CASE WHEN last_reset_month != ? THEN 0 ELSE api_calls_this_month END,
-        memories_this_month = CASE WHEN last_reset_month != ? THEN 0 ELSE memories_this_month END,
+        memories_total = CASE
+          WHEN memories_total < memories_this_month THEN memories_this_month
+          ELSE memories_total
+        END,
         last_reset_day = ?,
         last_reset_month = ?,
         updated_at = ?
     `,
-    args: [userId, today, thisMonth, nowIso, today, thisMonth, thisMonth, today, thisMonth, nowIso],
+    args: [userId, today, thisMonth, nowIso, today, thisMonth, today, thisMonth, nowIso],
   });
 
   const result = await client.execute({
-    sql: `SELECT api_calls_today, api_calls_this_month, memories_this_month, storage_bytes FROM usage_stats WHERE user_id = ?`,
+    sql: `SELECT api_calls_today, api_calls_this_month, memories_total, storage_bytes FROM usage_stats WHERE user_id = ?`,
     args: [userId],
   });
 
@@ -301,7 +311,7 @@ async function getOrCreateStats(userId: string): Promise<{
   return {
     apiCallsToday: Number(row?.api_calls_today ?? 0),
     apiCallsThisMonth: Number(row?.api_calls_this_month ?? 0),
-    memoriesThisMonth: Number(row?.memories_this_month ?? 0),
+    memoriesTotal: Number(row?.memories_total ?? 0),
     storageBytes: Number(row?.storage_bytes ?? 0),
   };
 }
@@ -343,6 +353,7 @@ export async function reserveMemoryQuotaInTransaction(
       INSERT INTO usage_stats (
         user_id,
         memories_this_month,
+        memories_total,
         storage_bytes,
         api_calls_today,
         api_calls_this_month,
@@ -350,7 +361,7 @@ export async function reserveMemoryQuotaInTransaction(
         last_reset_month,
         updated_at
       )
-      VALUES (?, 0, 0, 0, 0, ?, ?, ?)
+      VALUES (?, 0, 0, 0, 0, 0, ?, ?, ?)
       ON CONFLICT(user_id) DO NOTHING
     `,
     args: [userId, today, thisMonth, nowIso],
@@ -360,23 +371,17 @@ export async function reserveMemoryQuotaInTransaction(
     sql: `
       UPDATE usage_stats
       SET
-        memories_this_month = CASE
-          WHEN last_reset_month != ? THEN 1
-          ELSE memories_this_month + 1
-        END,
+        memories_this_month = memories_this_month + 1,
+        memories_total = memories_total + 1,
         storage_bytes = storage_bytes + ?,
         last_reset_day = ?,
         last_reset_month = ?,
         updated_at = ?
       WHERE user_id = ?
         AND storage_bytes + ? <= ?
-        AND (
-          last_reset_month != ?
-          OR memories_this_month < ?
-        )
+        AND memories_total < ?
     `,
     args: [
-      thisMonth,
       sizeBytes,
       today,
       thisMonth,
@@ -384,8 +389,7 @@ export async function reserveMemoryQuotaInTransaction(
       userId,
       sizeBytes,
       LIMITS.STORAGE_BYTES,
-      thisMonth,
-      LIMITS.MEMORIES_PER_MONTH,
+      LIMITS.MEMORIES_TOTAL,
     ],
   });
 
@@ -395,7 +399,7 @@ export async function reserveMemoryQuotaInTransaction(
 
   const statsResult = await tx.execute({
     sql: `
-      SELECT memories_this_month, storage_bytes, last_reset_month
+      SELECT memories_total, storage_bytes
       FROM usage_stats
       WHERE user_id = ?
       LIMIT 1
@@ -404,8 +408,7 @@ export async function reserveMemoryQuotaInTransaction(
   });
 
   const row = statsResult.rows[0] as Record<string, unknown> | undefined;
-  const storedMonth = typeof row?.last_reset_month === "string" ? row.last_reset_month : null;
-  const effectiveMemories = storedMonth === thisMonth ? Number(row?.memories_this_month ?? 0) : 0;
+  const effectiveMemories = Number(row?.memories_total ?? 0);
   const effectiveStorage = Number(row?.storage_bytes ?? 0);
 
   if (effectiveStorage + sizeBytes > LIMITS.STORAGE_BYTES) {
@@ -417,7 +420,7 @@ export async function reserveMemoryQuotaInTransaction(
   }
 
   throw new MemryError("QUOTA_MEMORIES", {
-    limit: LIMITS.MEMORIES_PER_MONTH,
+    limit: LIMITS.MEMORIES_TOTAL,
     current: effectiveMemories,
   });
 }

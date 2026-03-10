@@ -23,6 +23,10 @@ export async function POST(request: Request) {
       userId: identity.userId,
       sharedLearningEnabled:
         typeof body.sharedLearningEnabled === "boolean" ? body.sharedLearningEnabled : undefined,
+      benchmarkInclusionEnabled:
+        typeof body.benchmarkInclusionEnabled === "boolean" ? body.benchmarkInclusionEnabled : undefined,
+      traceRetentionDays:
+        typeof body.traceRetentionDays === "number" ? body.traceRetentionDays : undefined,
     });
     await logCognitiveAuditEvent({
       request,
@@ -32,6 +36,8 @@ export async function POST(request: Request) {
       resourceId: identity.userId,
       metadata: {
         sharedLearningEnabled: settings.sharedLearningEnabled,
+        benchmarkInclusionEnabled: settings.benchmarkInclusionEnabled,
+        traceRetentionDays: settings.traceRetentionDays,
       },
     });
     return Response.json({ settings });

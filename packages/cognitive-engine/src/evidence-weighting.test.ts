@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildSharedSignature,
   classifyPatternLifecycle,
+  coarsenSharedErrorFamily,
+  coarsenSharedTechnologies,
   deriveSkillLifecycle,
+  extractSharedProblemClasses,
   extractPatternCandidate,
   scoreTraceEvidence,
   summarizeEntityImpact,
@@ -160,6 +164,70 @@ describe("extractPatternCandidate", () => {
     expect(candidate?.confidence).toBeLessThan(0.5);
     expect(candidate?.sourceTraceCount).toBe(2);
     expect(candidate?.pitfalls).toContain("Build failed because env vars were missing");
+  });
+
+  it("coarsens global trigger fields to avoid leaking rare identifiers", () => {
+    const cluster: ClusteredTraceGroup = {
+      key: "global:nextjs:auth",
+      scope: "global",
+      userId: null,
+      domain: "nextjs",
+      sharedSignature: null,
+      successRate: 0,
+      traces: [
+        makeTrace({
+          id: "global-1",
+          userId: "user-a",
+          problem: "AcmePayroll portal auth middleware blocks _next/static in production",
+          context: {
+            technologies: ["Next.js 15", "Clerk", "TypeScript"],
+            errorMessages: ["Unauthorized session token rejected in AcmePayroll middleware"],
+          },
+        }),
+        makeTrace({
+          id: "global-2",
+          userId: "user-b",
+          problem: "AcmePayroll session routing breaks because middleware protects static assets",
+          context: {
+            technologies: ["nextjs", "clerk", "ts"],
+            errorMessages: ["Forbidden auth session while fetching _next/static asset"],
+          },
+        }),
+      ],
+    };
+
+    const candidate = extractPatternCandidate(cluster);
+
+    expect(candidate).not.toBeNull();
+    expect(candidate?.trigger.keywords).toEqual(expect.arrayContaining(["auth", "middleware", "session"]));
+    expect(candidate?.trigger.keywords).not.toContain("acmepayroll");
+    expect(candidate?.trigger.technologies).toEqual(expect.arrayContaining(["auth", "nextjs", "typescript"]));
+    expect(candidate?.trigger.errorPatterns).toEqual(["auth"]);
+  });
+});
+
+describe("shared fingerprint coarsening", () => {
+  it("uses coarse shared classes instead of repo-specific identifiers", () => {
+    expect(extractSharedProblemClasses("AcmePayroll portal auth middleware blocks _next/static in production"))
+      .toEqual(expect.arrayContaining(["auth", "middleware"]));
+    expect(coarsenSharedTechnologies(["Next.js 15", "Clerk", "packages/acmepayroll-ui"]))
+      .toEqual(expect.arrayContaining(["auth", "nextjs"]));
+    expect(coarsenSharedErrorFamily("Unauthorized session token rejected in AcmePayroll middleware")).toBe("auth");
+
+    const left = buildSharedSignature({
+      type: "debugging",
+      problem: "AcmePayroll portal auth middleware blocks _next/static in production",
+      technologies: ["Next.js 15", "Clerk", "packages/acmepayroll-ui"],
+      errorMessages: ["Unauthorized session token rejected in AcmePayroll middleware"],
+    });
+    const right = buildSharedSignature({
+      type: "debugging",
+      problem: "Contoso portal auth middleware blocks static assets in production",
+      technologies: ["nextjs", "auth0"],
+      errorMessages: ["Unauthorized session token rejected during middleware auth"],
+    });
+
+    expect(left).toBe(right);
   });
 });
 

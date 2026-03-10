@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { Brain, CheckCircle2, Clock3, GitBranchPlus, ShieldAlert, Sparkles } from "lucide-react";
+import { Brain, CheckCircle2, Clock3, Download, GitBranchPlus, ShieldAlert, Sparkles, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,10 +15,12 @@ import {
   getSkills,
 } from "@/lib/cognitive-db";
 import {
+  deleteCognitiveDataAction,
   deprecatePatternAction,
   disablePublishAction,
   publishSkillAction,
   refreshSkillAction,
+  updatePrivacySettingsAction,
 } from "./actions";
 
 function formatDate(value: string | null | undefined): string {
@@ -47,11 +49,18 @@ function statusVariant(status: string): "default" | "secondary" | "outline" | "d
   return "default";
 }
 
-export default async function CognitiveDashboardPage() {
+export default async function CognitiveDashboardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { userId } = await auth();
   if (!userId) {
     redirect("/");
   }
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const notice = typeof resolvedSearchParams.notice === "string" ? resolvedSearchParams.notice : null;
+  const error = typeof resolvedSearchParams.error === "string" ? resolvedSearchParams.error : null;
 
   const [metrics, settings, traces, patterns, skills, applications, jobs, benchmarkRuns] = await Promise.all([
     getCognitiveMetrics(userId, 14),
@@ -78,6 +87,13 @@ export default async function CognitiveDashboardPage() {
         </p>
       </section>
 
+      {notice ? (
+        <div className="rounded-xl border border-emerald-800 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">{notice}</div>
+      ) : null}
+      {error ? (
+        <div className="rounded-xl border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-200">{error}</div>
+      ) : null}
+
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className="border-zinc-800 bg-zinc-900/60">
           <CardHeader>
@@ -103,6 +119,90 @@ export default async function CognitiveDashboardPage() {
             <CardTitle className="flex items-center gap-2 text-zinc-100"><CheckCircle2 className="h-4 w-4 text-cyan-300" />{settings.sharedLearningEnabled ? "Enabled" : "Disabled"}</CardTitle>
             <p className="text-xs text-zinc-500">{Math.round(metrics.sharedTraceOptInRate * 100)}% of recent traces were share-eligible.</p>
           </CardHeader>
+        </Card>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1.1fr_1fr]">
+        <Card className="border-zinc-800 bg-zinc-900/60">
+          <CardHeader>
+            <CardTitle>Privacy Controls</CardTitle>
+            <CardDescription>Control sharing, benchmark inclusion, and retention for your cognitive data.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form action={updatePrivacySettingsAction} className="space-y-4">
+              <label className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950/50 px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium text-zinc-100">Shared learning</p>
+                  <p className="text-xs text-zinc-500">Allow sanitized traces to contribute to shared global patterns.</p>
+                </div>
+                <input
+                  type="checkbox"
+                  name="sharedLearningEnabled"
+                  defaultChecked={settings.sharedLearningEnabled}
+                  className="h-4 w-4 accent-cyan-400"
+                />
+              </label>
+
+              <label className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950/50 px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium text-zinc-100">Benchmark inclusion</p>
+                  <p className="text-xs text-zinc-500">Allow your application history to be used in generated eval fixtures.</p>
+                </div>
+                <input
+                  type="checkbox"
+                  name="benchmarkInclusionEnabled"
+                  defaultChecked={settings.benchmarkInclusionEnabled}
+                  className="h-4 w-4 accent-cyan-400"
+                />
+              </label>
+
+              <label className="block rounded-xl border border-zinc-800 bg-zinc-950/50 px-4 py-3">
+                <p className="text-sm font-medium text-zinc-100">Trace retention</p>
+                <p className="mt-1 text-xs text-zinc-500">How long raw cognitive traces should be kept before retention cleanup removes them.</p>
+                <select
+                  name="traceRetentionDays"
+                  defaultValue={String(settings.traceRetentionDays)}
+                  className="mt-3 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
+                >
+                  <option value="30">30 days</option>
+                  <option value="60">60 days</option>
+                  <option value="90">90 days</option>
+                  <option value="180">180 days</option>
+                </select>
+              </label>
+
+              <Button type="submit" size="sm">Save Privacy Settings</Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card className="border-zinc-800 bg-zinc-900/60">
+          <CardHeader>
+            <CardTitle>Export or Delete Data</CardTitle>
+            <CardDescription>Use these controls for access and deletion requests on your cognitive data.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
+              <p className="text-sm font-medium text-zinc-100">Export cognitive data</p>
+              <p className="mt-1 text-xs text-zinc-500">Download your traces, applications, local patterns, skills, settings, and benchmark history as JSON.</p>
+              <Button asChild size="sm" className="mt-3">
+                <a href="/dashboard/cognitive/export">
+                  <Download className="h-4 w-4" />
+                  Export JSON
+                </a>
+              </Button>
+            </div>
+            <div className="rounded-xl border border-red-900 bg-red-950/30 p-4">
+              <p className="text-sm font-medium text-zinc-100">Delete cognitive data</p>
+              <p className="mt-1 text-xs text-zinc-400">This removes your cognitive traces, local patterns, local skills, benchmark runs, and settings. Shared-learning contributions are revoked first.</p>
+              <form action={deleteCognitiveDataAction} className="mt-3">
+                <Button type="submit" size="sm" variant="destructive">
+                  <Trash2 className="h-4 w-4" />
+                  Delete Cognitive Data
+                </Button>
+              </form>
+            </div>
+          </CardContent>
         </Card>
       </section>
 

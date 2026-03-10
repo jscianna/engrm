@@ -42,6 +42,9 @@ export type AuditAction =
   | "cognitive.pattern.feedback"
   | "cognitive.skill.synthesize"
   | "cognitive.skill.publish"
+  | "cognitive.export"
+  | "cognitive.delete"
+  | "cognitive.retention.cleanup"
   | "cognitive.eval.benchmark_run";
 
 export type AuditLogEntry = {

@@ -107,9 +107,9 @@ export async function GET(request: Request) {
         retention: "90 days when enabled",
       },
       gdpr: {
-        dataExport: "Planned",
+        dataExport: "Implemented for cognitive data",
         dataDeletion: "Implemented",
-        consent: "Via Clerk",
+        consent: "Shared learning and benchmark inclusion are opt-in user settings",
       },
       soc2: {
         status: "Not certified",

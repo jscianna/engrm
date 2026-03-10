@@ -2,7 +2,7 @@ import { validateApiKey } from "@/lib/api-auth";
 import { errorResponse } from "@/lib/errors";
 import { CURATED_COGNITIVE_BENCHMARKS } from "@/lib/cognitive-curated-benchmarks";
 import { evaluateBenchmark, evaluateBenchmarkGate } from "@/lib/cognitive-benchmark";
-import { generateRetrievalEvalDataset, getRecentBenchmarkRuns, recordBenchmarkRun } from "@/lib/cognitive-db";
+import { generateRetrievalEvalDataset, getCognitiveUserSettings, getRecentBenchmarkRuns, recordBenchmarkRun } from "@/lib/cognitive-db";
 import { logCognitiveAuditEvent } from "@/lib/cognitive-audit";
 import { assertBenchmarkRunsEnabled } from "@/lib/cognitive-guards";
 
@@ -26,6 +26,19 @@ export async function POST(request: Request) {
     assertBenchmarkRunsEnabled();
     const body = await request.json().catch(() => ({}));
     const dataset = body.dataset === "generated" ? "generated" : "curated";
+    const settings = await getCognitiveUserSettings(identity.userId);
+    if (dataset === "generated" && !settings.benchmarkInclusionEnabled) {
+      return Response.json({
+        dataset,
+        fixtureCount: 0,
+        result: {},
+        gate: {
+          passed: false,
+          reasons: ["benchmark_inclusion_disabled"],
+        },
+        skipped: true,
+      }, { status: 403 });
+    }
     const generated = dataset === "generated"
       ? await generateRetrievalEvalDataset({ userId: identity.userId, limit: 200, acceptedOnly: false })
       : null;

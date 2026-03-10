@@ -22,14 +22,14 @@ export async function GET() {
       usage: {
         apiCallsToday: stats.apiCallsToday,
         apiCallsThisMonth: stats.apiCallsThisMonth,
-        memoriesThisMonth: stats.memoriesThisMonth,
+        memoriesTotal: stats.memoriesTotal,
         storageBytes: stats.storageBytes,
         estimatedStorageCost: Math.round(estimatedStorageCost * 100) / 100,
       },
       limits: stats.limits,
       percentages: {
         apiCallsToday: Math.round((stats.apiCallsToday / stats.limits.requestsPerDay) * 100),
-        memoriesThisMonth: Math.round((stats.memoriesThisMonth / stats.limits.memoriesPerMonth) * 100),
+        memoriesTotal: Math.round((stats.memoriesTotal / stats.limits.memoriesTotal) * 100),
         storageBytes: Math.round((stats.storageBytes / stats.limits.storageBytes) * 100),
       },
     });

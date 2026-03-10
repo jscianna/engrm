@@ -1,6 +1,6 @@
 import { validateApiKey } from "@/lib/api-auth";
 import { errorResponse } from "@/lib/errors";
-import { generateRetrievalEvalDataset } from "@/lib/cognitive-db";
+import { generateRetrievalEvalDataset, getCognitiveUserSettings } from "@/lib/cognitive-db";
 import { CURATED_COGNITIVE_BENCHMARKS } from "@/lib/cognitive-curated-benchmarks";
 
 export const runtime = "nodejs";
@@ -31,6 +31,17 @@ export async function GET(request: Request) {
             skills: [],
           },
         })),
+      });
+    }
+
+    const settings = await getCognitiveUserSettings(identity.userId);
+    if (!settings.benchmarkInclusionEnabled) {
+      return Response.json({
+        fixtures: [],
+        predictions: [],
+        records: [],
+        skipped: true,
+        reason: "benchmark_inclusion_disabled",
       });
     }
 

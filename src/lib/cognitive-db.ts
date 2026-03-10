@@ -273,7 +273,58 @@ export interface RetrievalEvalDataset {
 export interface CognitiveUserSettings {
   userId: string;
   sharedLearningEnabled: boolean;
+  benchmarkInclusionEnabled: boolean;
+  traceRetentionDays: number;
   updatedAt: string;
+}
+
+export interface CognitivePrivacyExport {
+  exportedAt: string;
+  settings: CognitiveUserSettings;
+  traces: CodingTrace[];
+  applications: Array<{
+    application: CognitiveApplication;
+    matches: ApplicationMatch[];
+  }>;
+  patterns: Pattern[];
+  skills: SynthesizedSkill[];
+  benchmarkRuns: Array<{
+    id: string;
+    dataset: string;
+    fixtureCount: number;
+    result: Record<string, unknown>;
+    gate: Record<string, unknown> | null;
+    createdAt: string;
+  }>;
+}
+
+export interface CognitiveDataDeletionResult {
+  deletedAt: string;
+  tracesDeleted: number;
+  applicationsDeleted: number;
+  patternMatchesDeleted: number;
+  applicationMatchesDeleted: number;
+  localPatternsDeleted: number;
+  localSkillsDeleted: number;
+  benchmarkRunsDeleted: number;
+  settingsDeleted: number;
+  sharedLearningRevoked: boolean;
+  globalPatternsRefreshed: number;
+  globalSkillsRefreshed: number;
+}
+
+export interface CognitiveRetentionCleanupResult {
+  cleanedAt: string;
+  usersProcessed: number;
+  tracesDeleted: number;
+  applicationsDeleted: number;
+  patternMatchesDeleted: number;
+  applicationMatchesDeleted: number;
+  benchmarkRunsDeleted: number;
+  localPatternsDeleted: number;
+  localSkillsDeleted: number;
+  globalPatternsRefreshed: number;
+  globalSkillsRefreshed: number;
 }
 
 let initialized = false;
@@ -481,6 +532,8 @@ async function ensureInitialized(): Promise<void> {
     CREATE TABLE IF NOT EXISTS cognitive_user_settings (
       user_id TEXT PRIMARY KEY,
       shared_learning_enabled INTEGER NOT NULL DEFAULT 0,
+      benchmark_inclusion_enabled INTEGER NOT NULL DEFAULT 0,
+      trace_retention_days INTEGER NOT NULL DEFAULT 30,
       updated_at TEXT NOT NULL
     );
   `);
@@ -526,6 +579,13 @@ async function ensureInitialized(): Promise<void> {
   await client.execute(`ALTER TABLE cognitive_applications ADD COLUMN baseline_group_key TEXT`).catch(() => {});
   await client.execute(`ALTER TABLE cognitive_applications ADD COLUMN baseline_snapshot_json TEXT`).catch(() => {});
   await client.execute(`ALTER TABLE cognitive_user_settings ADD COLUMN shared_learning_enabled INTEGER DEFAULT 0`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_user_settings ADD COLUMN benchmark_inclusion_enabled INTEGER DEFAULT 0`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_user_settings ADD COLUMN trace_retention_days INTEGER DEFAULT 30`).catch(() => {});
+
+  // Shared/global learning derives cluster keys in memory from sanitized content.
+  // Persisted reusable signatures are cleared to reduce cross-session linkability.
+  await client.execute(`UPDATE coding_traces SET shared_signature = NULL WHERE shared_signature IS NOT NULL`).catch(() => {});
+  await client.execute(`UPDATE cognitive_patterns SET shared_signature = NULL WHERE scope = 'global' OR user_id IS NULL`).catch(() => {});
 
   initialized = true;
 }
@@ -534,6 +594,8 @@ function rowToCognitiveUserSettings(row: Record<string, unknown>): CognitiveUser
   return {
     userId: row.user_id as string,
     sharedLearningEnabled: Number(row.shared_learning_enabled ?? 0) === 1,
+    benchmarkInclusionEnabled: Number(row.benchmark_inclusion_enabled ?? 0) === 1,
+    traceRetentionDays: Math.max(1, Math.min(365, Number(row.trace_retention_days ?? 30))),
     updatedAt: (row.updated_at as string) ?? new Date(0).toISOString(),
   };
 }
@@ -741,15 +803,15 @@ export async function getCognitiveUserSettings(userId: string): Promise<Cognitiv
   const now = new Date().toISOString();
   await client.execute({
     sql: `
-      INSERT INTO cognitive_user_settings (user_id, shared_learning_enabled, updated_at)
-      VALUES (?, 0, ?)
+      INSERT INTO cognitive_user_settings (user_id, shared_learning_enabled, benchmark_inclusion_enabled, trace_retention_days, updated_at)
+      VALUES (?, 0, 0, 30, ?)
       ON CONFLICT(user_id) DO NOTHING
     `,
     args: [userId, now],
   });
   const result = await client.execute({
     sql: `
-      SELECT user_id, shared_learning_enabled, updated_at
+      SELECT user_id, shared_learning_enabled, benchmark_inclusion_enabled, trace_retention_days, updated_at
       FROM cognitive_user_settings
       WHERE user_id = ?
       LIMIT 1
@@ -759,6 +821,8 @@ export async function getCognitiveUserSettings(userId: string): Promise<Cognitiv
   return rowToCognitiveUserSettings((result.rows[0] as Record<string, unknown>) ?? {
     user_id: userId,
     shared_learning_enabled: 0,
+    benchmark_inclusion_enabled: 0,
+    trace_retention_days: 30,
     updated_at: now,
   });
 }
@@ -766,6 +830,8 @@ export async function getCognitiveUserSettings(userId: string): Promise<Cognitiv
 export async function updateCognitiveUserSettings(params: {
   userId: string;
   sharedLearningEnabled?: boolean;
+  benchmarkInclusionEnabled?: boolean;
+  traceRetentionDays?: number;
 }): Promise<CognitiveUserSettings> {
   await ensureInitialized();
   const client = getDb();
@@ -773,21 +839,549 @@ export async function updateCognitiveUserSettings(params: {
   const now = new Date().toISOString();
   const next = {
     sharedLearningEnabled: params.sharedLearningEnabled ?? existing.sharedLearningEnabled,
+    benchmarkInclusionEnabled: params.benchmarkInclusionEnabled ?? existing.benchmarkInclusionEnabled,
+    traceRetentionDays: Math.max(1, Math.min(365, params.traceRetentionDays ?? existing.traceRetentionDays)),
   };
   await client.execute({
     sql: `
-      INSERT INTO cognitive_user_settings (user_id, shared_learning_enabled, updated_at)
-      VALUES (?, ?, ?)
+      INSERT INTO cognitive_user_settings (user_id, shared_learning_enabled, benchmark_inclusion_enabled, trace_retention_days, updated_at)
+      VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
         shared_learning_enabled = excluded.shared_learning_enabled,
+        benchmark_inclusion_enabled = excluded.benchmark_inclusion_enabled,
+        trace_retention_days = excluded.trace_retention_days,
         updated_at = excluded.updated_at
     `,
-    args: [params.userId, next.sharedLearningEnabled ? 1 : 0, now],
+    args: [
+      params.userId,
+      next.sharedLearningEnabled ? 1 : 0,
+      next.benchmarkInclusionEnabled ? 1 : 0,
+      next.traceRetentionDays,
+      now,
+    ],
   });
+  if (existing.sharedLearningEnabled && !next.sharedLearningEnabled) {
+    await revokeSharedLearningForUser(params.userId);
+  }
+  if (existing.benchmarkInclusionEnabled && !next.benchmarkInclusionEnabled) {
+    await client.execute({
+      sql: `DELETE FROM cognitive_benchmark_runs WHERE user_id = ?`,
+      args: [params.userId],
+    });
+  }
   return {
     userId: params.userId,
     sharedLearningEnabled: next.sharedLearningEnabled,
+    benchmarkInclusionEnabled: next.benchmarkInclusionEnabled,
+    traceRetentionDays: next.traceRetentionDays,
     updatedAt: now,
+  };
+}
+
+async function getApplicationsWithMatches(userId: string, limit?: number): Promise<Array<{
+  application: CognitiveApplication;
+  matches: ApplicationMatch[];
+}>> {
+  await ensureInitialized();
+  const client = getDb();
+  const limitClause = typeof limit === "number" ? "LIMIT ?" : "";
+  const applicationArgs: Array<string | number> = [userId];
+  if (typeof limit === "number") {
+    applicationArgs.push(Math.max(1, Math.min(limit, 500)));
+  }
+  const applicationsResult = await client.execute({
+    sql: `
+      SELECT *
+      FROM cognitive_applications
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+      ${limitClause}
+    `,
+    args: applicationArgs,
+  });
+  const applications = applicationsResult.rows.map((row) => rowToApplication(row as Record<string, unknown>));
+  if (applications.length === 0) {
+    return [];
+  }
+
+  const matchesResult = await client.execute({
+    sql: `
+      SELECT *
+      FROM pattern_applications
+      WHERE application_id IN (${applications.map(() => "?").join(",")})
+      ORDER BY rank ASC, created_at DESC
+    `,
+    args: applications.map((application) => application.id),
+  });
+  const matches = matchesResult.rows.map((row) => rowToApplicationMatch(row as Record<string, unknown>));
+  return applications.map((application) => ({
+    application,
+    matches: matches.filter((match) => match.applicationId === application.id),
+  }));
+}
+
+async function getAllUserTraces(userId: string): Promise<CodingTrace[]> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT *
+      FROM coding_traces
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+    `,
+    args: [userId],
+  });
+  return result.rows.map((row) => rowToTrace(row as Record<string, unknown>));
+}
+
+async function getUserLocalPatterns(userId: string): Promise<Pattern[]> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT *
+      FROM cognitive_patterns
+      WHERE user_id = ?
+      ORDER BY updated_at DESC
+    `,
+    args: [userId],
+  });
+  return result.rows.map((row) => rowToPattern(row as Record<string, unknown>));
+}
+
+async function getUserLocalSkills(userId: string): Promise<SynthesizedSkill[]> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT *
+      FROM synthesized_skills
+      WHERE user_id = ?
+      ORDER BY updated_at DESC
+    `,
+    args: [userId],
+  });
+  return result.rows.map((row) => rowToSkill(row as Record<string, unknown>));
+}
+
+async function getUserBenchmarkRuns(userId: string): Promise<Array<{
+  id: string;
+  dataset: string;
+  fixtureCount: number;
+  result: Record<string, unknown>;
+  gate: Record<string, unknown> | null;
+  createdAt: string;
+}>> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT id, dataset, fixture_count, result_json, gate_json, created_at
+      FROM cognitive_benchmark_runs
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+    `,
+    args: [userId],
+  });
+  return result.rows.map((row) => ({
+    id: row.id as string,
+    dataset: row.dataset as string,
+    fixtureCount: Number(row.fixture_count ?? 0),
+    result: parseObject(row.result_json),
+    gate: row.gate_json ? parseObject(row.gate_json) : null,
+    createdAt: row.created_at as string,
+  }));
+}
+
+async function getSkillIdsForPatternIds(patternIds: string[]): Promise<string[]> {
+  const uniquePatternIds = Array.from(new Set(patternIds.filter(Boolean)));
+  if (uniquePatternIds.length === 0) {
+    return [];
+  }
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT id
+      FROM synthesized_skills
+      WHERE pattern_id IN (${uniquePatternIds.map(() => "?").join(",")})
+    `,
+    args: uniquePatternIds,
+  });
+  return result.rows
+    .map((row) => row.id)
+    .filter((value): value is string => typeof value === "string");
+}
+
+async function pruneOrphanedLocalArtifacts(userId: string): Promise<{
+  patternsDeleted: number;
+  skillsDeleted: number;
+}> {
+  const traces = await getAllUserTraces(userId);
+  const existingTraceIds = new Set(traces.map((trace) => trace.id));
+  const patterns = await getUserLocalPatterns(userId);
+  const orphanedPatternIds = patterns
+    .filter((pattern) => {
+      const sourceTraceIds = parseStringArray(pattern.sourceTraceIdsJson);
+      return sourceTraceIds.length === 0 || sourceTraceIds.every((traceId) => !existingTraceIds.has(traceId));
+    })
+    .map((pattern) => pattern.id);
+
+  if (orphanedPatternIds.length === 0) {
+    return { patternsDeleted: 0, skillsDeleted: 0 };
+  }
+
+  await ensureInitialized();
+  const client = getDb();
+  const skillDeleteResult = await client.execute({
+    sql: `
+      DELETE FROM synthesized_skills
+      WHERE user_id = ?
+        AND pattern_id IN (${orphanedPatternIds.map(() => "?").join(",")})
+    `,
+    args: [userId, ...orphanedPatternIds],
+  });
+  const patternDeleteResult = await client.execute({
+    sql: `
+      DELETE FROM cognitive_patterns
+      WHERE user_id = ?
+        AND id IN (${orphanedPatternIds.map(() => "?").join(",")})
+    `,
+    args: [userId, ...orphanedPatternIds],
+  });
+
+  return {
+    patternsDeleted: patternDeleteResult.rowsAffected ?? 0,
+    skillsDeleted: skillDeleteResult.rowsAffected ?? 0,
+  };
+}
+
+export async function revokeSharedLearningForUser(userId: string): Promise<{
+  tracesUpdated: number;
+  globalMatchesDeleted: number;
+  globalPatternsRefreshed: number;
+  globalSkillsRefreshed: number;
+}> {
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+  const traceResult = await client.execute({
+    sql: `
+      SELECT id
+      FROM coding_traces
+      WHERE user_id = ? AND share_eligible = 1
+    `,
+    args: [userId],
+  });
+  const traceIds = traceResult.rows
+    .map((row) => row.id)
+    .filter((value): value is string => typeof value === "string");
+
+  const updateResult = await client.execute({
+    sql: `
+      UPDATE coding_traces
+      SET share_eligible = 0,
+          shared_signature = NULL,
+          updated_at = ?
+      WHERE user_id = ? AND share_eligible = 1
+    `,
+    args: [now, userId],
+  });
+
+  if (traceIds.length === 0) {
+    return {
+      tracesUpdated: updateResult.rowsAffected ?? 0,
+      globalMatchesDeleted: 0,
+      globalPatternsRefreshed: 0,
+      globalSkillsRefreshed: 0,
+    };
+  }
+
+  const patternResult = await client.execute({
+    sql: `
+      SELECT DISTINCT m.pattern_id
+      FROM trace_pattern_matches m
+      JOIN cognitive_patterns p ON p.id = m.pattern_id
+      WHERE m.trace_id IN (${traceIds.map(() => "?").join(",")})
+        AND (p.scope = 'global' OR p.user_id IS NULL)
+    `,
+    args: traceIds,
+  });
+  const globalPatternIds = patternResult.rows
+    .map((row) => row.pattern_id)
+    .filter((value): value is string => typeof value === "string");
+
+  const deleteResult = await client.execute({
+    sql: `
+      DELETE FROM trace_pattern_matches
+      WHERE trace_id IN (${traceIds.map(() => "?").join(",")})
+        AND pattern_id IN (
+          SELECT id FROM cognitive_patterns WHERE scope = 'global' OR user_id IS NULL
+        )
+    `,
+    args: traceIds,
+  });
+
+  const globalSkillIds = await getSkillIdsForPatternIds(globalPatternIds);
+  await recomputePatternStats(globalPatternIds);
+  await recomputeSkillStats(globalSkillIds);
+
+  return {
+    tracesUpdated: updateResult.rowsAffected ?? 0,
+    globalMatchesDeleted: deleteResult.rowsAffected ?? 0,
+    globalPatternsRefreshed: globalPatternIds.length,
+    globalSkillsRefreshed: globalSkillIds.length,
+  };
+}
+
+export async function exportCognitiveUserData(userId: string): Promise<CognitivePrivacyExport> {
+  const [settings, traces, applications, patterns, skills, benchmarkRuns] = await Promise.all([
+    getCognitiveUserSettings(userId),
+    getAllUserTraces(userId),
+    getApplicationsWithMatches(userId),
+    getUserLocalPatterns(userId),
+    getUserLocalSkills(userId),
+    getUserBenchmarkRuns(userId),
+  ]);
+
+  return {
+    exportedAt: new Date().toISOString(),
+    settings,
+    traces,
+    applications,
+    patterns,
+    skills,
+    benchmarkRuns,
+  };
+}
+
+export async function deleteCognitiveUserData(userId: string): Promise<CognitiveDataDeletionResult> {
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+
+  const localPatternIds = (await client.execute({
+    sql: `SELECT id FROM cognitive_patterns WHERE user_id = ?`,
+    args: [userId],
+  })).rows
+    .map((row) => row.id)
+    .filter((value): value is string => typeof value === "string");
+
+  const localSkillIds = (await client.execute({
+    sql: `SELECT id FROM synthesized_skills WHERE user_id = ?`,
+    args: [userId],
+  })).rows
+    .map((row) => row.id)
+    .filter((value): value is string => typeof value === "string");
+
+  const sharedRevoke = await revokeSharedLearningForUser(userId);
+
+  const applicationMatchesDeleted = (await client.execute({
+    sql: `DELETE FROM pattern_applications WHERE user_id = ?`,
+    args: [userId],
+  })).rowsAffected ?? 0;
+
+  const applicationsDeleted = (await client.execute({
+    sql: `DELETE FROM cognitive_applications WHERE user_id = ?`,
+    args: [userId],
+  })).rowsAffected ?? 0;
+
+  const patternMatchesDeleted = (await client.execute({
+    sql: `
+      DELETE FROM trace_pattern_matches
+      WHERE trace_id IN (SELECT id FROM coding_traces WHERE user_id = ?)
+         OR pattern_id IN (SELECT id FROM cognitive_patterns WHERE user_id = ?)
+    `,
+    args: [userId, userId],
+  })).rowsAffected ?? 0;
+
+  const benchmarkRunsDeleted = (await client.execute({
+    sql: `DELETE FROM cognitive_benchmark_runs WHERE user_id = ?`,
+    args: [userId],
+  })).rowsAffected ?? 0;
+
+  const localSkillsDeleted = (await client.execute({
+    sql: `DELETE FROM synthesized_skills WHERE user_id = ?`,
+    args: [userId],
+  })).rowsAffected ?? 0;
+
+  const localPatternsDeleted = (await client.execute({
+    sql: `DELETE FROM cognitive_patterns WHERE user_id = ?`,
+    args: [userId],
+  })).rowsAffected ?? 0;
+
+  const tracesDeleted = (await client.execute({
+    sql: `DELETE FROM coding_traces WHERE user_id = ?`,
+    args: [userId],
+  })).rowsAffected ?? 0;
+
+  const settingsDeleted = (await client.execute({
+    sql: `DELETE FROM cognitive_user_settings WHERE user_id = ?`,
+    args: [userId],
+  })).rowsAffected ?? 0;
+
+  if (localPatternIds.length > 0 || localSkillIds.length > 0) {
+    await recomputePatternStats(localPatternIds);
+    await recomputeSkillStats(localSkillIds);
+  }
+
+  return {
+    deletedAt: now,
+    tracesDeleted,
+    applicationsDeleted,
+    patternMatchesDeleted,
+    applicationMatchesDeleted,
+    localPatternsDeleted,
+    localSkillsDeleted,
+    benchmarkRunsDeleted,
+    settingsDeleted,
+    sharedLearningRevoked: sharedRevoke.tracesUpdated > 0,
+    globalPatternsRefreshed: sharedRevoke.globalPatternsRefreshed,
+    globalSkillsRefreshed: sharedRevoke.globalSkillsRefreshed,
+  };
+}
+
+export async function cleanupExpiredCognitiveData(params?: {
+  userId?: string;
+  benchmarkRetentionDays?: number;
+}): Promise<CognitiveRetentionCleanupResult> {
+  await ensureInitialized();
+  const client = getDb();
+  const cleanedAt = new Date().toISOString();
+  const benchmarkRetentionDays = Math.max(1, Math.min(params?.benchmarkRetentionDays ?? 90, 3650));
+  const benchmarkCutoff = new Date(Date.now() - benchmarkRetentionDays * 24 * 60 * 60 * 1000).toISOString();
+
+  const userRows = await client.execute({
+    sql: params?.userId
+      ? `
+        SELECT DISTINCT ? as user_id
+      `
+      : `
+        SELECT DISTINCT user_id
+        FROM (
+          SELECT user_id FROM coding_traces
+          UNION
+          SELECT user_id FROM cognitive_applications
+          UNION
+          SELECT user_id FROM cognitive_benchmark_runs
+          UNION
+          SELECT user_id FROM cognitive_user_settings
+        )
+      `,
+    args: params?.userId ? [params.userId] : [],
+  });
+  const userIds = userRows.rows
+    .map((row) => row.user_id)
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  const touchedGlobalPatternIds = new Set<string>();
+  let tracesDeleted = 0;
+  let applicationsDeleted = 0;
+  let patternMatchesDeleted = 0;
+  let applicationMatchesDeleted = 0;
+  let benchmarkRunsDeleted = 0;
+  let localPatternsDeleted = 0;
+  let localSkillsDeleted = 0;
+
+  for (const userId of userIds) {
+    const settings = await getCognitiveUserSettings(userId);
+    const traceCutoff = new Date(Date.now() - settings.traceRetentionDays * 24 * 60 * 60 * 1000).toISOString();
+    const expiredTraceRows = await client.execute({
+      sql: `
+        SELECT id
+        FROM coding_traces
+        WHERE user_id = ? AND created_at < ?
+      `,
+      args: [userId, traceCutoff],
+    });
+    const expiredTraceIds = expiredTraceRows.rows
+      .map((row) => row.id)
+      .filter((value): value is string => typeof value === "string");
+
+    if (expiredTraceIds.length > 0) {
+      const globalPatternRows = await client.execute({
+        sql: `
+          SELECT DISTINCT m.pattern_id
+          FROM trace_pattern_matches m
+          JOIN cognitive_patterns p ON p.id = m.pattern_id
+          WHERE m.trace_id IN (${expiredTraceIds.map(() => "?").join(",")})
+            AND (p.scope = 'global' OR p.user_id IS NULL)
+        `,
+        args: expiredTraceIds,
+      });
+      for (const row of globalPatternRows.rows) {
+        if (typeof row.pattern_id === "string") {
+          touchedGlobalPatternIds.add(row.pattern_id);
+        }
+      }
+    }
+
+    applicationMatchesDeleted += (await client.execute({
+      sql: `
+        DELETE FROM pattern_applications
+        WHERE application_id IN (
+          SELECT id FROM cognitive_applications WHERE user_id = ? AND created_at < ?
+        )
+      `,
+      args: [userId, traceCutoff],
+    })).rowsAffected ?? 0;
+
+    applicationsDeleted += (await client.execute({
+      sql: `
+        DELETE FROM cognitive_applications
+        WHERE user_id = ? AND created_at < ?
+      `,
+      args: [userId, traceCutoff],
+    })).rowsAffected ?? 0;
+
+    patternMatchesDeleted += (await client.execute({
+      sql: `
+        DELETE FROM trace_pattern_matches
+        WHERE trace_id IN (
+          SELECT id FROM coding_traces WHERE user_id = ? AND created_at < ?
+        )
+      `,
+      args: [userId, traceCutoff],
+    })).rowsAffected ?? 0;
+
+    tracesDeleted += (await client.execute({
+      sql: `
+        DELETE FROM coding_traces
+        WHERE user_id = ? AND created_at < ?
+      `,
+      args: [userId, traceCutoff],
+    })).rowsAffected ?? 0;
+
+    benchmarkRunsDeleted += (await client.execute({
+      sql: `
+        DELETE FROM cognitive_benchmark_runs
+        WHERE user_id = ? AND created_at < ?
+      `,
+      args: [userId, benchmarkCutoff],
+    })).rowsAffected ?? 0;
+
+    const pruned = await pruneOrphanedLocalArtifacts(userId);
+    localPatternsDeleted += pruned.patternsDeleted;
+    localSkillsDeleted += pruned.skillsDeleted;
+  }
+
+  const globalSkillIds = await getSkillIdsForPatternIds([...touchedGlobalPatternIds]);
+  await recomputePatternStats([...touchedGlobalPatternIds]);
+  await recomputeSkillStats(globalSkillIds);
+
+  return {
+    cleanedAt,
+    usersProcessed: userIds.length,
+    tracesDeleted,
+    applicationsDeleted,
+    patternMatchesDeleted,
+    applicationMatchesDeleted,
+    benchmarkRunsDeleted,
+    localPatternsDeleted,
+    localSkillsDeleted,
+    globalPatternsRefreshed: touchedGlobalPatternIds.size,
+    globalSkillsRefreshed: globalSkillIds.length,
   };
 }
 
@@ -1105,16 +1699,7 @@ export async function createTrace(input: CreateTraceInput): Promise<CodingTrace>
     heuristicOutcome,
     automatedOutcome: input.automatedOutcome,
   });
-  const technologies = parseStringArray((normalizedContext as Record<string, unknown>).technologies);
-  const errorMessages = parseStringArray((normalizedContext as Record<string, unknown>).errorMessages);
-  const sharedSignature = shareEligible
-    ? buildSharedSignature({
-        type: input.type,
-        problem: input.problem,
-        technologies,
-        errorMessages,
-      })
-    : null;
+  const sharedSignature = null;
 
   const existing = await client.execute({
     sql: `SELECT * FROM coding_traces WHERE user_id = ? AND trace_hash = ? LIMIT 1`,
@@ -1421,6 +2006,7 @@ export async function createPattern(input: CreatePatternInput): Promise<Pattern>
   const now = new Date().toISOString();
   const scope = input.scope ?? (input.userId ? "local" : "global");
   const patternKey = input.patternKey ?? `${scope}:${input.userId ?? "global"}:${normalizeForFingerprint(input.domain)}:${crypto.randomUUID()}`;
+  const sharedSignature = scope === "global" ? null : (input.sharedSignature ?? null);
 
   await client.execute({
     sql: `
@@ -1436,7 +2022,7 @@ export async function createPattern(input: CreatePatternInput): Promise<Pattern>
       input.userId ?? null,
       scope,
       patternKey,
-      input.sharedSignature ?? null,
+      sharedSignature,
       input.domain,
       JSON.stringify(input.trigger),
       input.approach,
@@ -1979,7 +2565,7 @@ export async function runPatternExtraction(params: {
     const globalRows = await client.execute({
       sql: `
         SELECT * FROM coding_traces
-        WHERE share_eligible = 1 AND sanitized = 1 AND shared_signature IS NOT NULL
+        WHERE share_eligible = 1 AND sanitized = 1
         ORDER BY created_at DESC
         LIMIT 1000
       `,
@@ -2075,7 +2661,7 @@ async function upsertPatternCandidate(candidate: {
         UPDATE cognitive_patterns
         SET user_id = ?,
             scope = ?,
-            shared_signature = ?,
+            shared_signature = NULL,
             domain = ?,
             trigger_json = ?,
             approach = ?,
@@ -2093,7 +2679,6 @@ async function upsertPatternCandidate(candidate: {
       args: [
         candidate.userId,
         candidate.scope,
-        candidate.scope === "global" ? candidate.key.replace(/^global:/, "") : null,
         candidate.domain,
         JSON.stringify(candidate.trigger),
         candidate.approach,
@@ -2121,7 +2706,7 @@ async function upsertPatternCandidate(candidate: {
     userId: candidate.userId,
     scope: candidate.scope,
     patternKey: candidate.key,
-    sharedSignature: candidate.scope === "global" ? candidate.key.replace(/^global:/, "") : null,
+    sharedSignature: null,
     domain: candidate.domain,
     trigger: candidate.trigger,
     approach: candidate.approach,

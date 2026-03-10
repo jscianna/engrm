@@ -607,6 +607,8 @@ export const DEFAULT_AGENT_API_KEY_SCOPES = [
   "cognitive.patterns.list",
   "cognitive.patterns.match",
   "cognitive.patterns.skill-candidates",
+  "cognitive.privacy.delete",
+  "cognitive.privacy.export",
   "cognitive.settings.*",
   "cognitive.skills.get",
   "cognitive.skills.list",

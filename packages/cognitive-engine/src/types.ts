@@ -203,6 +203,42 @@ export interface VerificationResults {
   failedChecks?: string[];
 }
 
+export interface CognitiveUserSettings {
+  userId: string;
+  sharedLearningEnabled: boolean;
+  benchmarkInclusionEnabled: boolean;
+  traceRetentionDays: number;
+  updatedAt: string;
+}
+
+export interface CognitivePrivacyExport {
+  exportedAt: string;
+  settings: CognitiveUserSettings;
+  traces: CodingTrace[];
+  applications: Array<{
+    application: Record<string, unknown>;
+    matches: Array<Record<string, unknown>>;
+  }>;
+  patterns: Pattern[];
+  skills: SynthesizedSkill[];
+  benchmarkRuns: Array<Record<string, unknown>>;
+}
+
+export interface CognitiveDataDeletionResult {
+  deletedAt: string;
+  tracesDeleted: number;
+  applicationsDeleted: number;
+  patternMatchesDeleted: number;
+  applicationMatchesDeleted: number;
+  localPatternsDeleted: number;
+  localSkillsDeleted: number;
+  benchmarkRunsDeleted: number;
+  settingsDeleted: number;
+  sharedLearningRevoked: boolean;
+  globalPatternsRefreshed: number;
+  globalSkillsRefreshed: number;
+}
+
 export interface StoreTraceRequest {
   sessionId: string;
   type: TraceType;

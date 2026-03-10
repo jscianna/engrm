@@ -5,6 +5,9 @@
  */
 
 import type {
+  CognitiveDataDeletionResult,
+  CognitivePrivacyExport,
+  CognitiveUserSettings,
   CodingTrace,
   Pattern,
   RetrievalEvalDataset,
@@ -135,6 +138,30 @@ export class CognitiveClient {
 
   async getBenchmarkRuns(limit = 10): Promise<{ runs: Record<string, unknown>[] }> {
     return this.request<{ runs: Record<string, unknown>[] }>(`/cognitive/eval/benchmarks?limit=${limit}`);
+  }
+
+  async getPrivacySettings(): Promise<CognitiveUserSettings> {
+    const response = await this.request<{ settings: CognitiveUserSettings }>("/cognitive/settings");
+    return response.settings;
+  }
+
+  async updatePrivacySettings(input: Partial<Pick<CognitiveUserSettings, "sharedLearningEnabled" | "benchmarkInclusionEnabled" | "traceRetentionDays">>): Promise<CognitiveUserSettings> {
+    const response = await this.request<{ settings: CognitiveUserSettings }>("/cognitive/settings", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    return response.settings;
+  }
+
+  async exportCognitiveData(): Promise<CognitivePrivacyExport> {
+    return this.request<CognitivePrivacyExport>("/cognitive/privacy/export");
+  }
+
+  async deleteCognitiveData(): Promise<CognitiveDataDeletionResult> {
+    const response = await this.request<{ result: CognitiveDataDeletionResult }>("/cognitive/privacy", {
+      method: "DELETE",
+    });
+    return response.result;
   }
   
   /**
