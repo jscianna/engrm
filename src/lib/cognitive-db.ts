@@ -433,21 +433,33 @@ export async function updatePatternFeedback(
 ): Promise<void> {
   await ensureInitialized();
   const client = getDb();
+  const now = new Date().toISOString();
   
-  const column = outcome === 'success' ? 'success_count' : 'fail_count';
-  
-  await client.execute({
-    sql: `
-      UPDATE cognitive_patterns
-      SET ${column} = ${column} + 1,
-          confidence = CAST(success_count + (CASE WHEN ? = 'success' THEN 1 ELSE 0 END)) AS REAL / 
-                       CAST(success_count + fail_count + 1 AS REAL),
-          last_applied = ?,
-          updated_at = ?
-      WHERE id = ?
-    `,
-    args: [outcome, new Date().toISOString(), new Date().toISOString(), patternId],
-  });
+  if (outcome === 'success') {
+    await client.execute({
+      sql: `
+        UPDATE cognitive_patterns
+        SET success_count = success_count + 1,
+            confidence = CAST(success_count + 1 AS REAL) / CAST(success_count + fail_count + 1 AS REAL),
+            last_applied = ?,
+            updated_at = ?
+        WHERE id = ?
+      `,
+      args: [now, now, patternId],
+    });
+  } else {
+    await client.execute({
+      sql: `
+        UPDATE cognitive_patterns
+        SET fail_count = fail_count + 1,
+            confidence = CAST(success_count AS REAL) / CAST(success_count + fail_count + 1 AS REAL),
+            last_applied = ?,
+            updated_at = ?
+        WHERE id = ?
+      `,
+      args: [now, now, patternId],
+    });
+  }
 }
 
 export async function getSkillCandidates(userId: string): Promise<Pattern[]> {
