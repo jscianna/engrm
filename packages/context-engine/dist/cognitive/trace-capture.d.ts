@@ -20,6 +20,17 @@ export type StructuredTracePayload = {
     automatedSignals: Record<string, unknown>;
     errorMessage?: string;
     toolsUsed: string[];
+    toolCalls: Array<Record<string, unknown>>;
+    toolResults: Array<Record<string, unknown>>;
+    verificationCommands: string[];
+    retryCount: number;
+    repoSignals: {
+        filesModified: string[];
+        languages: string[];
+        diffSummary: string;
+        workspaceRoot?: string;
+    };
+    resolutionKind: "tests_passed" | "build_passed" | "lint_passed" | "manual_only" | "failed";
     filesModified: string[];
     durationMs: number;
     sanitized: true;
@@ -32,6 +43,7 @@ export declare function buildStructuredTrace(params: {
     messages: AgentMessage[];
     toolsUsed?: string[];
     filesModified?: string[];
+    workspaceRoot?: string;
     startTime: number;
     endTime: number;
 }): StructuredTracePayload | null;

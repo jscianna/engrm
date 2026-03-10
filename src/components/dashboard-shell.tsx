@@ -10,6 +10,7 @@ import { FeedbackWidget } from "@/components/feedback-widget";
 
 const links = [
   { href: "/dashboard", label: "Home", icon: Home },
+  { href: "/dashboard/cognitive", label: "Cognitive", icon: Brain },
   { href: "/dashboard/add", label: "Add", icon: Plus },
   { href: "/dashboard/search", label: "Search", icon: Search },
   { href: "/dashboard/browser", label: "Browser", icon: Layers },

@@ -14,7 +14,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "vitest"
+    "test": "vitest",
+    "eval": "node ./dist/eval/cli.js"
   },
   "keywords": ["ai", "agent", "memory", "cognitive", "learning", "openclaw"],
   "author": "FatHippo",

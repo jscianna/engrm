@@ -62,6 +62,7 @@ export class CognitiveClient {
             body: JSON.stringify(request),
         });
         return {
+            applicationId: response.applicationId,
             traces: response.traces || [],
             patterns: response.patterns || [],
             skills: response.skills || [],
@@ -73,6 +74,13 @@ export class CognitiveClient {
     async getRecentTraces(limit = 20) {
         const response = await this.request(`/cognitive/traces?limit=${limit}`);
         return response.traces || [];
+    }
+    async exportEvalFixtures(limit = 100, acceptedOnly = false) {
+        const params = new URLSearchParams({
+            limit: String(limit),
+            acceptedOnly: acceptedOnly ? "1" : "0",
+        });
+        return this.request(`/cognitive/eval/fixtures?${params.toString()}`);
     }
     /**
      * Get trace by ID
@@ -139,6 +147,15 @@ export class CognitiveClient {
     async getSkill(skillId) {
         try {
             const response = await this.request(`/cognitive/skills/${skillId}`);
+            return response.skill;
+        }
+        catch {
+            return null;
+        }
+    }
+    async publishSkill(skillId) {
+        try {
+            const response = await this.request(`/cognitive/skills/${skillId}/publish`, { method: 'POST' });
             return response.skill;
         }
         catch {

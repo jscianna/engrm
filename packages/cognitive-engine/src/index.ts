@@ -24,6 +24,7 @@ export { PatternExtractor } from './extraction/pattern-extractor.js';
 
 // API Client
 export { CognitiveClient } from './api/client.js';
+export { evaluateRetrievalFixtures } from './eval/harness.js';
 
 // Utilities
 export {

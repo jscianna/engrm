@@ -7,8 +7,8 @@
 import type {
   CodingTrace,
   Pattern,
+  RetrievalEvalDataset,
   SynthesizedSkill,
-  StoreTraceRequest,
   StoreTraceResponse,
   GetRelevantTracesRequest,
   GetRelevantTracesResponse,
@@ -90,6 +90,7 @@ export class CognitiveClient {
    */
   async getRelevantTraces(request: GetRelevantTracesRequest): Promise<GetRelevantTracesResponse> {
     const response = await this.request<{
+      applicationId?: string;
       traces: CodingTrace[];
       patterns: Pattern[];
       skills: SynthesizedSkill[];
@@ -99,6 +100,7 @@ export class CognitiveClient {
     });
     
     return {
+      applicationId: response.applicationId,
       traces: response.traces || [],
       patterns: response.patterns || [],
       skills: response.skills || [],
@@ -113,6 +115,14 @@ export class CognitiveClient {
       `/cognitive/traces?limit=${limit}`
     );
     return response.traces || [];
+  }
+
+  async exportEvalFixtures(limit = 100, acceptedOnly = false): Promise<RetrievalEvalDataset> {
+    const params = new URLSearchParams({
+      limit: String(limit),
+      acceptedOnly: acceptedOnly ? "1" : "0",
+    });
+    return this.request<RetrievalEvalDataset>(`/cognitive/eval/fixtures?${params.toString()}`);
   }
   
   /**
@@ -199,6 +209,18 @@ export class CognitiveClient {
     try {
       const response = await this.request<{ skill: SynthesizedSkill }>(
         `/cognitive/skills/${skillId}`
+      );
+      return response.skill;
+    } catch {
+      return null;
+    }
+  }
+
+  async publishSkill(skillId: string): Promise<SynthesizedSkill | null> {
+    try {
+      const response = await this.request<{ skill: SynthesizedSkill }>(
+        `/cognitive/skills/${skillId}/publish`,
+        { method: 'POST' },
       );
       return response.skill;
     } catch {

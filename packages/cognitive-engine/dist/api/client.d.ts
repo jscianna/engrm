@@ -3,7 +3,7 @@
  *
  * Handles communication with the FatHippo API for trace storage and retrieval.
  */
-import type { CodingTrace, Pattern, SynthesizedSkill, StoreTraceResponse, GetRelevantTracesRequest, GetRelevantTracesResponse, PatternFeedbackRequest, CognitiveEngineConfig } from '../types.js';
+import type { CodingTrace, Pattern, RetrievalEvalDataset, SynthesizedSkill, StoreTraceResponse, GetRelevantTracesRequest, GetRelevantTracesResponse, PatternFeedbackRequest, CognitiveEngineConfig } from '../types.js';
 export declare class CognitiveClient {
     private apiKey;
     private baseUrl;
@@ -21,6 +21,7 @@ export declare class CognitiveClient {
      * Get recent traces
      */
     getRecentTraces(limit?: number): Promise<CodingTrace[]>;
+    exportEvalFixtures(limit?: number, acceptedOnly?: boolean): Promise<RetrievalEvalDataset>;
     /**
      * Get trace by ID
      */
@@ -49,5 +50,6 @@ export declare class CognitiveClient {
      * Get a specific skill by ID
      */
     getSkill(skillId: string): Promise<SynthesizedSkill | null>;
+    publishSkill(skillId: string): Promise<SynthesizedSkill | null>;
 }
 //# sourceMappingURL=client.d.ts.map

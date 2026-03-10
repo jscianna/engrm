@@ -22,6 +22,7 @@ export class FatHippoContextEngine {
     cachedCritical = null;
     // Cognitive engine state
     sessionStartTimes = new Map();
+    sessionApplicationIds = new Map();
     cognitiveEnabled;
     static TRIVIAL_ACKS = new Set([
         "ok",
@@ -266,7 +267,7 @@ export class FatHippoContextEngine {
         let cognitiveContext = "";
         if (this.cognitiveEnabled && this.looksLikeCodingQuery(lastUserMessage)) {
             try {
-                const cognitive = await this.fetchCognitiveContext(lastUserMessage);
+                const cognitive = await this.fetchCognitiveContext(params.sessionId, lastUserMessage);
                 if (cognitive) {
                     cognitiveContext = cognitive;
                 }
@@ -275,7 +276,17 @@ export class FatHippoContextEngine {
                 console.error("[FatHippo] Cognitive context error:", error);
             }
         }
-        const fullContext = constraintsContext + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + cognitiveContext;
+        const fullContext = typeof params.tokenBudget === "number" && params.tokenBudget > 0
+            ? this.fitContextToBudget({
+                sections: [
+                    constraintsContext,
+                    memoryBlock ? `${memoryBlock}\n` : "",
+                    indexedContext,
+                    cognitiveContext,
+                ],
+                contextBudget: Math.max(0, params.tokenBudget - baseMessageTokens),
+            })
+            : constraintsContext + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + cognitiveContext;
         const tokens = estimateTokens(fullContext) + baseMessageTokens;
         return {
             messages: params.messages,
@@ -333,7 +344,7 @@ export class FatHippoContextEngine {
     /**
      * Fetch relevant traces and patterns from cognitive API
      */
-    async fetchCognitiveContext(problem) {
+    async fetchCognitiveContext(sessionId, problem) {
         const baseUrl = this.getApiBaseUrl();
         const response = await fetch(`${baseUrl}/v1/cognitive/traces/relevant`, {
             method: 'POST',
@@ -341,11 +352,14 @@ export class FatHippoContextEngine {
                 'Authorization': `Bearer ${this.config.apiKey}`,
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ problem, limit: 3 }),
+            body: JSON.stringify({ sessionId, endpoint: "context-engine.assemble", problem, limit: 3 }),
         });
         if (!response.ok)
             return null;
         const data = await response.json();
+        if (data.applicationId) {
+            this.sessionApplicationIds.set(sessionId, data.applicationId);
+        }
         const sections = [];
         const localPatterns = (data.patterns ?? []).filter((pattern) => pattern.scope !== "global");
         const globalPatterns = (data.patterns ?? []).filter((pattern) => pattern.scope === "global");
@@ -397,10 +411,12 @@ export class FatHippoContextEngine {
             messages: params.messages,
             toolsUsed: this.detectToolsUsed(params.messages),
             filesModified: this.detectFilesModified(params.sessionFile, params.messages),
+            workspaceRoot: this.detectWorkspaceRoot(params.sessionFile),
             startTime: this.sessionStartTimes.get(params.sessionId) ?? Date.now() - 60_000,
-            endTime: Date.now(),
+            endTime: Math.min(Date.now(), (this.sessionStartTimes.get(params.sessionId) ?? Date.now()) + 30 * 60 * 1000),
         });
         if (!payload) {
+            this.sessionStartTimes.set(params.sessionId, Date.now());
             return;
         }
         try {
@@ -413,6 +429,7 @@ export class FatHippoContextEngine {
                 },
                 body: JSON.stringify({
                     ...payload,
+                    applicationId: this.sessionApplicationIds.get(params.sessionId) ?? null,
                     shareEligible: this.config.shareEligibleByDefault !== false && payload.shareEligible,
                 }),
             });
@@ -420,9 +437,11 @@ export class FatHippoContextEngine {
                 throw new Error(`Trace capture failed with status ${response.status}`);
             }
             this.sessionStartTimes.delete(params.sessionId);
+            this.sessionApplicationIds.delete(params.sessionId);
         }
         catch (error) {
             console.error("[FatHippo] Trace capture error:", error);
+            this.sessionStartTimes.set(params.sessionId, Date.now());
         }
     }
     async runCognitiveHeartbeat() {
@@ -473,6 +492,17 @@ export class FatHippoContextEngine {
             }
         }
         return [...files].slice(0, 25);
+    }
+    detectWorkspaceRoot(sessionFile) {
+        if (!sessionFile) {
+            return undefined;
+        }
+        const normalized = sessionFile.replace(/\\/g, "/");
+        const segments = normalized.split("/").filter(Boolean);
+        if (segments.length <= 1) {
+            return normalized;
+        }
+        return `/${segments.slice(0, -1).join("/")}`;
     }
     getApiBaseUrl() {
         const baseUrl = this.config.baseUrl || "https://www.fathippo.com/api";
@@ -636,6 +666,48 @@ export class FatHippoContextEngine {
             memories: selectedMemories,
             syntheses: selectedSyntheses,
         };
+    }
+    fitContextToBudget(params) {
+        if (params.contextBudget <= 0) {
+            return "";
+        }
+        let remaining = params.contextBudget;
+        const selected = [];
+        for (const section of params.sections.map((value) => value.trim()).filter(Boolean)) {
+            const sectionTokens = estimateTokens(section);
+            if (sectionTokens <= remaining) {
+                selected.push(section);
+                remaining -= sectionTokens;
+                continue;
+            }
+            if (remaining <= 16) {
+                break;
+            }
+            const truncated = this.truncateContextSection(section, remaining);
+            if (truncated) {
+                selected.push(truncated);
+            }
+            break;
+        }
+        return selected.join("\n\n");
+    }
+    truncateContextSection(section, tokenBudget) {
+        let low = 0;
+        let high = section.length;
+        let best = "";
+        while (low <= high) {
+            const mid = Math.floor((low + high) / 2);
+            const candidate = `${section.slice(0, mid).trimEnd()}\n...`;
+            const tokens = estimateTokens(candidate);
+            if (tokens <= tokenBudget) {
+                best = candidate;
+                low = mid + 1;
+            }
+            else {
+                high = mid - 1;
+            }
+        }
+        return best;
     }
 }
 //# sourceMappingURL=engine.js.map

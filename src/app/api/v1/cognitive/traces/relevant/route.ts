@@ -6,7 +6,7 @@
 
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
-import { getMatchingPatterns, getRelevantSkills, getRelevantTraces } from "@/lib/cognitive-db";
+import { getMatchingPatterns, getRelevantSkills, getRelevantTraces, logCognitiveApplication } from "@/lib/cognitive-db";
 
 export const runtime = "nodejs";
 
@@ -21,6 +21,8 @@ export async function POST(request: Request) {
     
     const problem = typeof body.problem === "string" ? body.problem : "";
     const limit = Math.min(Number(body.limit) || 5, 20);
+    const sessionId = typeof body.sessionId === "string" ? body.sessionId : `session_${Date.now()}`;
+    const endpoint = typeof body.endpoint === "string" ? body.endpoint : "context-engine";
     
     if (!problem) {
       throw new MemryError("VALIDATION_ERROR", { field: "problem", reason: "required" });
@@ -44,8 +46,30 @@ export async function POST(request: Request) {
       technologies,
       limit: 3,
     });
+    const application = await logCognitiveApplication({
+      userId: identity.userId,
+      sessionId,
+      problem,
+      endpoint,
+      traces: traces.map((trace, index) => ({
+        id: trace.id,
+        scope: "local",
+        rank: index + 1,
+      })),
+      patterns: matchedPatterns.map((pattern, index) => ({
+        id: pattern.id,
+        scope: pattern.scope,
+        rank: index + 1,
+      })),
+      skills: skills.map((skill, index) => ({
+        id: skill.id,
+        scope: skill.scope,
+        rank: index + 1,
+      })),
+    });
     
     return Response.json({
+      applicationId: application.application.id,
       traces: traces.map(t => ({
         id: t.id,
         type: t.type,

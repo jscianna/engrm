@@ -64,7 +64,15 @@ export type PatternEvidenceSummary = {
   effectiveEvidence: number;
 };
 
-export type PatternLifecycleStatus = "active" | "candidate" | "deprecated";
+export type PatternLifecycleStatus =
+  | "candidate"
+  | "active_local"
+  | "active_global"
+  | "synthesized_local"
+  | "synthesized_global"
+  | "deprecated";
+
+export type SkillLifecycleStatus = "draft" | "active" | "stale" | "deprecated";
 
 type TraceEvidenceScore = {
   positive: number;
@@ -481,6 +489,7 @@ export function summarizePatternEvidence(traces: LearningTrace[]): PatternEviden
 export function classifyPatternStatus(params: {
   effectiveEvidence: number;
   confidence: number;
+  scope?: "local" | "global";
   activationEvidence?: number;
   activationConfidence?: number;
   deprecationConfidence?: number;
@@ -490,12 +499,29 @@ export function classifyPatternStatus(params: {
   const deprecationConfidence = params.deprecationConfidence ?? 0.4;
 
   if (params.effectiveEvidence >= activationEvidence && params.confidence >= activationConfidence) {
-    return "active";
+    return params.scope === "global" ? "active_global" : "active_local";
   }
   if (params.effectiveEvidence >= activationEvidence && params.confidence < deprecationConfidence) {
     return "deprecated";
   }
   return "candidate";
+}
+
+export function synthesizedPatternStatus(scope: "local" | "global"): PatternLifecycleStatus {
+  return scope === "global" ? "synthesized_global" : "synthesized_local";
+}
+
+export function isInjectablePatternStatus(status: string): boolean {
+  return (
+    status === "active_local" ||
+    status === "active_global" ||
+    status === "synthesized_local" ||
+    status === "synthesized_global"
+  );
+}
+
+export function isActivePatternStatus(status: string): boolean {
+  return status === "active_local" || status === "active_global";
 }
 
 export function isSkillSynthesisEligible(params: {
@@ -509,10 +535,34 @@ export function isSkillSynthesisEligible(params: {
   const minConfidence = params.minConfidence ?? 0.8;
   const minSuccesses = params.minSuccesses ?? 5;
   return (
-    (params.status === "active" || params.status === "synthesized") &&
+    (
+      params.status === "active_local" ||
+      params.status === "active_global" ||
+      params.status === "synthesized_local" ||
+      params.status === "synthesized_global"
+    ) &&
     params.confidence >= minConfidence &&
     params.successCount >= minSuccesses
   );
+}
+
+export function deriveSkillStatus(params: {
+  patternStatus: string;
+  confidence: number;
+  minConfidence?: number;
+}): SkillLifecycleStatus {
+  const minConfidence = params.minConfidence ?? 0.8;
+  if (params.patternStatus === "deprecated") {
+    return "stale";
+  }
+  if (!isInjectablePatternStatus(params.patternStatus) || params.confidence < minConfidence) {
+    return "draft";
+  }
+  return "active";
+}
+
+export function isInjectableSkillStatus(status: string): boolean {
+  return status === "active";
 }
 
 export function scoreTraceEvidence(trace: LearningTrace): TraceEvidenceScore {

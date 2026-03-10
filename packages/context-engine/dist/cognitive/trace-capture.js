@@ -53,6 +53,11 @@ export function buildStructuredTrace(params) {
         return null;
     }
     const shareText = [problem, reasoning, solution ?? "", ...(context.errorMessages ?? [])].join("\n");
+    const languages = inferLanguages(params.filesModified ?? []);
+    const verificationCommands = extractVerificationCommands(automatedSignals.toolResults);
+    const retryCount = estimateRetryCount(automatedSignals.toolCalls, automatedSignals.toolResults);
+    const resolutionKind = determineResolutionKind(automatedSignals);
+    const diffSummary = buildDiffSummary(params.filesModified ?? [], languages);
     return {
         sessionId: params.sessionId,
         type: detectProblemType(params.messages),
@@ -68,15 +73,106 @@ export function buildStructuredTrace(params) {
             ...automatedSignals,
             automatedOutcome: automatedOutcome ?? null,
             errorMessages: context.errorMessages ?? [],
+            verificationCommands,
+            retryCount,
+            resolutionKind,
         },
         errorMessage: context.errorMessages?.[0],
         toolsUsed: automatedSignals.toolsUsed,
+        toolCalls: automatedSignals.toolCalls,
+        toolResults: automatedSignals.toolResults,
+        verificationCommands,
+        retryCount,
+        repoSignals: {
+            filesModified: params.filesModified ?? [],
+            languages,
+            diffSummary,
+            workspaceRoot: params.workspaceRoot,
+        },
+        resolutionKind,
         filesModified: params.filesModified ?? [],
         durationMs,
         sanitized: true,
         sanitizedAt: new Date().toISOString(),
         shareEligible: isShareEligible(shareText),
     };
+}
+function inferLanguages(filesModified) {
+    const languages = new Set();
+    for (const file of filesModified) {
+        const extension = file.split(".").pop()?.toLowerCase();
+        if (extension === "ts" || extension === "tsx")
+            languages.add("typescript");
+        if (extension === "js" || extension === "jsx")
+            languages.add("javascript");
+        if (extension === "py")
+            languages.add("python");
+        if (extension === "go")
+            languages.add("go");
+        if (extension === "rs")
+            languages.add("rust");
+        if (extension === "java")
+            languages.add("java");
+        if (extension === "rb")
+            languages.add("ruby");
+        if (extension === "sql")
+            languages.add("sql");
+        if (extension === "md")
+            languages.add("markdown");
+        if (extension === "json")
+            languages.add("json");
+        if (extension === "yml" || extension === "yaml")
+            languages.add("yaml");
+        if (extension === "sh")
+            languages.add("shell");
+    }
+    return [...languages];
+}
+function buildDiffSummary(filesModified, languages) {
+    if (filesModified.length === 0) {
+        return "No file modifications detected";
+    }
+    const languageSummary = languages.length > 0 ? ` across ${languages.join(", ")}` : "";
+    return `${filesModified.length} files modified${languageSummary}`;
+}
+function extractVerificationCommands(toolResults) {
+    return toolResults
+        .filter((signal) => signal.success === true && (signal.category === "test" || signal.category === "build" || signal.category === "lint"))
+        .map((signal) => signal.command)
+        .filter((value) => Boolean(value))
+        .slice(0, 6);
+}
+function estimateRetryCount(toolCalls, toolResults) {
+    const commandCounts = new Map();
+    for (const signal of [...toolCalls, ...toolResults]) {
+        const key = signal.command ?? signal.toolName;
+        commandCounts.set(key, (commandCounts.get(key) ?? 0) + 1);
+    }
+    let retries = toolResults.filter((signal) => signal.success === false).length;
+    for (const count of commandCounts.values()) {
+        if (count > 1) {
+            retries += count - 1;
+        }
+    }
+    return retries;
+}
+function determineResolutionKind(automatedSignals) {
+    if (automatedSignals.testSignals.passed > 0) {
+        return "tests_passed";
+    }
+    if (automatedSignals.buildSignals.passed > 0) {
+        return "build_passed";
+    }
+    if (automatedSignals.lintSignals.passed > 0) {
+        return "lint_passed";
+    }
+    if (automatedSignals.commandsFailed > 0 ||
+        automatedSignals.testSignals.failed > 0 ||
+        automatedSignals.buildSignals.failed > 0 ||
+        automatedSignals.lintSignals.failed > 0) {
+        return "failed";
+    }
+    return "manual_only";
 }
 function detectProblemType(messages) {
     const text = messages.map(getMessageText).join(" ").toLowerCase();
@@ -195,6 +291,7 @@ function extractContext(messages, filesModified, automatedSignals) {
 }
 function extractAutomatedSignals(messages, fallbackToolsUsed) {
     const toolsUsed = new Set(fallbackToolsUsed.filter(Boolean));
+    const toolUseById = new Map();
     const toolCalls = [];
     const toolResults = [];
     const errorMessages = [];
@@ -216,7 +313,7 @@ function extractAutomatedSignals(messages, fallbackToolsUsed) {
         }
         if (isToolResultMessage(rawMessage)) {
             toolResultCount += 1;
-            const signal = extractToolSignalFromContainer(rawMessage, messageToolName ?? "unknown");
+            const signal = extractToolSignalFromContainer(rawMessage, messageToolName ?? "unknown", toolUseById);
             if (signal) {
                 toolResults.push(signal);
                 toolsUsed.add(signal.toolName);
@@ -253,8 +350,12 @@ function extractAutomatedSignals(messages, fallbackToolsUsed) {
             if (blockType === "tool_use") {
                 toolCallCount += 1;
                 const toolName = readString(rawBlock.name) ?? messageToolName ?? "unknown";
-                toolsUsed.add(toolName);
                 const command = extractCommandText(rawBlock);
+                const toolUseId = readString(rawBlock.id) ?? readString(rawBlock.tool_use_id) ?? readString(rawBlock.toolUseId);
+                if (toolUseId) {
+                    toolUseById.set(toolUseId, { toolName, command });
+                }
+                toolsUsed.add(toolName);
                 toolCalls.push({
                     toolName,
                     category: classifyToolSignal(toolName, command),
@@ -263,7 +364,7 @@ function extractAutomatedSignals(messages, fallbackToolsUsed) {
             }
             if (blockType === "tool_result") {
                 toolResultCount += 1;
-                const signal = extractToolSignalFromContainer(rawBlock, messageToolName ?? "unknown");
+                const signal = extractToolSignalFromContainer(rawBlock, messageToolName ?? "unknown", toolUseById);
                 if (signal) {
                     toolResults.push(signal);
                     toolsUsed.add(signal.toolName);
@@ -311,12 +412,14 @@ function extractAutomatedSignals(messages, fallbackToolsUsed) {
 function isToolResultMessage(raw) {
     return raw.role === "toolResult" || raw.type === "toolResult" || raw.role === "tool";
 }
-function extractToolSignalFromContainer(raw, fallbackToolName) {
+function extractToolSignalFromContainer(raw, fallbackToolName, toolUseById) {
+    const toolUseId = readString(raw.tool_use_id) ?? readString(raw.toolUseId);
+    const toolRef = toolUseId ? toolUseById.get(toolUseId) : undefined;
     const toolName = readString(raw.toolName) ??
         readString(raw.name) ??
-        readString(raw.tool_use_id ? raw.tool_use_id : undefined) ??
+        toolRef?.toolName ??
         fallbackToolName;
-    const command = extractCommandText(raw);
+    const command = extractCommandText(raw) ?? toolRef?.command;
     const outputText = readTextualPayload(raw.content) || readTextualPayload(raw.output) || readTextualPayload(raw.result);
     const stderrText = readTextualPayload(raw.stderr) || readTextualPayload(raw.error);
     const combinedText = [outputText, stderrText].filter(Boolean).join("\n").trim();

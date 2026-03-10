@@ -41,6 +41,17 @@ export interface CodingTrace {
   
   // Metadata
   toolsUsed: string[];
+  toolCalls?: Array<Record<string, unknown>>;
+  toolResults?: Array<Record<string, unknown>>;
+  verificationCommands?: string[];
+  retryCount?: number;
+  repoSignals?: {
+    filesModified: string[];
+    languages: string[];
+    diffSummary: string;
+    workspaceRoot?: string;
+  };
+  resolutionKind?: 'tests_passed' | 'build_passed' | 'lint_passed' | 'manual_only' | 'failed';
   filesModified: string[];
   durationMs: number;
   
@@ -102,7 +113,13 @@ export interface PatternTrigger {
   problemTypes?: TraceType[];   // Types of problems this applies to
 }
 
-export type PatternStatus = 'candidate' | 'active' | 'synthesized' | 'deprecated';
+export type PatternStatus =
+  | 'candidate'
+  | 'active_local'
+  | 'active_global'
+  | 'synthesized_local'
+  | 'synthesized_global'
+  | 'deprecated';
 
 // ============================================================================
 // SKILL TYPES - Synthesized from patterns
@@ -120,6 +137,7 @@ export interface SynthesizedSkill {
   // Provenance
   sourcePatternIds: string[];
   sourceTraceIds: string[];
+  sourceTraceCount?: number;
   generatedAt: string;
   generatedBy: 'auto' | 'manual';
   
@@ -148,7 +166,7 @@ export interface SkillContent {
   references?: string[];
 }
 
-export type SkillStatus = 'draft' | 'testing' | 'published' | 'deprecated' | 'removed';
+export type SkillStatus = 'draft' | 'active' | 'stale' | 'deprecated';
 
 // ============================================================================
 // API TYPES
@@ -181,9 +199,57 @@ export interface GetRelevantTracesRequest {
 }
 
 export interface GetRelevantTracesResponse {
+  applicationId?: string;
   traces: CodingTrace[];
   patterns: Pattern[];
   skills: SynthesizedSkill[];
+}
+
+export interface RetrievalEvalFixture {
+  applicationId?: string;
+  sessionId?: string;
+  endpoint?: string;
+  problem: string;
+  technologies?: string[];
+  expectedTraceIds: string[];
+  expectedPatternIds: string[];
+  expectedSkillIds: string[];
+  acceptedId?: string;
+}
+
+export interface RetrievalEvalPrediction {
+  applicationId?: string;
+  sessionId?: string;
+  traces: Array<{ id: string }>;
+  patterns: Array<{ id: string }>;
+  skills: Array<{ id: string }>;
+  finalOutcome?: TraceOutcome;
+  acceptedTraceId?: string;
+  acceptedPatternId?: string;
+  acceptedSkillId?: string;
+}
+
+export interface RetrievalEvalDatasetRecord {
+  applicationId: string;
+  sessionId: string;
+  endpoint: string;
+  labelSource: 'explicit' | 'weak';
+  fixture: RetrievalEvalFixture;
+  prediction: RetrievalEvalPrediction;
+}
+
+export interface RetrievalEvalDataset {
+  fixtures: RetrievalEvalFixture[];
+  predictions: RetrievalEvalPrediction[];
+  records: RetrievalEvalDatasetRecord[];
+}
+
+export interface RetrievalEvalResult {
+  traceMrr: number;
+  patternRecallAtK: number;
+  skillHitRate: number;
+  weakOutcomeLift: number;
+  cases: number;
 }
 
 export interface PatternFeedbackRequest {

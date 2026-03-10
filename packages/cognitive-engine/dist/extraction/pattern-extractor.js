@@ -150,7 +150,7 @@ export class PatternExtractor {
         const totalApplications = pattern.successCount + pattern.failCount;
         return (totalApplications >= minPatterns &&
             pattern.confidence >= minSuccessRate &&
-            pattern.status === 'active');
+            (pattern.status === 'active_local' || pattern.status === 'active_global'));
     }
     // ============================================================================
     // HELPER METHODS

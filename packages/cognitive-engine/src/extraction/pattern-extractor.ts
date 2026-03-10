@@ -51,7 +51,7 @@ export class PatternExtractor {
     // Convert to TraceCluster objects
     const result: TraceCluster[] = [];
     
-    for (const [key, clusterTraces] of clusters) {
+    for (const [, clusterTraces] of clusters) {
       // Only include clusters with minimum traces
       if (clusterTraces.length < (this.config.minTracesForPattern || 3)) {
         continue;
@@ -204,7 +204,7 @@ export class PatternExtractor {
     return (
       totalApplications >= minPatterns &&
       pattern.confidence >= minSuccessRate &&
-      pattern.status === 'active'
+      (pattern.status === 'active_local' || pattern.status === 'active_global')
     );
   }
   

@@ -35,6 +35,15 @@ async function updateOutcome(
         body.automatedSignals && typeof body.automatedSignals === "object" && !Array.isArray(body.automatedSignals)
           ? body.automatedSignals
           : null,
+      applicationId: typeof body.applicationId === "string" ? body.applicationId : null,
+      acceptedTraceId: typeof body.acceptedTraceId === "string" ? body.acceptedTraceId : null,
+      acceptedPatternId: typeof body.acceptedPatternId === "string" ? body.acceptedPatternId : null,
+      acceptedSkillId: typeof body.acceptedSkillId === "string" ? body.acceptedSkillId : null,
+      timeToResolutionMs: typeof body.timeToResolutionMs === "number" ? body.timeToResolutionMs : null,
+      verificationSummary:
+        body.verificationSummary && typeof body.verificationSummary === "object" && !Array.isArray(body.verificationSummary)
+          ? body.verificationSummary
+          : null,
     });
 
     if (!trace) {
@@ -49,6 +58,10 @@ async function updateOutcome(
         outcomeConfidence: trace.outcomeConfidence,
         updatedAt: trace.updatedAt,
       },
+      applicationId: typeof body.applicationId === "string" ? body.applicationId : null,
+      acceptedTraceId: typeof body.acceptedTraceId === "string" ? body.acceptedTraceId : null,
+      acceptedPatternId: typeof body.acceptedPatternId === "string" ? body.acceptedPatternId : null,
+      acceptedSkillId: typeof body.acceptedSkillId === "string" ? body.acceptedSkillId : null,
     });
   } catch (error) {
     return errorResponse(error);

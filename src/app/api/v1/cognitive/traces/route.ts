@@ -7,7 +7,7 @@
 
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
-import { createTrace, getMatchingPatterns, getRecentTraces, syncTracePatternMatches } from "@/lib/cognitive-db";
+import { createTrace, getMatchingPatterns, getRecentTraces, syncTracePatternMatches, updateApplicationOutcome } from "@/lib/cognitive-db";
 
 export const runtime = "nodejs";
 
@@ -36,20 +36,38 @@ export async function POST(request: Request) {
     if (!body.sanitized) {
       throw new MemryError("VALIDATION_ERROR", { field: "sanitized", reason: "trace must be sanitized before storage" });
     }
+    const normalizedContext = {
+      ...(body.context && typeof body.context === "object" && !Array.isArray(body.context) ? body.context : {}),
+      repoSignals:
+        body.repoSignals && typeof body.repoSignals === "object" && !Array.isArray(body.repoSignals)
+          ? body.repoSignals
+          : undefined,
+      resolutionKind: typeof body.resolutionKind === "string" ? body.resolutionKind : undefined,
+    };
+    const normalizedAutomatedSignals = {
+      ...(body.automatedSignals && typeof body.automatedSignals === "object" && !Array.isArray(body.automatedSignals)
+        ? body.automatedSignals
+        : {}),
+      toolCalls: Array.isArray(body.toolCalls) ? body.toolCalls : undefined,
+      toolResults: Array.isArray(body.toolResults) ? body.toolResults : undefined,
+      verificationCommands: Array.isArray(body.verificationCommands) ? body.verificationCommands : undefined,
+      retryCount: typeof body.retryCount === "number" ? body.retryCount : undefined,
+      resolutionKind: typeof body.resolutionKind === "string" ? body.resolutionKind : undefined,
+    };
     
     const trace = await createTrace({
       userId: identity.userId,
       sessionId: body.sessionId,
       type: body.type,
       problem: body.problem,
-      context: body.context || {},
+      context: normalizedContext,
       reasoning: body.reasoning || "",
       approaches: body.approaches || [],
       solution: body.solution,
       outcome: body.outcome,
       heuristicOutcome: body.heuristicOutcome,
       automatedOutcome: body.automatedOutcome,
-      automatedSignals: body.automatedSignals,
+      automatedSignals: normalizedAutomatedSignals,
       errorMessage: body.errorMessage,
       toolsUsed: body.toolsUsed || [],
       filesModified: body.filesModified || [],
@@ -58,10 +76,11 @@ export async function POST(request: Request) {
       sanitizedAt: body.sanitizedAt,
       shareEligible: body.shareEligible,
       explicitFeedbackNotes: body.notes,
+      applicationId: typeof body.applicationId === "string" ? body.applicationId : null,
     });
     
-    const technologies = Array.isArray(body.context?.technologies)
-      ? body.context.technologies.filter((value: unknown): value is string => typeof value === "string")
+    const technologies = Array.isArray(normalizedContext.technologies)
+      ? normalizedContext.technologies.filter((value: unknown): value is string => typeof value === "string")
       : [];
     const matchedPatterns = await getMatchingPatterns({
       userId: identity.userId,
@@ -75,6 +94,20 @@ export async function POST(request: Request) {
       patterns: matchedPatterns.map((pattern) => ({ id: pattern.id, score: pattern.score })),
       matchSource: "trace_capture",
     });
+    if (typeof body.applicationId === "string") {
+      await updateApplicationOutcome({
+        userId: identity.userId,
+        applicationId: body.applicationId,
+        traceId: trace.id,
+        finalOutcome: trace.outcome,
+        acceptedTraceId: typeof body.acceptedTraceId === "string" ? body.acceptedTraceId : null,
+        timeToResolutionMs: typeof body.durationMs === "number" ? body.durationMs : null,
+        verificationSummary:
+          body.verificationSummary && typeof body.verificationSummary === "object" && !Array.isArray(body.verificationSummary)
+            ? body.verificationSummary
+            : null,
+      });
+    }
     
     return Response.json({
       trace: {
@@ -86,8 +119,11 @@ export async function POST(request: Request) {
         outcomeSource: trace.outcomeSource,
         outcomeConfidence: trace.outcomeConfidence,
         shareEligible: trace.shareEligible,
+        context: JSON.parse(trace.contextJson),
+        automatedSignals: JSON.parse(trace.automatedSignalsJson),
         createdAt: trace.createdAt,
       },
+      applicationId: typeof body.applicationId === "string" ? body.applicationId : null,
       matchedPatterns: matchedPatterns.map(p => ({
         id: p.id,
         domain: p.domain,
@@ -127,6 +163,8 @@ export async function GET(request: Request) {
         outcomeConfidence: t.outcomeConfidence,
         shareEligible: t.shareEligible,
         durationMs: t.durationMs,
+        context: JSON.parse(t.contextJson),
+        automatedSignals: JSON.parse(t.automatedSignalsJson),
         createdAt: t.createdAt,
       })),
       count: traces.length,

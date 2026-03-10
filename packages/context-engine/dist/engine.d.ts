@@ -15,6 +15,7 @@ export declare class FatHippoContextEngine implements ContextEngine {
     private config;
     private cachedCritical;
     private sessionStartTimes;
+    private sessionApplicationIds;
     private cognitiveEnabled;
     private static readonly TRIVIAL_ACKS;
     private static readonly MIN_VECTOR_SIMILARITY;
@@ -84,6 +85,7 @@ export declare class FatHippoContextEngine implements ContextEngine {
     private captureStructuredTrace;
     private runCognitiveHeartbeat;
     private detectFilesModified;
+    private detectWorkspaceRoot;
     private getApiBaseUrl;
     /**
      * Handle compaction via Dream Cycle
@@ -123,5 +125,7 @@ export declare class FatHippoContextEngine implements ContextEngine {
     private isRoleMessage;
     private estimateMessageTokens;
     private constrainContextToBudget;
+    private fitContextToBudget;
+    private truncateContextSection;
 }
 //# sourceMappingURL=engine.d.ts.map

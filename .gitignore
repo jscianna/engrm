@@ -81,6 +81,21 @@ FRONTEND_AUDIT.md
 moa-heuristics-synthesis.md
 packages/context-engine/node_modules
 packages/mcp-server/node_modules
+packages/cognitive-engine/node_modules/.vite/
+
+# Local package build/test noise
+packages/cognitive-engine/dist/**/*.test.d.ts
+packages/cognitive-engine/dist/**/*.test.d.ts.map
+packages/cognitive-engine/dist/**/*.test.js
+packages/cognitive-engine/dist/**/*.test.js.map
+packages/cognitive-engine/dist/**/*.spec.d.ts
+packages/cognitive-engine/dist/**/*.spec.d.ts.map
+packages/cognitive-engine/dist/**/*.spec.js
+packages/cognitive-engine/dist/**/*.spec.js.map
+packages/context-engine/src/cognitive/*.d.ts
+packages/context-engine/src/cognitive/*.d.ts.map
+packages/context-engine/src/cognitive/*.js
+packages/context-engine/src/cognitive/*.js.map
 
 # Internal review docs
 CONTEXT_REVIEW.md

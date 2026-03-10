@@ -59,6 +59,13 @@ interface CognitiveSkill {
   successRate: number;
 }
 
+interface CognitiveContextResponse {
+  applicationId?: string;
+  traces: CognitiveTrace[];
+  patterns: CognitivePattern[];
+  skills?: CognitiveSkill[];
+}
+
 /**
  * FatHippo Context Engine implementation
  */
@@ -80,6 +87,7 @@ export class FatHippoContextEngine implements ContextEngine {
   
   // Cognitive engine state
   private sessionStartTimes: Map<string, number> = new Map();
+  private sessionApplicationIds: Map<string, string> = new Map();
   private cognitiveEnabled: boolean;
   
   private static readonly TRIVIAL_ACKS = new Set([
@@ -385,7 +393,7 @@ export class FatHippoContextEngine implements ContextEngine {
     let cognitiveContext = "";
     if (this.cognitiveEnabled && this.looksLikeCodingQuery(lastUserMessage)) {
       try {
-        const cognitive = await this.fetchCognitiveContext(lastUserMessage);
+        const cognitive = await this.fetchCognitiveContext(params.sessionId, lastUserMessage);
         if (cognitive) {
           cognitiveContext = cognitive;
         }
@@ -469,7 +477,7 @@ export class FatHippoContextEngine implements ContextEngine {
   /**
    * Fetch relevant traces and patterns from cognitive API
    */
-  private async fetchCognitiveContext(problem: string): Promise<string | null> {
+  private async fetchCognitiveContext(sessionId: string, problem: string): Promise<string | null> {
     const baseUrl = this.getApiBaseUrl();
     
     const response = await fetch(`${baseUrl}/v1/cognitive/traces/relevant`, {
@@ -478,16 +486,15 @@ export class FatHippoContextEngine implements ContextEngine {
         'Authorization': `Bearer ${this.config.apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ problem, limit: 3 }),
+      body: JSON.stringify({ sessionId, endpoint: "context-engine.assemble", problem, limit: 3 }),
     });
     
     if (!response.ok) return null;
     
-    const data = await response.json() as {
-      traces: CognitiveTrace[];
-      patterns: CognitivePattern[];
-      skills?: CognitiveSkill[];
-    };
+    const data = await response.json() as CognitiveContextResponse;
+    if (data.applicationId) {
+      this.sessionApplicationIds.set(sessionId, data.applicationId);
+    }
     
     const sections: string[] = [];
 
@@ -553,6 +560,7 @@ export class FatHippoContextEngine implements ContextEngine {
       messages: params.messages,
       toolsUsed: this.detectToolsUsed(params.messages),
       filesModified: this.detectFilesModified(params.sessionFile, params.messages),
+      workspaceRoot: this.detectWorkspaceRoot(params.sessionFile),
       startTime: this.sessionStartTimes.get(params.sessionId) ?? Date.now() - 60_000,
       endTime: Math.min(Date.now(), (this.sessionStartTimes.get(params.sessionId) ?? Date.now()) + 30 * 60 * 1000),
     });
@@ -572,6 +580,7 @@ export class FatHippoContextEngine implements ContextEngine {
         },
         body: JSON.stringify({
           ...payload,
+          applicationId: this.sessionApplicationIds.get(params.sessionId) ?? null,
           shareEligible: this.config.shareEligibleByDefault !== false && payload.shareEligible,
         }),
       });
@@ -579,6 +588,7 @@ export class FatHippoContextEngine implements ContextEngine {
         throw new Error(`Trace capture failed with status ${response.status}`);
       }
       this.sessionStartTimes.delete(params.sessionId);
+      this.sessionApplicationIds.delete(params.sessionId);
     } catch (error) {
       console.error("[FatHippo] Trace capture error:", error);
       this.sessionStartTimes.set(params.sessionId, Date.now());
@@ -636,6 +646,18 @@ export class FatHippoContextEngine implements ContextEngine {
     }
 
     return [...files].slice(0, 25);
+  }
+
+  private detectWorkspaceRoot(sessionFile: string): string | undefined {
+    if (!sessionFile) {
+      return undefined;
+    }
+    const normalized = sessionFile.replace(/\\/g, "/");
+    const segments = normalized.split("/").filter(Boolean);
+    if (segments.length <= 1) {
+      return normalized;
+    }
+    return `/${segments.slice(0, -1).join("/")}`;
   }
 
   private getApiBaseUrl(): string {

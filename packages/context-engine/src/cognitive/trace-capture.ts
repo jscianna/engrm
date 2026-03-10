@@ -18,6 +18,17 @@ export type StructuredTracePayload = {
   automatedSignals: Record<string, unknown>;
   errorMessage?: string;
   toolsUsed: string[];
+  toolCalls: Array<Record<string, unknown>>;
+  toolResults: Array<Record<string, unknown>>;
+  verificationCommands: string[];
+  retryCount: number;
+  repoSignals: {
+    filesModified: string[];
+    languages: string[];
+    diffSummary: string;
+    workspaceRoot?: string;
+  };
+  resolutionKind: "tests_passed" | "build_passed" | "lint_passed" | "manual_only" | "failed";
   filesModified: string[];
   durationMs: number;
   sanitized: true;
@@ -101,6 +112,7 @@ export function buildStructuredTrace(params: {
   messages: AgentMessage[];
   toolsUsed?: string[];
   filesModified?: string[];
+  workspaceRoot?: string;
   startTime: number;
   endTime: number;
 }): StructuredTracePayload | null {
@@ -130,6 +142,11 @@ export function buildStructuredTrace(params: {
   }
 
   const shareText = [problem, reasoning, solution ?? "", ...(context.errorMessages ?? [])].join("\n");
+  const languages = inferLanguages(params.filesModified ?? []);
+  const verificationCommands = extractVerificationCommands(automatedSignals.toolResults);
+  const retryCount = estimateRetryCount(automatedSignals.toolCalls, automatedSignals.toolResults);
+  const resolutionKind = determineResolutionKind(automatedSignals);
+  const diffSummary = buildDiffSummary(params.filesModified ?? [], languages);
   return {
     sessionId: params.sessionId,
     type: detectProblemType(params.messages),
@@ -145,15 +162,103 @@ export function buildStructuredTrace(params: {
       ...automatedSignals,
       automatedOutcome: automatedOutcome ?? null,
       errorMessages: context.errorMessages ?? [],
+      verificationCommands,
+      retryCount,
+      resolutionKind,
     },
     errorMessage: context.errorMessages?.[0],
     toolsUsed: automatedSignals.toolsUsed,
+    toolCalls: automatedSignals.toolCalls,
+    toolResults: automatedSignals.toolResults,
+    verificationCommands,
+    retryCount,
+    repoSignals: {
+      filesModified: params.filesModified ?? [],
+      languages,
+      diffSummary,
+      workspaceRoot: params.workspaceRoot,
+    },
+    resolutionKind,
     filesModified: params.filesModified ?? [],
     durationMs,
     sanitized: true,
     sanitizedAt: new Date().toISOString(),
     shareEligible: isShareEligible(shareText),
   };
+}
+
+function inferLanguages(filesModified: string[]): string[] {
+  const languages = new Set<string>();
+  for (const file of filesModified) {
+    const extension = file.split(".").pop()?.toLowerCase();
+    if (extension === "ts" || extension === "tsx") languages.add("typescript");
+    if (extension === "js" || extension === "jsx") languages.add("javascript");
+    if (extension === "py") languages.add("python");
+    if (extension === "go") languages.add("go");
+    if (extension === "rs") languages.add("rust");
+    if (extension === "java") languages.add("java");
+    if (extension === "rb") languages.add("ruby");
+    if (extension === "sql") languages.add("sql");
+    if (extension === "md") languages.add("markdown");
+    if (extension === "json") languages.add("json");
+    if (extension === "yml" || extension === "yaml") languages.add("yaml");
+    if (extension === "sh") languages.add("shell");
+  }
+  return [...languages];
+}
+
+function buildDiffSummary(filesModified: string[], languages: string[]): string {
+  if (filesModified.length === 0) {
+    return "No file modifications detected";
+  }
+  const languageSummary = languages.length > 0 ? ` across ${languages.join(", ")}` : "";
+  return `${filesModified.length} files modified${languageSummary}`;
+}
+
+function extractVerificationCommands(toolResults: ToolSignal[]): string[] {
+  return toolResults
+    .filter((signal) => signal.success === true && (signal.category === "test" || signal.category === "build" || signal.category === "lint"))
+    .map((signal) => signal.command)
+    .filter((value): value is string => Boolean(value))
+    .slice(0, 6);
+}
+
+function estimateRetryCount(toolCalls: ToolSignal[], toolResults: ToolSignal[]): number {
+  const commandCounts = new Map<string, number>();
+  for (const signal of [...toolCalls, ...toolResults]) {
+    const key = signal.command ?? signal.toolName;
+    commandCounts.set(key, (commandCounts.get(key) ?? 0) + 1);
+  }
+  let retries = toolResults.filter((signal) => signal.success === false).length;
+  for (const count of commandCounts.values()) {
+    if (count > 1) {
+      retries += count - 1;
+    }
+  }
+  return retries;
+}
+
+function determineResolutionKind(
+  automatedSignals: AutomatedSignalSummary,
+): "tests_passed" | "build_passed" | "lint_passed" | "manual_only" | "failed" {
+  if (automatedSignals.testSignals.passed > 0) {
+    return "tests_passed";
+  }
+  if (automatedSignals.buildSignals.passed > 0) {
+    return "build_passed";
+  }
+  if (automatedSignals.lintSignals.passed > 0) {
+    return "lint_passed";
+  }
+  if (
+    automatedSignals.commandsFailed > 0 ||
+    automatedSignals.testSignals.failed > 0 ||
+    automatedSignals.buildSignals.failed > 0 ||
+    automatedSignals.lintSignals.failed > 0
+  ) {
+    return "failed";
+  }
+  return "manual_only";
 }
 
 function detectProblemType(messages: AgentMessage[]): string {

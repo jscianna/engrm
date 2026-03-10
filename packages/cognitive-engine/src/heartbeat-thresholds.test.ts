@@ -44,13 +44,14 @@ describe("heartbeat promotion thresholds", () => {
     const status = classifyPatternStatus({
       effectiveEvidence: summary.effectiveEvidence,
       confidence: summary.confidence,
+      scope: "local",
       activationEvidence: 3,
       activationConfidence: 0.7,
     });
 
     expect(summary.effectiveEvidence).toBeGreaterThanOrEqual(3);
     expect(summary.confidence).toBeGreaterThanOrEqual(0.7);
-    expect(status).toBe("active");
+    expect(status).toBe("active_local");
   });
 
   it("deprecates patterns when the same evidence volume is strongly negative", () => {
@@ -91,6 +92,7 @@ describe("heartbeat promotion thresholds", () => {
     const status = classifyPatternStatus({
       effectiveEvidence: summary.effectiveEvidence,
       confidence: summary.confidence,
+      scope: "global",
     });
 
     expect(summary.effectiveEvidence).toBeGreaterThanOrEqual(2.5);
@@ -108,6 +110,7 @@ describe("heartbeat promotion thresholds", () => {
     const status = classifyPatternStatus({
       effectiveEvidence: summary.effectiveEvidence,
       confidence: summary.confidence,
+      scope: "local",
       activationEvidence: 3,
       activationConfidence: 0.7,
     });
@@ -127,11 +130,20 @@ describe("heartbeat skill synthesis thresholds", () => {
         successCount: 5,
         failCount: 1,
       }),
+    ).toBe(false);
+
+    expect(
+      isSkillSynthesisEligible({
+        status: "active_local",
+        confidence: 0.84,
+        successCount: 5,
+        failCount: 1,
+      }),
     ).toBe(true);
 
     expect(
       isSkillSynthesisEligible({
-        status: "synthesized",
+        status: "synthesized_global",
         confidence: 0.84,
         successCount: 5,
         failCount: 2,
@@ -142,7 +154,7 @@ describe("heartbeat skill synthesis thresholds", () => {
   it("does not allow four successes plus one failure to synthesize a skill", () => {
     expect(
       isSkillSynthesisEligible({
-        status: "active",
+        status: "active_local",
         confidence: 0.84,
         successCount: 4,
         failCount: 1,
@@ -162,7 +174,7 @@ describe("heartbeat skill synthesis thresholds", () => {
 
     expect(
       isSkillSynthesisEligible({
-        status: "active",
+        status: "active_local",
         confidence: 0.79,
         successCount: 5,
         failCount: 0,
@@ -171,7 +183,7 @@ describe("heartbeat skill synthesis thresholds", () => {
 
     expect(
       isSkillSynthesisEligible({
-        status: "active",
+        status: "active_global",
         confidence: 0.88,
         successCount: 4,
         failCount: 1,
