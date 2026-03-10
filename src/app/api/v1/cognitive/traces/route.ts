@@ -7,7 +7,7 @@
 
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
-import { createTrace, getRecentTraces, getPatterns } from "@/lib/cognitive-db";
+import { createTrace, getMatchingPatterns, getRecentTraces, syncTracePatternMatches } from "@/lib/cognitive-db";
 
 export const runtime = "nodejs";
 
@@ -47,21 +47,34 @@ export async function POST(request: Request) {
       approaches: body.approaches || [],
       solution: body.solution,
       outcome: body.outcome,
+      heuristicOutcome: body.heuristicOutcome,
+      automatedOutcome: body.automatedOutcome,
+      automatedSignals: body.automatedSignals,
       errorMessage: body.errorMessage,
       toolsUsed: body.toolsUsed || [],
       filesModified: body.filesModified || [],
       durationMs: body.durationMs || 0,
       sanitized: body.sanitized,
       sanitizedAt: body.sanitizedAt,
+      shareEligible: body.shareEligible,
+      explicitFeedbackNotes: body.notes,
     });
     
-    // Find matching patterns for response
-    const patterns = await getPatterns(identity.userId);
-    const problem = body.problem.toLowerCase();
-    const matchedPatterns = patterns.filter(p => {
-      const trigger = JSON.parse(p.triggerJson);
-      return trigger.keywords?.some((k: string) => problem.includes(k.toLowerCase()));
-    }).slice(0, 3);
+    const technologies = Array.isArray(body.context?.technologies)
+      ? body.context.technologies.filter((value: unknown): value is string => typeof value === "string")
+      : [];
+    const matchedPatterns = await getMatchingPatterns({
+      userId: identity.userId,
+      problem: body.problem,
+      technologies,
+      limit: 5,
+    });
+    await syncTracePatternMatches({
+      userId: identity.userId,
+      traceId: trace.id,
+      patterns: matchedPatterns.map((pattern) => ({ id: pattern.id, score: pattern.score })),
+      matchSource: "trace_capture",
+    });
     
     return Response.json({
       trace: {
@@ -70,6 +83,9 @@ export async function POST(request: Request) {
         type: trace.type,
         problem: trace.problem,
         outcome: trace.outcome,
+        outcomeSource: trace.outcomeSource,
+        outcomeConfidence: trace.outcomeConfidence,
+        shareEligible: trace.shareEligible,
         createdAt: trace.createdAt,
       },
       matchedPatterns: matchedPatterns.map(p => ({
@@ -77,6 +93,8 @@ export async function POST(request: Request) {
         domain: p.domain,
         approach: p.approach,
         confidence: p.confidence,
+        score: p.score,
+        scope: p.scope,
       })),
     }, { status: 201 });
     
@@ -105,6 +123,9 @@ export async function GET(request: Request) {
         type: t.type,
         problem: t.problem,
         outcome: t.outcome,
+        outcomeSource: t.outcomeSource,
+        outcomeConfidence: t.outcomeConfidence,
+        shareEligible: t.shareEligible,
         durationMs: t.durationMs,
         createdAt: t.createdAt,
       })),

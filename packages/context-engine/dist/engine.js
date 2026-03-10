@@ -4,6 +4,7 @@
  * Implements OpenClaw's ContextEngine interface for encrypted agent memory.
  */
 import { FatHippoClient } from "./api/client.js";
+import { buildStructuredTrace, getMessageText, shouldCaptureCodingTrace } from "./cognitive/trace-capture.js";
 import { formatMemoriesForInjection, dedupeMemories, estimateTokens, } from "./utils/formatting.js";
 import { detectPromptInjection, matchesCapturePatterns, sanitizeContent, } from "./utils/filtering.js";
 /**
@@ -48,6 +49,7 @@ export class FatHippoContextEngine {
      */
     async bootstrap(params) {
         try {
+            this.sessionStartTimes.set(params.sessionId, Date.now());
             // Prefetch critical memories for this session
             const critical = await this.client.getCriticalMemories({
                 limit: 30,
@@ -136,9 +138,12 @@ export class FatHippoContextEngine {
      * Post-turn lifecycle processing
      */
     async afterTurn(params) {
-        // Don't process heartbeat turns
-        if (params.isHeartbeat)
+        if (params.isHeartbeat) {
+            if (this.cognitiveEnabled && this.config.cognitiveHeartbeatEnabled !== false) {
+                await this.runCognitiveHeartbeat();
+            }
             return;
+        }
         // Invalidate critical cache after turns (may have new memories)
         const cacheAge = this.cachedCritical
             ? Date.now() - this.cachedCritical.fetchedAt
@@ -149,138 +154,12 @@ export class FatHippoContextEngine {
         }
         // Capture cognitive trace for coding sessions
         if (this.cognitiveEnabled) {
-            await this.maybeCaptureTrace(params.sessionId, params.messages);
-        }
-    }
-    /**
-     * Capture a trace if this looks like a completed coding task
-     */
-    async maybeCaptureTrace(sessionId, messages) {
-        // Need at least 4 messages (user, assistant, maybe more back-and-forth)
-        if (messages.length < 4)
-            return;
-        // Check if this looks like a coding conversation
-        const allText = messages.map(m => this.getMessageText(m)).join(' ').toLowerCase();
-        if (!this.looksLikeCodingQuery(allText))
-            return;
-        // Extract problem from first user message
-        const firstUserMsg = messages.find(m => m.role === 'user');
-        if (!firstUserMsg)
-            return;
-        const problem = this.getMessageText(firstUserMsg).slice(0, 500);
-        // Extract reasoning from assistant thinking blocks
-        const reasoning = this.extractReasoning(messages);
-        if (!reasoning || reasoning.length < 50)
-            return; // Skip if no meaningful reasoning
-        // Detect outcome from last messages
-        const outcome = this.detectOutcome(messages);
-        // Extract solution from last assistant message if success
-        let solution;
-        if (outcome === 'success') {
-            const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
-            if (lastAssistant) {
-                solution = this.getMessageText(lastAssistant).slice(0, 1000);
-            }
-        }
-        // Detect technologies
-        const technologies = this.detectTechnologies(allText);
-        // Get session start time or set it
-        if (!this.sessionStartTimes.has(sessionId)) {
-            this.sessionStartTimes.set(sessionId, Date.now() - 60000); // Estimate 1 min ago
-        }
-        const startTime = this.sessionStartTimes.get(sessionId);
-        const durationMs = Date.now() - startTime;
-        // Skip very short sessions
-        if (durationMs < 10000)
-            return; // Less than 10 seconds
-        // Capture the trace
-        try {
-            const baseUrl = this.config.baseUrl?.replace('/v1', '') || 'https://fathippo.ai/api';
-            await fetch(`${baseUrl}/v1/cognitive/traces`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.config.apiKey}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    sessionId,
-                    type: this.detectProblemType(allText),
-                    problem: this.sanitizeForStorage(problem),
-                    context: { technologies },
-                    reasoning: this.sanitizeForStorage(reasoning),
-                    approaches: [],
-                    solution: solution ? this.sanitizeForStorage(solution) : undefined,
-                    outcome,
-                    toolsUsed: this.detectToolsUsed(messages),
-                    filesModified: [],
-                    durationMs,
-                    sanitized: true,
-                    sanitizedAt: new Date().toISOString(),
-                }),
+            await this.captureStructuredTrace({
+                sessionId: params.sessionId,
+                sessionFile: params.sessionFile,
+                messages: params.messages,
             });
-            // Reset session start time
-            this.sessionStartTimes.delete(sessionId);
         }
-        catch (error) {
-            console.error('[FatHippo] Trace capture error:', error);
-        }
-    }
-    extractReasoning(messages) {
-        const thinkingBlocks = [];
-        for (const message of messages) {
-            if (message.role !== 'assistant')
-                continue;
-            const content = message.content;
-            if (Array.isArray(content)) {
-                for (const block of content) {
-                    if (typeof block === 'object' && 'thinking' in block && block.thinking) {
-                        thinkingBlocks.push(String(block.thinking));
-                    }
-                }
-            }
-        }
-        return thinkingBlocks.join('\n\n').slice(0, 3000);
-    }
-    detectOutcome(messages) {
-        const recentText = messages.slice(-3).map(m => this.getMessageText(m)).join(' ').toLowerCase();
-        const successWords = ['fixed', 'works', 'done', 'complete', 'success', 'resolved', 'passing'];
-        const failWords = ['still broken', 'not working', 'failed', 'error persists', 'stuck'];
-        const successScore = successWords.filter(w => recentText.includes(w)).length;
-        const failScore = failWords.filter(w => recentText.includes(w)).length;
-        if (successScore > failScore)
-            return 'success';
-        if (failScore > successScore)
-            return 'failed';
-        return 'partial';
-    }
-    detectProblemType(text) {
-        if (/debug|bug|error|fix|broken/.test(text))
-            return 'debugging';
-        if (/refactor|clean|reorganize/.test(text))
-            return 'refactoring';
-        if (/review|check|audit/.test(text))
-            return 'reviewing';
-        if (/config|setup|install/.test(text))
-            return 'configuring';
-        return 'building';
-    }
-    detectTechnologies(text) {
-        const techs = [];
-        const patterns = {
-            typescript: /typescript|\.tsx?/i,
-            javascript: /javascript|\.jsx?/i,
-            react: /react|jsx|usestate/i,
-            nextjs: /next\.?js|app router/i,
-            turso: /turso|libsql/i,
-            postgres: /postgres|psql/i,
-            python: /python|\.py/i,
-            docker: /docker|container/i,
-        };
-        for (const [tech, pattern] of Object.entries(patterns)) {
-            if (pattern.test(text))
-                techs.push(tech);
-        }
-        return techs;
     }
     detectToolsUsed(messages) {
         const tools = new Set();
@@ -294,38 +173,6 @@ export class FatHippoContextEngine {
             }
         }
         return [...tools];
-    }
-    sanitizeForStorage(text) {
-        // Basic secret sanitization
-        const patterns = [
-            /sk-[a-zA-Z0-9]{32,}/g,
-            /ghp_[a-zA-Z0-9]{36,}/g,
-            /mem_[a-zA-Z0-9]{32,}/g,
-            /AKIA[A-Z0-9]{16}/g,
-            /(['"]?)(?:api[_-]?key|secret|password|token)(['"]?\s*[:=]\s*)(['"]?)[\w\-\.]+\3/gi,
-        ];
-        let result = text;
-        for (const pattern of patterns) {
-            result = result.replace(pattern, '[REDACTED]');
-        }
-        return result;
-    }
-    getMessageText(message) {
-        const msg = message;
-        // Handle string content directly
-        if (typeof msg.content === 'string')
-            return msg.content;
-        // Handle array content (with text blocks)
-        if (Array.isArray(msg.content)) {
-            return msg.content
-                .filter(b => typeof b === 'object' && b !== null && typeof b.text === 'string')
-                .map(b => String(b.text))
-                .join('\n');
-        }
-        // Handle text field directly
-        if (typeof msg.text === 'string')
-            return msg.text;
-        return '';
     }
     /**
      * Assemble context for the model
@@ -452,7 +299,7 @@ export class FatHippoContextEngine {
      * Fetch active constraints (always injected)
      */
     async fetchConstraints() {
-        const baseUrl = this.config.baseUrl?.replace('/v1', '') || 'https://fathippo.ai/api';
+        const baseUrl = this.getApiBaseUrl();
         const response = await fetch(`${baseUrl}/v1/cognitive/constraints`, {
             method: 'GET',
             headers: {
@@ -468,7 +315,7 @@ export class FatHippoContextEngine {
      * Auto-detect and store constraints from user message
      */
     async maybeStoreConstraint(message) {
-        const baseUrl = this.config.baseUrl?.replace('/v1', '') || 'https://fathippo.ai/api';
+        const baseUrl = this.getApiBaseUrl();
         try {
             await fetch(`${baseUrl}/v1/cognitive/constraints`, {
                 method: 'POST',
@@ -487,7 +334,7 @@ export class FatHippoContextEngine {
      * Fetch relevant traces and patterns from cognitive API
      */
     async fetchCognitiveContext(problem) {
-        const baseUrl = this.config.baseUrl?.replace('/v1', '') || 'https://fathippo.ai/api';
+        const baseUrl = this.getApiBaseUrl();
         const response = await fetch(`${baseUrl}/v1/cognitive/traces/relevant`, {
             method: 'POST',
             headers: {
@@ -500,28 +347,142 @@ export class FatHippoContextEngine {
             return null;
         const data = await response.json();
         const sections = [];
-        // Format patterns (most actionable)
-        if (data.patterns && data.patterns.length > 0) {
-            const patternLines = data.patterns.map(p => `• [${p.domain}] ${p.approach.slice(0, 200)} (${Math.round(p.confidence * 100)}% confidence)`).join('\n');
+        const localPatterns = (data.patterns ?? []).filter((pattern) => pattern.scope !== "global");
+        const globalPatterns = (data.patterns ?? []).filter((pattern) => pattern.scope === "global");
+        if (localPatterns.length > 0) {
+            const patternLines = localPatterns
+                .map((pattern) => {
+                const score = typeof pattern.score === "number" ? `, score ${pattern.score.toFixed(1)}` : "";
+                return `- [${pattern.domain}] ${pattern.approach.slice(0, 200)} (${Math.round(pattern.confidence * 100)}% confidence${score})`;
+            })
+                .join("\n");
             sections.push(`## Learned Coding Patterns\n${patternLines}`);
         }
-        // Format traces
+        if (globalPatterns.length > 0) {
+            const patternLines = globalPatterns
+                .map((pattern) => {
+                const score = typeof pattern.score === "number" ? `, score ${pattern.score.toFixed(1)}` : "";
+                return `- [${pattern.domain}] ${pattern.approach.slice(0, 200)} (${Math.round(pattern.confidence * 100)}% confidence${score})`;
+            })
+                .join("\n");
+            sections.push(`## Shared Global Patterns\n${patternLines}`);
+        }
         if (data.traces && data.traces.length > 0) {
             const traceLines = data.traces.map(t => {
                 const icon = t.outcome === 'success' ? '✓' : t.outcome === 'failed' ? '✗' : '~';
                 const solution = t.solution ? ` → ${t.solution.slice(0, 80)}...` : '';
-                return `• ${icon} ${t.problem.slice(0, 80)}${solution}`;
+                return `- ${icon} ${t.problem.slice(0, 80)}${solution}`;
             }).join('\n');
             sections.push(`## Past Similar Problems\n${traceLines}`);
+        }
+        if (data.skills && data.skills.length > 0) {
+            const skillLines = data.skills
+                .map((skill) => `- [${skill.scope}] ${skill.name}: ${skill.description} (${Math.round(skill.successRate * 100)}% success)`)
+                .join("\n");
+            sections.push(`## Synthesized Skills\n${skillLines}`);
         }
         if (sections.length === 0)
             return null;
         return '\n' + sections.join('\n\n') + '\n';
     }
+    async captureStructuredTrace(params) {
+        if (!shouldCaptureCodingTrace(params.messages)) {
+            return;
+        }
+        if (!this.sessionStartTimes.has(params.sessionId)) {
+            this.sessionStartTimes.set(params.sessionId, Date.now() - 60_000);
+        }
+        const payload = buildStructuredTrace({
+            sessionId: params.sessionId,
+            messages: params.messages,
+            toolsUsed: this.detectToolsUsed(params.messages),
+            filesModified: this.detectFilesModified(params.sessionFile, params.messages),
+            startTime: this.sessionStartTimes.get(params.sessionId) ?? Date.now() - 60_000,
+            endTime: Date.now(),
+        });
+        if (!payload) {
+            return;
+        }
+        try {
+            const baseUrl = this.getApiBaseUrl();
+            const response = await fetch(`${baseUrl}/v1/cognitive/traces`, {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${this.config.apiKey}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    ...payload,
+                    shareEligible: this.config.shareEligibleByDefault !== false && payload.shareEligible,
+                }),
+            });
+            if (!response.ok) {
+                throw new Error(`Trace capture failed with status ${response.status}`);
+            }
+            this.sessionStartTimes.delete(params.sessionId);
+        }
+        catch (error) {
+            console.error("[FatHippo] Trace capture error:", error);
+        }
+    }
+    async runCognitiveHeartbeat() {
+        const baseUrl = this.getApiBaseUrl();
+        const headers = {
+            Authorization: `Bearer ${this.config.apiKey}`,
+            "Content-Type": "application/json",
+        };
+        try {
+            const response = await fetch(`${baseUrl}/v1/cognitive/patterns/extract`, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({}),
+            });
+            if (!response.ok) {
+                throw new Error(`Pattern extraction failed with status ${response.status}`);
+            }
+        }
+        catch (error) {
+            console.error("[FatHippo] Pattern extraction heartbeat error:", error);
+        }
+        try {
+            const response = await fetch(`${baseUrl}/v1/cognitive/skills/synthesize`, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({}),
+            });
+            if (!response.ok) {
+                throw new Error(`Skill synthesis failed with status ${response.status}`);
+            }
+        }
+        catch (error) {
+            console.error("[FatHippo] Skill synthesis heartbeat error:", error);
+        }
+    }
+    detectFilesModified(sessionFile, messages) {
+        const files = new Set();
+        if (sessionFile) {
+            files.add(sessionFile);
+        }
+        const filePattern = /(?:^|[\s("'`])((?:[\w.-]+\/)*[\w.-]+\.(?:ts|tsx|js|jsx|json|md|sql|py|go|rs|java|rb|sh|yaml|yml))(?:$|[\s)"'`:,])/g;
+        for (const message of messages) {
+            const text = getMessageText(message);
+            for (const match of text.matchAll(filePattern)) {
+                if (match[1]) {
+                    files.add(match[1]);
+                }
+            }
+        }
+        return [...files].slice(0, 25);
+    }
+    getApiBaseUrl() {
+        const baseUrl = this.config.baseUrl || "https://www.fathippo.com/api";
+        return baseUrl.replace(/\/v1$/, "");
+    }
     /**
      * Handle compaction via Dream Cycle
      */
     async compact(params) {
+        void params;
         if (this.config.dreamCycleOnCompact === false) {
             // Fall back to default compaction
             return { ok: true, compacted: false, reason: "dreamCycleOnCompact disabled" };
@@ -554,7 +515,8 @@ export class FatHippoContextEngine {
     /**
      * Prepare context for subagent spawn
      */
-    async prepareSubagentSpawn(params) {
+    async prepareSubagentSpawn(_params) {
+        void _params;
         // For now, subagents inherit parent's memory scope
         // Future: could create isolated memory scope for subagent
         return {
@@ -566,7 +528,8 @@ export class FatHippoContextEngine {
     /**
      * Handle subagent completion
      */
-    async onSubagentEnded(params) {
+    async onSubagentEnded(_params) {
+        void _params;
         // Future: extract learnings from subagent session
         // and store them in parent's memory
     }

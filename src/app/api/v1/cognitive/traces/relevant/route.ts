@@ -6,7 +6,7 @@
 
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
-import { getRelevantTraces, getPatterns, getSkillCandidates } from "@/lib/cognitive-db";
+import { getMatchingPatterns, getRelevantSkills, getRelevantTraces } from "@/lib/cognitive-db";
 
 export const runtime = "nodejs";
 
@@ -29,31 +29,21 @@ export async function POST(request: Request) {
     // Get relevant traces via vector similarity
     const traces = await getRelevantTraces(identity.userId, problem, limit);
     
-    // Get matching patterns
-    const allPatterns = await getPatterns(identity.userId);
-    const problemLower = problem.toLowerCase();
-    const technologies = body.context?.technologies || [];
-    
-    const matchedPatterns = allPatterns.filter(p => {
-      if (p.status === 'deprecated') return false;
-      
-      const trigger = JSON.parse(p.triggerJson);
-      
-      // Check keyword matches
-      const keywordMatch = trigger.keywords?.some((k: string) => 
-        problemLower.includes(k.toLowerCase())
-      );
-      
-      // Check technology matches
-      const techMatch = trigger.technologies?.some((t: string) =>
-        technologies.some((ut: string) => ut.toLowerCase() === t.toLowerCase())
-      );
-      
-      return keywordMatch || techMatch;
-    }).slice(0, 5);
-    
-    // Get synthesized skills (placeholder for now)
-    const skills: unknown[] = [];
+    const technologies = Array.isArray(body.context?.technologies)
+      ? body.context.technologies.filter((value: unknown): value is string => typeof value === "string")
+      : [];
+    const matchedPatterns = await getMatchingPatterns({
+      userId: identity.userId,
+      problem,
+      technologies,
+      limit: 5,
+    });
+    const skills = await getRelevantSkills({
+      userId: identity.userId,
+      problem,
+      technologies,
+      limit: 3,
+    });
     
     return Response.json({
       traces: traces.map(t => ({
@@ -72,8 +62,17 @@ export async function POST(request: Request) {
         approach: p.approach,
         confidence: p.confidence,
         trigger: JSON.parse(p.triggerJson),
+        scope: p.scope,
+        score: p.score,
       })),
-      skills,
+      skills: skills.map((skill) => ({
+        id: skill.id,
+        name: skill.name,
+        description: skill.description,
+        status: skill.status,
+        successRate: skill.successRate,
+        scope: skill.scope,
+      })),
     });
     
   } catch (error) {

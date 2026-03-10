@@ -28,6 +28,7 @@ export async function GET(request: Request) {
       patterns: patterns.map(p => ({
         id: p.id,
         domain: p.domain,
+        scope: p.scope,
         trigger: JSON.parse(p.triggerJson),
         approach: p.approach,
         steps: p.stepsJson ? JSON.parse(p.stepsJson) : undefined,
@@ -35,6 +36,7 @@ export async function GET(request: Request) {
         confidence: p.confidence,
         successCount: p.successCount,
         failCount: p.failCount,
+        sourceTraceCount: p.sourceTraceCount,
         status: p.status,
         createdAt: p.createdAt,
         updatedAt: p.updatedAt,
@@ -67,7 +69,10 @@ export async function POST(request: Request) {
     }
     
     const pattern = await createPattern({
-      userId: identity.userId,
+      userId: body.scope === "global" ? null : identity.userId,
+      scope: body.scope === "global" ? "global" : "local",
+      patternKey: typeof body.patternKey === "string" ? body.patternKey : undefined,
+      sharedSignature: typeof body.sharedSignature === "string" ? body.sharedSignature : undefined,
       domain: body.domain,
       trigger: body.trigger,
       approach: body.approach,
@@ -77,12 +82,15 @@ export async function POST(request: Request) {
       successCount: body.successCount || 0,
       failCount: body.failCount || 0,
       sourceTraceIds: body.sourceTraceIds || [],
+      sourceTraceCount: body.sourceTraceCount,
+      status: body.status,
     });
     
     return Response.json({
       pattern: {
         id: pattern.id,
         domain: pattern.domain,
+        scope: pattern.scope,
         approach: pattern.approach,
         confidence: pattern.confidence,
         status: pattern.status,

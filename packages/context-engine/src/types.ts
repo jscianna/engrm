@@ -12,6 +12,10 @@ export interface FatHippoConfig {
   conversationId?: string | null;
   /** Enable cognitive engine features (trace capture, pattern injection). Default: true */
   cognitiveEnabled?: boolean;
+  /** Run extraction and synthesis from heartbeat turns. Default: true */
+  cognitiveHeartbeatEnabled?: boolean;
+  /** Shared learning opt-in for sanitized traces. Default: true */
+  shareEligibleByDefault?: boolean;
 }
 
 export interface Memory {

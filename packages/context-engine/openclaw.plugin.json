@@ -37,6 +37,21 @@
         "description": "Run Dream Cycle during compaction instead of lossy summarization",
         "default": true
       },
+      "cognitiveEnabled": {
+        "type": "boolean",
+        "description": "Enable trace capture, constraints, and cognitive context",
+        "default": true
+      },
+      "cognitiveHeartbeatEnabled": {
+        "type": "boolean",
+        "description": "Run extraction and skill synthesis on heartbeat turns",
+        "default": true
+      },
+      "shareEligibleByDefault": {
+        "type": "boolean",
+        "description": "Allow sanitized traces to contribute to shared global patterns",
+        "default": true
+      },
       "conversationId": {
         "type": "string",
         "description": "Scope memories to a specific conversation/project (null = derive from session)"
@@ -65,6 +80,15 @@
     },
     "dreamCycleOnCompact": {
       "label": "Dream Cycle on Compact"
+    },
+    "cognitiveEnabled": {
+      "label": "Enable Cognitive Loop"
+    },
+    "cognitiveHeartbeatEnabled": {
+      "label": "Heartbeat Extraction"
+    },
+    "shareEligibleByDefault": {
+      "label": "Shared Learning"
     },
     "conversationId": {
       "label": "Conversation ID",

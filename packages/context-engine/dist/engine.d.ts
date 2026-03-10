@@ -56,17 +56,7 @@ export declare class FatHippoContextEngine implements ContextEngine {
         tokenBudget?: number;
         legacyCompactionParams?: Record<string, unknown>;
     }): Promise<void>;
-    /**
-     * Capture a trace if this looks like a completed coding task
-     */
-    private maybeCaptureTrace;
-    private extractReasoning;
-    private detectOutcome;
-    private detectProblemType;
-    private detectTechnologies;
     private detectToolsUsed;
-    private sanitizeForStorage;
-    private getMessageText;
     /**
      * Assemble context for the model
      */
@@ -91,6 +81,10 @@ export declare class FatHippoContextEngine implements ContextEngine {
      * Fetch relevant traces and patterns from cognitive API
      */
     private fetchCognitiveContext;
+    private captureStructuredTrace;
+    private runCognitiveHeartbeat;
+    private detectFilesModified;
+    private getApiBaseUrl;
     /**
      * Handle compaction via Dream Cycle
      */
@@ -107,7 +101,7 @@ export declare class FatHippoContextEngine implements ContextEngine {
     /**
      * Prepare context for subagent spawn
      */
-    prepareSubagentSpawn(params: {
+    prepareSubagentSpawn(_params: {
         parentSessionKey: string;
         childSessionKey: string;
         ttlMs?: number;
@@ -115,7 +109,7 @@ export declare class FatHippoContextEngine implements ContextEngine {
     /**
      * Handle subagent completion
      */
-    onSubagentEnded(params: {
+    onSubagentEnded(_params: {
         childSessionKey: string;
         reason: SubagentEndReason;
     }): Promise<void>;
