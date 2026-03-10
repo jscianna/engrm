@@ -1,0 +1,30 @@
+{
+  "name": "@fathippo/cognitive-engine",
+  "version": "0.1.0",
+  "description": "Cognitive substrate for AI coding agents - learns from coding sessions, extracts patterns, synthesizes skills",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest"
+  },
+  "keywords": ["ai", "agent", "memory", "cognitive", "learning", "openclaw"],
+  "author": "FatHippo",
+  "license": "PROPRIETARY",
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  },
+  "peerDependencies": {
+    "openclaw": ">=0.60.0"
+  }
+}
