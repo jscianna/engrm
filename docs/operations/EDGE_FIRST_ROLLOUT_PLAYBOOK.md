@@ -237,6 +237,49 @@ diff <(jq .localRetrieval.hitRate ./tmp/edge-metrics-YYYYMMDD-HHMMSS.json) \
      <(jq .localRetrieval.hitRate ./tmp/edge-metrics-YYYYMMDD-HHMMSS.json)
 ```
 
+## Decision Gate
+
+Before proceeding to each rollout stage, use the edge safety toolkit to make data-driven decisions.
+
+### Automated Safety Check
+
+Run the safety snapshot and report before each stage increase:
+
+```bash
+# Capture current metrics
+./scripts/edge-safety-snapshot.sh https://fathippo.ai mem_xxx
+
+# Generate decision report (use the snapshot file created above)
+./scripts/edge-safety-report.sh ./tmp/edge-safety-YYYYMMDD-HHMMSS.json
+```
+
+### Decision Matrix
+
+The report provides a **GO**, **HOLD**, or **ROLLBACK** recommendation based on:
+
+| Status | Condition | Action |
+|--------|-----------|--------|
+| **GO** | All criteria met (hitRate ≥0.60, shadowAvgOverlap ≥0.55, avgRiskScore <0.60, avgFlushQuality ≥0.60) | Proceed to next stage |
+| **HOLD** | Mixed results - some thresholds not met but no critical failures | Investigate before proceeding |
+| **ROLLBACK** | Critical failure (shadowAvgOverlap <0.35 OR avgRiskScore ≥0.75 OR missingConstraints >0) | Roll back immediately |
+
+### Decision Template
+
+See [EDGE_SAFETY_DECISION_TEMPLATE.md](./EDGE_SAFETY_DECISION_TEMPLATE.md) for:
+- Detailed threshold explanations
+- Example scenarios (GO, HOLD, ROLLBACK)
+- Decision workflow steps
+
+### Integration with Rollout Stages
+
+| Stage | Before Proceeding | Safety Check |
+|-------|-------------------|--------------|
+| 5% → 20% | Capture 5% metrics, run safety report | Must be GO |
+| 20% → 50% | Capture 20% metrics, run safety report | Must be GO |
+| 50% → 100% | Capture 50% metrics, run safety report | Must be GO |
+
+**Important:** Do not proceed to the next stage if the safety report returns **HOLD** or **ROLLBACK**. Address the issues first.
+
 ## Troubleshooting
 
 ### Issue: Low Hit Rate
