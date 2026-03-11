@@ -26,6 +26,7 @@ import { calculateTypeBoost, type MemoryType } from "@/lib/memory-classifier";
 import { embedWithHyDE } from "@/lib/hyde";
 import { parseTemporalQuery, applyTemporalBoost } from "@/lib/temporal";
 import { rerankMemories } from "@/lib/reranker";
+import { localRetrieve } from "@/lib/local-retrieval";
 import type { MemoryRecord } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -137,6 +138,18 @@ export async function POST(request: Request) {
     const enableHyDE = body.hyde === true;
     const enableRerank = body.rerank === true;
     const enableTemporal = body.temporal !== false;
+    const enableEdgeFirst = body.edgeFirst === true;
+
+    // Edge-first retrieval: try local cache before expensive hybrid search
+    let edgeHit = false;
+    let edgeMemoryIds: string[] = [];
+    if (enableEdgeFirst) {
+      const localResult = await localRetrieve(message, identity.userId);
+      edgeHit = localResult.hit && localResult.confidence >= 0.8;
+      if (edgeHit) {
+        edgeMemoryIds = localResult.memoryIds;
+      }
+    }
 
     // Get critical memories
     const allCriticalMemories = filterSensitiveMemories(
@@ -273,17 +286,34 @@ export async function POST(request: Request) {
       // Get top 20 for reranking pipeline (we'll filter down to 5 after reranking)
       const rrfTopK = enableRerank ? 20 : 10;
       let memoryIds: string[] = [];
+
+      // Edge-first: prepend edge cache hits before hybrid search results
+      if (edgeHit && edgeMemoryIds.length > 0) {
+        memoryIds = edgeMemoryIds.slice(0, maxRelevant);
+      }
+
+      // Add hybrid search results (excluding duplicates from edge)
+      const edgeIdSet = new Set(memoryIds);
+      let hybridIds: string[] = [];
       if (vectorResults.length > 0 && bm25Results.length > 0) {
         const fused = rrfFusion(vectorResults, bm25Results, {
           k: rrfK,
           bm25Weight: bm25Weight,
         });
-        memoryIds = fused.map((r) => r.memoryId).slice(0, rrfTopK);
+        hybridIds = fused.map((r) => r.memoryId);
       } else if (vectorResults.length > 0) {
-        memoryIds = vectorResults.slice(0, rrfTopK).map((r) => r.id);
+        hybridIds = vectorResults.map((r) => r.id);
       } else if (bm25Results.length > 0) {
-        memoryIds = bm25Results.slice(0, rrfTopK).map((r) => r.memoryId);
+        hybridIds = bm25Results.map((r) => r.memoryId);
       }
+
+      // Merge edge and hybrid results, preserving edge priority
+      for (const id of hybridIds) {
+        if (!edgeIdSet.has(id)) {
+          memoryIds.push(id);
+        }
+      }
+      memoryIds = memoryIds.slice(0, rrfTopK);
 
       if (memoryIds.length > 0) {
         const memories = filterSensitiveMemories(await getAgentMemoriesByIds({
@@ -410,12 +440,22 @@ export async function POST(request: Request) {
     }
 
     // Return as plain text with content-type header
+    const headers: Record<string, string> = {
+      "Content-Type": "text/plain; charset=utf-8",
+    };
+
+    if (evaluation) {
+      headers["X-FatHippo-Eval-Id"] = evaluation.id;
+    }
+
+    if (enableEdgeFirst) {
+      headers["X-FatHippo-Edge-First"] = "on";
+      headers["X-FatHippo-Edge-Hit"] = edgeHit ? "true" : "false";
+    }
+
     return new Response(context, {
       status: 200,
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        ...(evaluation ? { "X-FatHippo-Eval-Id": evaluation.id } : {}),
-      },
+      headers,
     });
   } catch (error) {
     return errorResponse(error);
