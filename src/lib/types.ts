@@ -157,4 +157,6 @@ export type SynthesizedMemoryRecord = {
   createdAt: string;
   /** Abstraction level: 1=first-order synthesis, 2+=meta-synthesis (patterns of patterns) */
   abstractionLevel: number;
+  /** Quality score from LLM self-assessment (0.0-1.0) */
+  synthesisQualityScore?: number;
 };
