@@ -27,6 +27,7 @@ import { embedWithHyDE } from "@/lib/hyde";
 import { parseTemporalQuery, applyTemporalBoost } from "@/lib/temporal";
 import { rerankMemories } from "@/lib/reranker";
 import { localRetrieve, localStoreResult } from "@/lib/local-retrieval";
+import { isInEdgeRollout } from "@/lib/edge-rollout";
 import type { MemoryRecord } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -153,33 +154,43 @@ export async function POST(request: Request) {
     const edgeMaxIds = typeof body.edgeMaxIds === "number"
       ? Math.max(1, Math.min(20, body.edgeMaxIds))
       : maxRelevant;
+    const edgeRolloutPct = typeof body.edgeRolloutPct === "number"
+      ? Math.max(0, Math.min(100, body.edgeRolloutPct))
+      : 100;
+    const edgeSeed = typeof body.edgeSeed === "string" ? body.edgeSeed : "";
 
     // Edge-first retrieval: try local cache before expensive hybrid search
     let edgeHit = false;
     let edgeMemoryIds: string[] = [];
     let edgeConfidence = 0;
     let edgeCbActive = false;
+    let edgeRolloutActive = false;
     if (enableEdgeFirst) {
-      // Check circuit breaker state
-      edgeCbActive = cbCooldownRemaining > 0;
-      if (edgeCbActive) {
-        cbCooldownRemaining -= 1;
-      } else {
-        const localResult = await localRetrieve(message, identity.userId);
-        edgeConfidence = localResult.confidence;
-        edgeHit = localResult.hit && localResult.confidence >= edgeMinConfidence;
-        if (edgeHit) {
-          edgeMemoryIds = localResult.memoryIds.slice(0, edgeMaxIds);
-        }
-        // Circuit breaker: track consecutive low-confidence lookups
-        if (localResult.hit && localResult.confidence < edgeMinConfidence) {
-          cbConsecutiveLowConfidence += 1;
-          if (cbConsecutiveLowConfidence >= CB_LOW_CONFIDENCE_THRESHOLD) {
-            cbCooldownRemaining = CB_COOLDOWN_LOOKUPS;
+      // Check if user is in rollout percentage
+      edgeRolloutActive = isInEdgeRollout(identity.userId, edgeRolloutPct, edgeSeed);
+
+      if (edgeRolloutActive) {
+        // Check circuit breaker state
+        edgeCbActive = cbCooldownRemaining > 0;
+        if (edgeCbActive) {
+          cbCooldownRemaining -= 1;
+        } else {
+          const localResult = await localRetrieve(message, identity.userId);
+          edgeConfidence = localResult.confidence;
+          edgeHit = localResult.hit && localResult.confidence >= edgeMinConfidence;
+          if (edgeHit) {
+            edgeMemoryIds = localResult.memoryIds.slice(0, edgeMaxIds);
+          }
+          // Circuit breaker: track consecutive low-confidence lookups
+          if (localResult.hit && localResult.confidence < edgeMinConfidence) {
+            cbConsecutiveLowConfidence += 1;
+            if (cbConsecutiveLowConfidence >= CB_LOW_CONFIDENCE_THRESHOLD) {
+              cbCooldownRemaining = CB_COOLDOWN_LOOKUPS;
+              cbConsecutiveLowConfidence = 0;
+            }
+          } else {
             cbConsecutiveLowConfidence = 0;
           }
-        } else {
-          cbConsecutiveLowConfidence = 0;
         }
       }
     }
@@ -494,6 +505,7 @@ export async function POST(request: Request) {
       headers["X-FatHippo-Edge-Confidence"] = edgeConfidence.toFixed(3);
       headers["X-FatHippo-Edge-CB"] = edgeCbActive ? "on" : "off";
       headers["X-FatHippo-Edge-Min-Confidence"] = edgeMinConfidence.toFixed(2);
+      headers["X-FatHippo-Edge-Rollout"] = edgeRolloutActive ? "active" : "skipped";
     }
 
     return new Response(context, {
