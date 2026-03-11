@@ -53,6 +53,12 @@ const DEFAULT_VECTOR_TOPK = 40;
 const DEFAULT_RRF_K = 60;
 const DEFAULT_BM25_WEIGHT = 1.2;
 
+// Circuit breaker state for edge-first retrieval (process-local only)
+const CB_LOW_CONFIDENCE_THRESHOLD = 5; // consecutive low-confidence lookups to trigger
+const CB_COOLDOWN_LOOKUPS = 30; // lookups to skip after triggering
+let cbConsecutiveLowConfidence = 0;
+let cbCooldownRemaining = 0;
+
 function isTrivialQuery(message: string): boolean {
   const trimmed = message.trim();
   if (!trimmed) {
@@ -140,16 +146,41 @@ export async function POST(request: Request) {
     const enableTemporal = body.temporal !== false;
     const enableEdgeFirst = body.edgeFirst === true;
 
+    // Edge-first tuning parameters
+    const edgeMinConfidence = typeof body.edgeMinConfidence === "number"
+      ? Math.max(0.5, Math.min(0.98, body.edgeMinConfidence))
+      : 0.8;
+    const edgeMaxIds = typeof body.edgeMaxIds === "number"
+      ? Math.max(1, Math.min(20, body.edgeMaxIds))
+      : maxRelevant;
+
     // Edge-first retrieval: try local cache before expensive hybrid search
     let edgeHit = false;
     let edgeMemoryIds: string[] = [];
     let edgeConfidence = 0;
+    let edgeCbActive = false;
     if (enableEdgeFirst) {
-      const localResult = await localRetrieve(message, identity.userId);
-      edgeConfidence = localResult.confidence;
-      edgeHit = localResult.hit && localResult.confidence >= 0.8;
-      if (edgeHit) {
-        edgeMemoryIds = localResult.memoryIds;
+      // Check circuit breaker state
+      edgeCbActive = cbCooldownRemaining > 0;
+      if (edgeCbActive) {
+        cbCooldownRemaining -= 1;
+      } else {
+        const localResult = await localRetrieve(message, identity.userId);
+        edgeConfidence = localResult.confidence;
+        edgeHit = localResult.hit && localResult.confidence >= edgeMinConfidence;
+        if (edgeHit) {
+          edgeMemoryIds = localResult.memoryIds.slice(0, edgeMaxIds);
+        }
+        // Circuit breaker: track consecutive low-confidence lookups
+        if (localResult.hit && localResult.confidence < edgeMinConfidence) {
+          cbConsecutiveLowConfidence += 1;
+          if (cbConsecutiveLowConfidence >= CB_LOW_CONFIDENCE_THRESHOLD) {
+            cbCooldownRemaining = CB_COOLDOWN_LOOKUPS;
+            cbConsecutiveLowConfidence = 0;
+          }
+        } else {
+          cbConsecutiveLowConfidence = 0;
+        }
       }
     }
 
@@ -461,6 +492,8 @@ export async function POST(request: Request) {
       headers["X-FatHippo-Edge-First"] = "on";
       headers["X-FatHippo-Edge-Hit"] = edgeHit ? "true" : "false";
       headers["X-FatHippo-Edge-Confidence"] = edgeConfidence.toFixed(3);
+      headers["X-FatHippo-Edge-CB"] = edgeCbActive ? "on" : "off";
+      headers["X-FatHippo-Edge-Min-Confidence"] = edgeMinConfidence.toFixed(2);
     }
 
     return new Response(context, {
