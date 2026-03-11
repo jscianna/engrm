@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "check:cognitive-launch": "./node_modules/.bin/tsc --noEmit && (cd packages/cognitive-engine && ./node_modules/.bin/vitest run src/eval-harness.test.ts src/evidence-weighting.test.ts src/application-attribution.e2e.test.ts src/shared-learning-settings.e2e.test.ts src/api-key-scopes.e2e.test.ts src/operational-hardening.e2e.test.ts src/alert-delivery.test.ts src/admin-auth.test.ts src/cognitive-privacy.e2e.test.ts src/heartbeat-thresholds.test.ts src/tool-result-parsing.test.ts)"
+    "check:cognitive-launch": "./node_modules/.bin/tsc --noEmit && (cd packages/cognitive-engine && ./node_modules/.bin/vitest run src/eval-harness.test.ts src/evidence-weighting.test.ts src/application-attribution.e2e.test.ts src/shared-learning-settings.e2e.test.ts src/api-key-scopes.e2e.test.ts src/operational-hardening.e2e.test.ts src/alert-delivery.test.ts src/operational-alert-dispatch.test.ts src/request-throttle.test.ts src/admin-auth.test.ts src/cognitive-privacy.e2e.test.ts src/heartbeat-thresholds.test.ts src/tool-result-parsing.test.ts)"
   },
   "dependencies": {
     "framer-motion": "^11.18.0",

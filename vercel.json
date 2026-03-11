@@ -4,6 +4,10 @@
     {
       "path": "/api/health",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/admin/operational-alerts/dispatch",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

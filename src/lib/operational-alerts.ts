@@ -12,6 +12,9 @@ export type OperationalAlert = {
 };
 
 function staleThresholdMs(jobName: string): number {
+  if (jobName.includes("operational-alert-delivery")) {
+    return 2 * 60 * 60 * 1000;
+  }
   if (jobName.includes("pattern-extraction")) {
     return 18 * 60 * 60 * 1000;
   }

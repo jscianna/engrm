@@ -1,5 +1,8 @@
+import crypto from "node:crypto";
 import { MemryError } from "@/lib/errors";
 import type { OperationalAlert } from "@/lib/operational-alerts";
+import { getOperationalAlertsSummary } from "@/lib/operational-alerts";
+import { releaseJobLease, tryAcquireJobLease } from "@/lib/cognitive-db";
 
 export type OperationalAlertsSummary = {
   generatedAt: string;
@@ -16,6 +19,13 @@ export type DeliveredOperationalAlerts = {
   responseStatus?: number;
 };
 
+export type ScheduledOperationalAlertsResult = DeliveredOperationalAlerts & {
+  acquiredLease: boolean;
+  jobName: string;
+  fingerprint: string | null;
+  summary: OperationalAlertsSummary;
+};
+
 function deliveryFormat(): "generic" | "slack" {
   return process.env.OPS_ALERT_WEBHOOK_FORMAT === "slack" ? "slack" : "generic";
 }
@@ -23,6 +33,20 @@ function deliveryFormat(): "generic" | "slack" {
 function configuredDestination(): string | null {
   const url = process.env.OPS_ALERT_WEBHOOK_URL?.trim();
   return url ? url : null;
+}
+
+function dispatchIntervalMinutes(): number {
+  const value = Number(process.env.OPS_ALERT_DISPATCH_INTERVAL_MINUTES ?? 15);
+  return Number.isFinite(value) ? Math.max(5, Math.min(720, Math.trunc(value))) : 15;
+}
+
+function repeatIntervalMinutes(): number {
+  const value = Number(process.env.OPS_ALERT_REPEAT_MINUTES ?? 240);
+  return Number.isFinite(value) ? Math.max(15, Math.min(7 * 24 * 60, Math.trunc(value))) : 240;
+}
+
+function dispatchSecretConfigured(): boolean {
+  return Boolean(process.env.OPS_ALERT_DISPATCH_SECRET || process.env.CRON_SECRET || process.env.ADMIN_API_KEY);
 }
 
 function severityRank(severity: OperationalAlert["severity"]): number {
@@ -54,6 +78,12 @@ export function getOperationalAlertDeliveryConfig(): {
   destination: string | null;
   format: "generic" | "slack";
   hasBearerToken: boolean;
+  schedule: {
+    intervalMinutes: number;
+    repeatMinutes: number;
+    secretConfigured: boolean;
+    jobName: string;
+  };
 } {
   const destination = configuredDestination();
   return {
@@ -61,7 +91,60 @@ export function getOperationalAlertDeliveryConfig(): {
     destination,
     format: deliveryFormat(),
     hasBearerToken: Boolean(process.env.OPS_ALERT_WEBHOOK_BEARER_TOKEN),
+    schedule: {
+      intervalMinutes: dispatchIntervalMinutes(),
+      repeatMinutes: repeatIntervalMinutes(),
+      secretConfigured: dispatchSecretConfigured(),
+      jobName: "operational-alert-delivery",
+    },
   };
+}
+
+function fingerprintAlerts(summary: OperationalAlertsSummary): string | null {
+  if (summary.alerts.length === 0) {
+    return null;
+  }
+
+  const normalized = [...summary.alerts]
+    .map((alert) => ({
+      id: alert.id,
+      severity: alert.severity,
+      source: alert.source,
+      message: alert.message,
+      count: alert.count,
+    }))
+    .sort((left, right) => left.id.localeCompare(right.id));
+  return crypto.createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
+}
+
+function parseCheckpoint(raw: string | null | undefined): {
+  lastDeliveredAt: string | null;
+  lastDeliveredFingerprint: string | null;
+  lastResolvedAt: string | null;
+} {
+  if (!raw) {
+    return {
+      lastDeliveredAt: null,
+      lastDeliveredFingerprint: null,
+      lastResolvedAt: null,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return {
+      lastDeliveredAt: typeof parsed.lastDeliveredAt === "string" ? parsed.lastDeliveredAt : null,
+      lastDeliveredFingerprint:
+        typeof parsed.lastDeliveredFingerprint === "string" ? parsed.lastDeliveredFingerprint : null,
+      lastResolvedAt: typeof parsed.lastResolvedAt === "string" ? parsed.lastResolvedAt : null,
+    };
+  } catch {
+    return {
+      lastDeliveredAt: null,
+      lastDeliveredFingerprint: null,
+      lastResolvedAt: null,
+    };
+  }
 }
 
 export function formatOperationalAlertsMessage(
@@ -199,4 +282,156 @@ export async function deliverOperationalAlerts(
     reason: options?.reason,
     responseStatus: response.status,
   };
+}
+
+export async function dispatchOperationalAlertsIfDue(options?: {
+  force?: boolean;
+  reason?: string;
+  source?: string;
+}): Promise<ScheduledOperationalAlertsResult> {
+  const intervalMinutes = dispatchIntervalMinutes();
+  const repeatMinutes = repeatIntervalMinutes();
+  const jobName = "operational-alert-delivery";
+  const lease = await tryAcquireJobLease({
+    jobName,
+    intervalMs: intervalMinutes * 60 * 1000,
+    leaseMs: 5 * 60 * 1000,
+  });
+
+  const summary = await getOperationalAlertsSummary();
+  const fingerprint = fingerprintAlerts(summary);
+
+  if (!lease) {
+    return {
+      delivered: false,
+      skipped: true,
+      destination: configuredDestination(),
+      alertCount: summary.alerts.length,
+      format: deliveryFormat(),
+      reason: "lease_unavailable",
+      acquiredLease: false,
+      jobName,
+      fingerprint,
+      summary,
+    };
+  }
+
+  const checkpoint = parseCheckpoint(lease.checkpointJson);
+  const now = new Date();
+  const nowIso = now.toISOString();
+
+  try {
+    const dueForRepeat =
+      checkpoint.lastDeliveredAt == null ||
+      new Date(checkpoint.lastDeliveredAt).getTime() <= now.getTime() - repeatMinutes * 60 * 1000;
+    const alertsChanged =
+      fingerprint !== null &&
+      fingerprint !== checkpoint.lastDeliveredFingerprint;
+    const shouldSendResolved =
+      summary.alerts.length === 0 &&
+      checkpoint.lastDeliveredFingerprint !== null &&
+      checkpoint.lastResolvedAt == null;
+
+    if (!options?.force && summary.alerts.length === 0 && !shouldSendResolved) {
+      const result: ScheduledOperationalAlertsResult = {
+        delivered: false,
+        skipped: true,
+        destination: configuredDestination(),
+        alertCount: 0,
+        format: deliveryFormat(),
+        reason: "no_alerts",
+        acquiredLease: true,
+        jobName,
+        fingerprint,
+        summary,
+      };
+      await releaseJobLease({
+        jobName,
+        leaseToken: lease.leaseToken,
+        success: true,
+        checkpoint: {
+          lastDeliveredAt: checkpoint.lastDeliveredAt,
+          lastDeliveredFingerprint: null,
+          lastResolvedAt: checkpoint.lastResolvedAt ?? nowIso,
+        },
+      });
+      return result;
+    }
+
+    if (
+      !options?.force &&
+      summary.alerts.length > 0 &&
+      !alertsChanged &&
+      !dueForRepeat
+    ) {
+      const result: ScheduledOperationalAlertsResult = {
+        delivered: false,
+        skipped: true,
+        destination: configuredDestination(),
+        alertCount: summary.alerts.length,
+        format: deliveryFormat(),
+        reason: "unchanged_alerts",
+        acquiredLease: true,
+        jobName,
+        fingerprint,
+        summary,
+      };
+      await releaseJobLease({
+        jobName,
+        leaseToken: lease.leaseToken,
+        success: true,
+        checkpoint: {
+          lastDeliveredAt: checkpoint.lastDeliveredAt,
+          lastDeliveredFingerprint: checkpoint.lastDeliveredFingerprint,
+          lastResolvedAt: checkpoint.lastResolvedAt,
+        },
+      });
+      return result;
+    }
+
+    const deliveryReason =
+      options?.reason ??
+      (shouldSendResolved
+        ? "alerts resolved"
+        : alertsChanged
+          ? "alert set changed"
+          : "scheduled repeat");
+    const deliveryResult = await deliverOperationalAlerts(summary, {
+      force: Boolean(options?.force || shouldSendResolved),
+      reason: deliveryReason,
+      source: options?.source ?? "scheduled_dispatch",
+    });
+
+    await releaseJobLease({
+      jobName,
+      leaseToken: lease.leaseToken,
+      success: true,
+      checkpoint: {
+        lastDeliveredAt: deliveryResult.delivered ? nowIso : checkpoint.lastDeliveredAt,
+        lastDeliveredFingerprint: fingerprint,
+        lastResolvedAt: summary.alerts.length === 0 ? nowIso : null,
+      },
+    });
+
+    return {
+      ...deliveryResult,
+      acquiredLease: true,
+      jobName,
+      fingerprint,
+      summary,
+    };
+  } catch (error) {
+    await releaseJobLease({
+      jobName,
+      leaseToken: lease.leaseToken,
+      success: false,
+      checkpoint: {
+        lastDeliveredAt: checkpoint.lastDeliveredAt,
+        lastDeliveredFingerprint: checkpoint.lastDeliveredFingerprint,
+        lastResolvedAt: checkpoint.lastResolvedAt,
+        lastErrorAt: nowIso,
+      },
+    });
+    throw error;
+  }
 }

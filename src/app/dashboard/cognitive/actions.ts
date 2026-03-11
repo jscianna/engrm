@@ -13,6 +13,7 @@ import {
   setSkillPublicationDisabled,
   updateCognitiveUserSettings,
 } from "@/lib/cognitive-db";
+import { enforceRequestThrottle } from "@/lib/request-throttle";
 
 async function requireUser(): Promise<string> {
   const { userId } = await auth();
@@ -98,6 +99,12 @@ export async function publishSkillAction(formData: FormData): Promise<void> {
 export async function updatePrivacySettingsAction(formData: FormData): Promise<void> {
   const userId = await requireUser();
   try {
+    await enforceRequestThrottle({
+      scope: "dashboard.cognitive.settings.update",
+      actorKey: userId.toLowerCase(),
+      limit: 20,
+      windowMs: 60 * 60 * 1000,
+    });
     const sharedLearningEnabled = String(formData.get("sharedLearningEnabled") ?? "") === "on";
     const benchmarkInclusionEnabled = String(formData.get("benchmarkInclusionEnabled") ?? "") === "on";
     const traceRetentionDays = Number(formData.get("traceRetentionDays") ?? 30);
@@ -125,6 +132,12 @@ export async function updatePrivacySettingsAction(formData: FormData): Promise<v
 export async function deleteCognitiveDataAction(): Promise<void> {
   const userId = await requireUser();
   try {
+    await enforceRequestThrottle({
+      scope: "dashboard.cognitive.delete",
+      actorKey: userId.toLowerCase(),
+      limit: 2,
+      windowMs: 24 * 60 * 60 * 1000,
+    });
     const result = await deleteCognitiveUserData(userId);
     await logAuditEvent({
       userId,

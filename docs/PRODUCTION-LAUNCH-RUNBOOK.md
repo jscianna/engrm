@@ -17,10 +17,13 @@ Set these before launch:
 - `OPS_ALERT_WEBHOOK_URL=<webhook endpoint>`
 - `OPS_ALERT_WEBHOOK_FORMAT=generic` or `slack`
 - `OPS_ALERT_WEBHOOK_BEARER_TOKEN=<optional webhook bearer token>`
+- `OPS_ALERT_DISPATCH_SECRET=<bearer secret for scheduled alert dispatch>` or `CRON_SECRET=<bearer secret for platform cron>`
 
 Recommended:
 
 - `CLOUDFLARE_WAF_ENABLED=true`
+- `OPS_ALERT_DISPATCH_INTERVAL_MINUTES=15`
+- `OPS_ALERT_REPEAT_MINUTES=240`
 - Clerk production keys configured for all user-facing auth paths
 - optional Clerk metadata with `role: "admin"` for admin users
 
@@ -87,6 +90,21 @@ POST /api/admin/operational-alerts
 
 If the delivery call fails, do not launch until the webhook is fixed.
 
+Confirm scheduled dispatch is configured:
+
+1. Ensure `OPS_ALERT_DISPATCH_SECRET` or `CRON_SECRET` is set
+2. Confirm `/api/admin/security-status` shows `monitoring.delivery.schedule.secretConfigured = true`
+3. If using Vercel cron, confirm `vercel.json` includes `/api/admin/operational-alerts/dispatch`
+
+Manual dispatch smoke test:
+
+```bash
+curl -H "Authorization: Bearer $OPS_ALERT_DISPATCH_SECRET" \
+  https://your-domain.com/api/admin/operational-alerts/dispatch
+```
+
+Expect a JSON response with `result.acquiredLease = true`. If it returns `lease_unavailable`, wait for the prior run to finish and retry.
+
 ## Cognitive launch gates
 
 Before launch:
@@ -105,9 +123,10 @@ Before launch:
 3. Dry-run API key scope backfill.
 4. Apply scope backfill if the candidate set is correct.
 5. Send a forced alert delivery smoke test.
-6. Run one benchmark job and verify the gate output.
-7. Watch the dashboard and admin status for heartbeat freshness and new alerts.
-8. Open traffic gradually.
+6. Trigger one scheduled alert dispatch smoke test and verify the lease/checkpoint updates.
+7. Run one benchmark job and verify the gate output.
+8. Watch the dashboard and admin status for heartbeat freshness and new alerts.
+9. Open traffic gradually.
 
 ## Rollback
 
@@ -115,6 +134,7 @@ Rollback if any of these occur:
 
 - benchmark gates fail unexpectedly
 - operational alert delivery is not working
+- scheduled alert dispatch is not acquiring or delivering correctly
 - scope enforcement blocks critical agent traffic unexpectedly
 - heartbeat jobs stop succeeding
 
@@ -141,6 +161,7 @@ Review at least once per day:
 Do not launch if any of these are true:
 
 - `OPS_ALERT_WEBHOOK_URL` is not configured
+- `OPS_ALERT_DISPATCH_SECRET` or `CRON_SECRET` is not configured
 - wildcard API keys exist without explicit owner approval
 - benchmark gates are failing
 - heartbeat jobs are stale

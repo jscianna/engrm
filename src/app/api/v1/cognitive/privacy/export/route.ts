@@ -2,12 +2,19 @@ import { validateApiKey } from "@/lib/api-auth";
 import { errorResponse } from "@/lib/errors";
 import { exportCognitiveUserData } from "@/lib/cognitive-db";
 import { logCognitiveAuditEvent } from "@/lib/cognitive-audit";
+import { enforceRequestThrottle } from "@/lib/request-throttle";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   try {
     const identity = await validateApiKey(request, "cognitive.privacy.export");
+    await enforceRequestThrottle({
+      scope: "api.cognitive.privacy.export",
+      actorKey: identity.userId.toLowerCase(),
+      limit: 5,
+      windowMs: 60 * 60 * 1000,
+    });
     const payload = await exportCognitiveUserData(identity.userId);
     await logCognitiveAuditEvent({
       request,

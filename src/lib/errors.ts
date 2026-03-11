@@ -10,6 +10,7 @@ export type ErrorCode =
   | "AUTH_FORBIDDEN"
   | "RATE_LIMIT_MINUTE"
   | "RATE_LIMIT_DAILY"
+  | "RATE_LIMIT_ACTION"
   | "QUOTA_MEMORIES"
   | "QUOTA_STORAGE"
   | "MEMORY_NOT_FOUND"
@@ -55,6 +56,11 @@ const ERROR_DETAILS: Record<ErrorCode, { status: number; message: string; userMe
     status: 429,
     message: "Daily rate limit exceeded",
     userMessage: "Daily API limit reached. Limits reset at midnight UTC.",
+  },
+  RATE_LIMIT_ACTION: {
+    status: 429,
+    message: "Action rate limit exceeded",
+    userMessage: "Too many sensitive requests. Wait a bit and try again.",
   },
   QUOTA_MEMORIES: {
     status: 403,

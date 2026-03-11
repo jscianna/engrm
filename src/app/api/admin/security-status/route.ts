@@ -11,14 +11,31 @@ import { assertAdminAccess } from "@/lib/admin-auth";
 import { getOperationalAlertDeliveryConfig } from "@/lib/alert-delivery";
 import { getApiKeyScopeMigrationStatus } from "@/lib/db";
 import { getOperationalAlertsSummary } from "@/lib/operational-alerts";
+import { buildThrottleActorKey, enforceRequestThrottle } from "@/lib/request-throttle";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
+  let identity;
   try {
-    await assertAdminAccess(request);
+    identity = await assertAdminAccess(request);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    await enforceRequestThrottle({
+      scope: "admin.security-status.read",
+      actorKey: buildThrottleActorKey({
+        actorKey: identity.userId ?? identity.email,
+        request,
+        prefix: "admin",
+      }),
+      limit: 60,
+      windowMs: 10 * 60 * 1000,
+    });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Too many requests" }, { status: 429 });
   }
 
   const qdrantStatus = getQdrantStatus();
@@ -144,6 +161,7 @@ export async function GET(request: Request) {
       apiKeyScopeStatus.legacyKeysMissingScopes > 0 && "Backfill legacy API keys with explicit scopes",
       apiKeyScopeStatus.revocableWildcardKeys > 0 && "Rotate or scope down wildcard API keys before launch",
       !alertDelivery.configured && "Configure OPS_ALERT_WEBHOOK_URL before launch so critical alerts can be delivered",
+      !alertDelivery.schedule.secretConfigured && "Configure an operational alert dispatch secret before enabling automated delivery",
       operationalAlerts.alerts.length > 0 && "Clear current operational alerts before launch",
     ].filter(Boolean),
   };

@@ -2,6 +2,7 @@ import { validateApiKey } from "@/lib/api-auth";
 import { errorResponse } from "@/lib/errors";
 import { getCognitiveUserSettings, updateCognitiveUserSettings } from "@/lib/cognitive-db";
 import { logCognitiveAuditEvent } from "@/lib/cognitive-audit";
+import { enforceRequestThrottle } from "@/lib/request-throttle";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,12 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const identity = await validateApiKey(request, "cognitive.settings.update");
+    await enforceRequestThrottle({
+      scope: "api.cognitive.settings.update",
+      actorKey: identity.userId.toLowerCase(),
+      limit: 20,
+      windowMs: 60 * 60 * 1000,
+    });
     const body = await request.json().catch(() => ({}));
     const settings = await updateCognitiveUserSettings({
       userId: identity.userId,

@@ -172,6 +172,7 @@ export interface CognitiveJobLease {
   leaseExpiresAt: string;
   lastRunAt: string | null;
   lastSuccessAt: string | null;
+  checkpointJson?: string | null;
 }
 
 export interface CreateTraceInput {
@@ -3981,6 +3982,7 @@ export async function tryAcquireJobLease(params: {
     leaseExpiresAt,
     lastRunAt: row?.last_run_at as string | null ?? null,
     lastSuccessAt: row?.last_success_at as string | null ?? null,
+    checkpointJson: row?.checkpoint_json as string | null ?? null,
   };
 }
 

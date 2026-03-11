@@ -7,6 +7,7 @@ import { deliverOperationalAlerts } from "@/lib/alert-delivery";
 import { extractRequestInfo, logAuditEvent } from "@/lib/audit-log";
 import { backfillApiKeyScopes } from "@/lib/db";
 import { getOperationalAlertsSummary } from "@/lib/operational-alerts";
+import { enforceRequestThrottle } from "@/lib/request-throttle";
 
 function buildRedirect(target: string, key: "notice" | "error", value: string): never {
   const searchParams = new URLSearchParams({ [key]: value });
@@ -16,6 +17,12 @@ function buildRedirect(target: string, key: "notice" | "error", value: string): 
 export async function sendOperationalAlertTestAction(): Promise<void> {
   const identity = await assertAdminViewer();
   try {
+    await enforceRequestThrottle({
+      scope: "dashboard.admin.operational-alerts.send",
+      actorKey: (identity.userId ?? identity.email ?? "__admin__").toLowerCase(),
+      limit: 3,
+      windowMs: 60 * 60 * 1000,
+    });
     const summary = await getOperationalAlertsSummary();
     const result = await deliverOperationalAlerts(summary, {
       force: true,
@@ -49,6 +56,12 @@ export async function sendOperationalAlertTestAction(): Promise<void> {
 export async function applyApiKeyBackfillAction(): Promise<void> {
   const identity = await assertAdminViewer();
   try {
+    await enforceRequestThrottle({
+      scope: "dashboard.admin.api-key-backfill",
+      actorKey: (identity.userId ?? identity.email ?? "__admin__").toLowerCase(),
+      limit: 3,
+      windowMs: 60 * 60 * 1000,
+    });
     const result = await backfillApiKeyScopes({
       dryRun: false,
     });

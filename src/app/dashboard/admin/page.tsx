@@ -184,6 +184,8 @@ export default async function AdminDashboardPage({
             <p><span className="text-zinc-500">Format:</span> {delivery.format}</p>
             <p><span className="text-zinc-500">Destination:</span> {delivery.destination ?? "Missing OPS_ALERT_WEBHOOK_URL"}</p>
             <p><span className="text-zinc-500">Auth:</span> {delivery.hasBearerToken ? "Bearer token configured" : "No bearer token"}</p>
+            <p><span className="text-zinc-500">Schedule:</span> every {delivery.schedule.intervalMinutes} min, repeat every {delivery.schedule.repeatMinutes} min</p>
+            <p><span className="text-zinc-500">Dispatch secret:</span> {delivery.schedule.secretConfigured ? "Configured" : "Missing dispatch secret"}</p>
           </CardContent>
         </Card>
       </section>
