@@ -507,6 +507,8 @@ async function ensureSynthesizedMemoriesColumns(client: Client): Promise<void> {
     { name: "created_at", ddl: "TEXT NOT NULL DEFAULT ''" },
     // Decentralized graph model: abstraction level (1=first-order synthesis, 2+=meta-synthesis)
     { name: "abstraction_level", ddl: "INTEGER DEFAULT 1" },
+    { name: "synthesis_quality_score", ddl: "REAL" },
+    { name: "synthesis_metadata", ddl: "TEXT" },
   ];
 
   const tableInfo = await client.execute("PRAGMA table_info(synthesized_memories)");
@@ -1709,6 +1711,8 @@ function mapSynthesizedMemoryRow(row: Record<string, unknown>): SynthesizedMemor
     accessCount: Number(row.access_count ?? 0),
     createdAt: row.created_at as string,
     abstractionLevel: Number(row.abstraction_level ?? 1),
+    synthesisQualityScore: row.synthesis_quality_score === null ? undefined : Number(row.synthesis_quality_score),
+    synthesisMetadata: row.synthesis_metadata ? JSON.parse(row.synthesis_metadata as string) : undefined,
   };
 }
 

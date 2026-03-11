@@ -159,4 +159,6 @@ export type SynthesizedMemoryRecord = {
   abstractionLevel: number;
   /** Quality score from LLM self-assessment (0.0-1.0) */
   synthesisQualityScore?: number;
+  /** JSON metadata storing patterns, decisions, constraints, guidance */
+  synthesisMetadata?: Record<string, unknown>;
 };
