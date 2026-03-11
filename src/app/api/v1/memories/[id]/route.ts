@@ -2,6 +2,7 @@ import { deleteAgentMemoryById, getAgentMemoryById, updateAgentMemory } from "@/
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { recordMemoryDeleted } from "@/lib/rate-limiter";
+import { assertPreActionRecall } from "@/lib/pre-action-recall";
 
 export const runtime = "nodejs";
 
@@ -64,6 +65,7 @@ export async function DELETE(
 ) {
   try {
     const identity = await validateApiKey(request, "memories.delete");
+    assertPreActionRecall(request, "memories.delete");
     const { id } = await context.params;
     
     // Get memory first to know the size

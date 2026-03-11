@@ -28,6 +28,12 @@ import { parseTemporalQuery, applyTemporalBoost } from "@/lib/temporal";
 import { rerankMemories } from "@/lib/reranker";
 import { localRetrieve, localStoreResult, recordShadowSample } from "@/lib/local-retrieval";
 import { isInEdgeRollout } from "@/lib/edge-rollout";
+import {
+  computeCompactionRiskScore,
+  estimateFlushQuality,
+  countMissingConstraints,
+  recordCompactionSafetySample,
+} from "@/lib/compaction-safety";
 import type { MemoryRecord } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -457,6 +463,21 @@ export async function POST(request: Request) {
       }
     }
 
+    const hasDurableMemories = [...criticalMemories, ...dedupedRelevant].some(
+      (m) => m.durabilityClass === "durable",
+    );
+    const compactionRiskScore = computeCompactionRiskScore({
+      messageLength: message.length,
+      criticalCount: criticalMemories.length,
+      relevantCount: dedupedRelevant.length,
+      edgeEnabled: enableEdgeFirst,
+    });
+    const flushQuality = estimateFlushQuality({
+      hasCritical: criticalMemories.length > 0,
+      hasDurableMemories,
+      relevantCount: dedupedRelevant.length,
+    });
+
     // Build formatted context string
     const lines: string[] = [];
     
@@ -489,6 +510,21 @@ export async function POST(request: Request) {
     }
 
     const context = lines.join("\n");
+
+    const constraintRegex = /\b(must|never|always|do not|don't|cannot|can't)\b/i;
+    const beforeConstraints = [...criticalMemories, ...dedupedRelevant]
+      .map((m) => m.text)
+      .filter((t) => constraintRegex.test(t));
+    const afterConstraints = context
+      .split("\n")
+      .filter((line) => constraintRegex.test(line));
+    const missingConstraints = countMissingConstraints(beforeConstraints, afterConstraints);
+
+    recordCompactionSafetySample({
+      riskScore: compactionRiskScore,
+      flushQuality,
+      missingConstraints,
+    });
 
     // Record injection event for analytics (non-blocking)
     const allInjectedIds = [
@@ -537,6 +573,10 @@ export async function POST(request: Request) {
       headers["X-FatHippo-Hosted-Candidates"] = String(hostedCandidateCount);
       recordShadowSample(shadowOverlapAtK);
     }
+
+    headers["X-FatHippo-Compaction-Risk"] = compactionRiskScore.toFixed(4);
+    headers["X-FatHippo-Flush-Quality"] = flushQuality.toFixed(4);
+    headers["X-FatHippo-Constraint-Diff-Missing"] = String(missingConstraints);
 
     return new Response(context, {
       status: 200,

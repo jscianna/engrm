@@ -6,6 +6,7 @@ import type {
   MemoryGraphEdge,
   MemoryGraphNode,
   MemoryImportanceTier,
+  MemoryDurabilityClass,
   MemoryKind,
   MemoryListItem,
   MemoryRecord,
@@ -433,6 +434,7 @@ async function ensureMemoriesColumns(client: Client): Promise<void> {
     { name: "content_mac", ddl: "TEXT" },  // HMAC-SHA256 for content integrity
     { name: "tags_json", ddl: "TEXT" },  // JSON array of user tags
     { name: "importance_tier", ddl: "TEXT DEFAULT 'normal'" },  // critical/working/high/normal
+    { name: "durability_class", ddl: "TEXT DEFAULT 'working'" },  // ephemeral/working/durable
     { name: "promotion_locked", ddl: "INTEGER DEFAULT 0" },  // Prevents auto-demotion of manually set tiers
     { name: "locked_tier", ddl: "TEXT" },  // Lock memory at specific tier (prevents promotion/demotion)
     { name: "decay_immune", ddl: "INTEGER DEFAULT 0" },  // If 1, memory is immune to automatic decay
@@ -706,6 +708,7 @@ export type AgentMemoryRecord = {
   sourceType: MemorySourceType;
   memoryType: MemoryKind;
   importanceTier: MemoryImportanceTier;
+  durabilityClass?: MemoryDurabilityClass;
   sourceUrl: string | null;
   fileName: string | null;
   metadata: Record<string, unknown> | null;
@@ -741,6 +744,17 @@ export type RetrievalEvaluationRecord = {
   updatedAt: string | null;
 };
 
+function deriveDurabilityClass(row: Record<string, unknown>): MemoryDurabilityClass {
+  const explicit = row.durability_class as MemoryDurabilityClass | undefined;
+  if (explicit === "ephemeral" || explicit === "working" || explicit === "durable") {
+    return explicit;
+  }
+  const tier = (row.importance_tier as MemoryImportanceTier) ?? "normal";
+  if (tier === "critical") return "durable";
+  if (tier === "normal") return "ephemeral";
+  return "working";
+}
+
 function mapRow(row: Record<string, unknown>): MemoryRecord {
   const entities = parseJsonStringArray((row.entities as string | null) ?? row.entities_json);
   const userId = row.user_id as string;
@@ -756,6 +770,7 @@ function mapRow(row: Record<string, unknown>): MemoryRecord {
     memoryType: (row.memory_type as MemoryKind) ?? "episodic",
     importance: (row.importance as number) ?? 5,
     importanceTier: (row.importance_tier as MemoryImportanceTier) ?? "normal",
+    durabilityClass: deriveDurabilityClass(row),
     tags: parseTags((row.tags_csv as string) ?? ""),
     sourceUrl: row.source_url as string | null,
     fileName: row.file_name as string | null,
@@ -1757,6 +1772,7 @@ function mapAgentMemoryRow(row: Record<string, unknown>): AgentMemoryRecord {
     sourceType: (row.source_type as MemorySourceType) ?? "text",
     memoryType: (row.memory_type as MemoryKind) ?? "episodic",
     importanceTier: (row.importance_tier as MemoryImportanceTier) ?? "normal",
+    durabilityClass: deriveDurabilityClass(row),
     sourceUrl: (row.source_url as string | null) ?? null,
     fileName: (row.file_name as string | null) ?? null,
     metadata: parseJsonObject(row.metadata_json),
@@ -4072,6 +4088,20 @@ export async function incrementAccessCounts(userId: string, memoryIds: string[])
       WHERE user_id = ? AND id IN (${placeholders})
     `,
     args: [now, userId, ...memoryIds],
+  });
+
+  await client.execute({
+    sql: `
+      UPDATE memories
+      SET durability_class = CASE
+        WHEN access_count >= 10 OR importance_tier = 'critical' THEN 'durable'
+        WHEN access_count >= 3 OR importance_tier IN ('working','high') THEN 'working'
+        ELSE 'ephemeral'
+      END
+      WHERE user_id = ? AND id IN (${placeholders})
+        AND archived_at IS NULL
+    `,
+    args: [userId, ...memoryIds],
   });
 }
 

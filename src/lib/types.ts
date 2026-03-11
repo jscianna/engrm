@@ -20,6 +20,7 @@ export type MemoryKind =
   | "decision";
 export type MemorySyncStatus = "pending" | "synced" | "failed";
 export type MemoryImportanceTier = "critical" | "working" | "high" | "normal";
+export type MemoryDurabilityClass = "ephemeral" | "working" | "durable";
 export type MemoryRelationshipType =
   | "similar"
   | "updates"
@@ -73,6 +74,7 @@ export type MemoryRecord = {
   memoryType: MemoryKind;
   importance: number;
   importanceTier: MemoryImportanceTier;
+  durabilityClass?: MemoryDurabilityClass;
   tags: string[];
   sourceUrl: string | null;
   fileName: string | null;
