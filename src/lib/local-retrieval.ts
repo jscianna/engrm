@@ -10,10 +10,32 @@ type CacheEntry = {
   updatedAt: number;
 };
 
+export type LocalRetrievalMetrics = {
+  lookups: number;
+  hits: number;
+  misses: number;
+  directHits: number;
+  fuzzyHits: number;
+  stores: number;
+  evictions: number;
+  hitRate: number;
+  users: number;
+  entries: number;
+};
+
 const MAX_ENTRIES_PER_USER = 200;
 const TTL_MS = 15 * 60 * 1000;
 
 const cache = new Map<string, Map<string, CacheEntry>>();
+const metrics = {
+  lookups: 0,
+  hits: 0,
+  misses: 0,
+  directHits: 0,
+  fuzzyHits: 0,
+  stores: 0,
+  evictions: 0,
+};
 
 function normalizeQuery(query: string): string {
   return query.toLowerCase().trim().replace(/\s+/g, " ");
@@ -44,14 +66,28 @@ function getUserCache(userId: string): Map<string, CacheEntry> {
   return created;
 }
 
+function calibrateConfidence(similarity: number, ageMs: number, base = 0.85): number {
+  const agePenalty = Math.min(0.2, ageMs / TTL_MS / 5);
+  const score = base * 0.5 + similarity * 0.5 - agePenalty;
+  return Math.max(0.6, Math.min(0.98, score));
+}
+
 export async function localRetrieve(query: string, userId: string): Promise<LocalRetrievalResult> {
+  metrics.lookups += 1;
+
   const userCache = getUserCache(userId);
   const key = normalizeQuery(query);
   const now = Date.now();
 
   const direct = userCache.get(key);
   if (direct && now - direct.updatedAt <= TTL_MS) {
-    return { hit: true, memoryIds: direct.memoryIds, confidence: direct.confidence };
+    metrics.hits += 1;
+    metrics.directHits += 1;
+    return {
+      hit: true,
+      memoryIds: direct.memoryIds,
+      confidence: calibrateConfidence(1, now - direct.updatedAt, direct.confidence),
+    };
   }
 
   const qTokens = tokenize(query);
@@ -60,6 +96,7 @@ export async function localRetrieve(query: string, userId: string): Promise<Loca
   for (const [k, entry] of userCache.entries()) {
     if (now - entry.updatedAt > TTL_MS) {
       userCache.delete(k);
+      metrics.evictions += 1;
       continue;
     }
     const score = jaccard(qTokens, tokenize(k));
@@ -71,17 +108,22 @@ export async function localRetrieve(query: string, userId: string): Promise<Loca
 
   if (bestKey && bestScore >= 0.72) {
     const best = userCache.get(bestKey)!;
+    metrics.hits += 1;
+    metrics.fuzzyHits += 1;
     return {
       hit: true,
       memoryIds: best.memoryIds,
-      confidence: Math.max(0.8, Math.min(0.95, bestScore)),
+      confidence: calibrateConfidence(bestScore, now - best.updatedAt, best.confidence),
     };
   }
 
+  metrics.misses += 1;
   return { hit: false, memoryIds: [], confidence: 0 };
 }
 
 export function localStoreResult(userId: string, query: string, memoryIds: string[], confidence = 0.85): void {
+  metrics.stores += 1;
+
   const userCache = getUserCache(userId);
   const key = normalizeQuery(query);
   userCache.set(key, {
@@ -93,6 +135,21 @@ export function localStoreResult(userId: string, query: string, memoryIds: strin
   if (userCache.size > MAX_ENTRIES_PER_USER) {
     const entries = [...userCache.entries()].sort((a, b) => a[1].updatedAt - b[1].updatedAt);
     const removeCount = userCache.size - MAX_ENTRIES_PER_USER;
-    for (let i = 0; i < removeCount; i += 1) userCache.delete(entries[i][0]);
+    for (let i = 0; i < removeCount; i += 1) {
+      userCache.delete(entries[i][0]);
+      metrics.evictions += 1;
+    }
   }
+}
+
+export function getLocalRetrievalMetrics(): LocalRetrievalMetrics {
+  let totalEntries = 0;
+  for (const userCache of cache.values()) totalEntries += userCache.size;
+
+  return {
+    ...metrics,
+    hitRate: metrics.lookups > 0 ? Number((metrics.hits / metrics.lookups).toFixed(4)) : 0,
+    users: cache.size,
+    entries: totalEntries,
+  };
 }

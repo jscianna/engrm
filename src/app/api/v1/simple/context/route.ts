@@ -143,8 +143,10 @@ export async function POST(request: Request) {
     // Edge-first retrieval: try local cache before expensive hybrid search
     let edgeHit = false;
     let edgeMemoryIds: string[] = [];
+    let edgeConfidence = 0;
     if (enableEdgeFirst) {
       const localResult = await localRetrieve(message, identity.userId);
+      edgeConfidence = localResult.confidence;
       edgeHit = localResult.hit && localResult.confidence >= 0.8;
       if (edgeHit) {
         edgeMemoryIds = localResult.memoryIds;
@@ -458,6 +460,7 @@ export async function POST(request: Request) {
     if (enableEdgeFirst) {
       headers["X-FatHippo-Edge-First"] = "on";
       headers["X-FatHippo-Edge-Hit"] = edgeHit ? "true" : "false";
+      headers["X-FatHippo-Edge-Confidence"] = edgeConfidence.toFixed(3);
     }
 
     return new Response(context, {
