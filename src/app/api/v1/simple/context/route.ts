@@ -223,6 +223,7 @@ export async function POST(request: Request) {
       sourceType: "text" as const,
       memoryType: "semantic" as const,
       importanceTier: "critical" as const,
+      durabilityClass: "durable" as const,
       sourceUrl: null,
       fileName: null,
       metadata: null,
