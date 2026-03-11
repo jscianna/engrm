@@ -59,4 +59,34 @@ describe("api key scopes", () => {
       code: "AUTH_FORBIDDEN",
     });
   });
+
+  it("does not include destructive privacy scopes in default API keys", async () => {
+    const { apiKey, scopes } = await db.createApiKey("user-default-scope-test", "Default agent");
+
+    expect(scopes).not.toContain("cognitive.privacy.export");
+    expect(scopes).not.toContain("cognitive.privacy.delete");
+    expect(scopes).not.toContain("cognitive.settings.update");
+    expect(scopes).not.toContain("cognitive.settings.*");
+    expect(scopes).toContain("cognitive.settings.get");
+
+    const exportRequest = new Request("http://localhost/api/v1/cognitive/privacy/export", {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+
+    await expect(apiAuth.validateApiKey(exportRequest, "cognitive.privacy.export")).rejects.toMatchObject({
+      code: "AUTH_FORBIDDEN",
+    });
+
+    const updateSettingsRequest = new Request("http://localhost/api/v1/cognitive/settings", {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+
+    await expect(apiAuth.validateApiKey(updateSettingsRequest, "cognitive.settings.update")).rejects.toMatchObject({
+      code: "AUTH_FORBIDDEN",
+    });
+  });
 });

@@ -16,7 +16,6 @@ export default async function SettingsPage() {
     email: primaryEmail,
     publicMetadata: user?.publicMetadata,
     privateMetadata: user?.privateMetadata,
-    unsafeMetadata: user?.unsafeMetadata,
   });
 
   return (

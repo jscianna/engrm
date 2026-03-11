@@ -33,11 +33,14 @@ export async function deprecatePatternAction(formData: FormData): Promise<void> 
   if (!patternId) {
     return;
   }
-  await setPatternStatus({
+  const updated = await setPatternStatus({
     userId,
     patternId,
     status: "deprecated",
   });
+  if (!updated) {
+    redirectWithMessage("/dashboard/cognitive", "error", "Pattern not found or not editable.");
+  }
   revalidatePath("/dashboard/cognitive");
 }
 
@@ -47,7 +50,10 @@ export async function refreshSkillAction(formData: FormData): Promise<void> {
   if (!skillId) {
     return;
   }
-  await refreshSkillDraftById({ userId, skillId });
+  const refreshed = await refreshSkillDraftById({ userId, skillId });
+  if (!refreshed) {
+    redirectWithMessage("/dashboard/cognitive", "error", "Skill not found or not editable.");
+  }
   revalidatePath("/dashboard/cognitive");
 }
 

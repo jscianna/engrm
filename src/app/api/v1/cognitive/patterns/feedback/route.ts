@@ -34,13 +34,18 @@ export async function POST(request: Request) {
       throw new MemryError("VALIDATION_ERROR", { field: "outcome", reason: "must be 'success' or 'failure'" });
     }
     
-    await updatePatternFeedback({
+    const updated = await updatePatternFeedback({
       userId: identity.userId,
       patternId,
       traceId,
       outcome,
       notes: typeof body.notes === "string" ? body.notes : null,
     });
+    if (!updated) {
+      throw new MemryError("AUTH_FORBIDDEN", {
+        reason: "pattern_or_trace_not_accessible",
+      });
+    }
 
     await logCognitiveAuditEvent({
       request,
@@ -55,7 +60,7 @@ export async function POST(request: Request) {
     });
     
     return Response.json({
-      updated: true,
+      updated,
       patternId,
       traceId,
       outcome,

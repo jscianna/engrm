@@ -801,14 +801,6 @@ export async function getCognitiveUserSettings(userId: string): Promise<Cognitiv
   await ensureInitialized();
   const client = getDb();
   const now = new Date().toISOString();
-  await client.execute({
-    sql: `
-      INSERT INTO cognitive_user_settings (user_id, shared_learning_enabled, benchmark_inclusion_enabled, trace_retention_days, updated_at)
-      VALUES (?, 0, 0, 30, ?)
-      ON CONFLICT(user_id) DO NOTHING
-    `,
-    args: [userId, now],
-  });
   const result = await client.execute({
     sql: `
       SELECT user_id, shared_learning_enabled, benchmark_inclusion_enabled, trace_retention_days, updated_at
@@ -1276,6 +1268,8 @@ export async function cleanupExpiredCognitiveData(params?: {
     .filter((value): value is string => typeof value === "string" && value.length > 0);
 
   const touchedGlobalPatternIds = new Set<string>();
+  const touchedApplicationPatternIds = new Set<string>();
+  const touchedSkillIds = new Set<string>();
   let tracesDeleted = 0;
   let applicationsDeleted = 0;
   let patternMatchesDeleted = 0;
@@ -1314,6 +1308,24 @@ export async function cleanupExpiredCognitiveData(params?: {
         if (typeof row.pattern_id === "string") {
           touchedGlobalPatternIds.add(row.pattern_id);
         }
+      }
+    }
+
+    const affectedApplicationEntities = await client.execute({
+      sql: `
+        SELECT DISTINCT p.entity_type, p.entity_id
+        FROM pattern_applications p
+        JOIN cognitive_applications a ON a.id = p.application_id
+        WHERE a.user_id = ? AND a.created_at < ?
+      `,
+      args: [userId, traceCutoff],
+    });
+    for (const row of affectedApplicationEntities.rows) {
+      if (row.entity_type === "pattern" && typeof row.entity_id === "string") {
+        touchedApplicationPatternIds.add(row.entity_id);
+      }
+      if (row.entity_type === "skill" && typeof row.entity_id === "string") {
+        touchedSkillIds.add(row.entity_id);
       }
     }
 
@@ -1366,9 +1378,12 @@ export async function cleanupExpiredCognitiveData(params?: {
     localSkillsDeleted += pruned.skillsDeleted;
   }
 
-  const globalSkillIds = await getSkillIdsForPatternIds([...touchedGlobalPatternIds]);
-  await recomputePatternStats([...touchedGlobalPatternIds]);
-  await recomputeSkillStats(globalSkillIds);
+  const patternIdsToRefresh = Array.from(new Set([...touchedGlobalPatternIds, ...touchedApplicationPatternIds]));
+  const derivedSkillIds = await getSkillIdsForPatternIds(patternIdsToRefresh);
+  const derivedGlobalSkillIds = await getSkillIdsForPatternIds([...touchedGlobalPatternIds]);
+  const skillIdsToRefresh = Array.from(new Set([...touchedSkillIds, ...derivedSkillIds]));
+  await recomputePatternStats(patternIdsToRefresh);
+  await recomputeSkillStats(skillIdsToRefresh);
 
   return {
     cleanedAt,
@@ -1381,7 +1396,7 @@ export async function cleanupExpiredCognitiveData(params?: {
     localPatternsDeleted,
     localSkillsDeleted,
     globalPatternsRefreshed: touchedGlobalPatternIds.size,
-    globalSkillsRefreshed: globalSkillIds.length,
+    globalSkillsRefreshed: derivedGlobalSkillIds.length,
   };
 }
 
@@ -2138,7 +2153,7 @@ export async function updatePatternFeedback(params: {
   traceId: string;
   outcome: "success" | "failure";
   notes?: string | null;
-}): Promise<void> {
+}): Promise<boolean> {
   await ensureInitialized();
   const client = getDb();
   const now = new Date().toISOString();
@@ -2153,7 +2168,7 @@ export async function updatePatternFeedback(params: {
     args: [params.patternId, params.userId],
   });
   if (!patternResult.rows[0]) {
-    return;
+    return false;
   }
 
   const traceResult = await client.execute({
@@ -2166,7 +2181,7 @@ export async function updatePatternFeedback(params: {
     args: [params.traceId, params.userId],
   });
   if (!traceResult.rows[0]) {
-    return;
+    return false;
   }
 
   const existingMatch = await client.execute({
@@ -2214,6 +2229,7 @@ export async function updatePatternFeedback(params: {
   }
 
   await recomputePatternStats([params.patternId]);
+  return true;
 }
 
 export async function getSkillCandidates(userId: string): Promise<Pattern[]> {
@@ -2995,22 +3011,26 @@ async function recomputePatternImpactStats(patternIds: string[]): Promise<void> 
     const stats = await client.execute({
       sql: `
         SELECT
-               CASE
-                 WHEN a.accepted_pattern_id = ? OR a.materialized_pattern_id = ? THEN 1
-                 ELSE 0
-               END as accepted,
+               p.accepted as accepted,
                a.final_outcome,
-               CASE WHEN m.match_source = 'explicit_feedback' AND m.explicit_outcome = 'failure' THEN 1 ELSE 0 END as explicit_negative,
+               COALESCE(feedback.explicit_negative, 0) as explicit_negative,
                a.time_to_resolution_ms,
                a.retry_count,
                a.verification_summary_json,
                a.baseline_snapshot_json
-        FROM trace_pattern_matches m
-        JOIN coding_traces t ON t.id = m.trace_id
-        LEFT JOIN cognitive_applications a ON a.trace_id = t.id
-        WHERE m.pattern_id = ?
+        FROM pattern_applications p
+        LEFT JOIN cognitive_applications a ON a.id = p.application_id
+        LEFT JOIN (
+          SELECT
+            trace_id,
+            MAX(CASE WHEN explicit_outcome = 'failure' THEN 1 ELSE 0 END) as explicit_negative
+          FROM trace_pattern_matches
+          WHERE pattern_id = ?
+          GROUP BY trace_id
+        ) feedback ON feedback.trace_id = a.trace_id
+        WHERE p.entity_type = 'pattern' AND p.entity_id = ?
       `,
-      args: [patternId, patternId, patternId],
+      args: [patternId, patternId],
     });
     const impact = summarizeEntityImpact(stats.rows.map((row) => applicationObservation(row as Record<string, unknown>)));
     await client.execute({
@@ -3270,7 +3290,11 @@ export async function updateApplicationOutcome(params: {
     await client.execute({
       sql: `
         UPDATE pattern_applications
-        SET accepted = CASE WHEN entity_type = 'trace' AND entity_id = ? THEN 1 ELSE accepted END,
+        SET accepted = CASE
+              WHEN entity_type = 'trace' AND entity_id = ? THEN 1
+              WHEN entity_type = 'trace' THEN 0
+              ELSE accepted
+            END,
             updated_at = ?
         WHERE application_id = ? AND user_id = ?
       `,
@@ -3282,7 +3306,11 @@ export async function updateApplicationOutcome(params: {
     await client.execute({
       sql: `
         UPDATE pattern_applications
-        SET accepted = CASE WHEN entity_type = 'pattern' AND entity_id = ? THEN 1 ELSE accepted END,
+        SET accepted = CASE
+              WHEN entity_type = 'pattern' AND entity_id = ? THEN 1
+              WHEN entity_type = 'pattern' THEN 0
+              ELSE accepted
+            END,
             updated_at = ?
         WHERE application_id = ? AND user_id = ?
       `,
@@ -3303,7 +3331,11 @@ export async function updateApplicationOutcome(params: {
     await client.execute({
       sql: `
         UPDATE pattern_applications
-        SET accepted = CASE WHEN entity_type = 'skill' AND entity_id = ? THEN 1 ELSE accepted END,
+        SET accepted = CASE
+              WHEN entity_type = 'skill' AND entity_id = ? THEN 1
+              WHEN entity_type = 'skill' THEN 0
+              ELSE accepted
+            END,
             updated_at = ?
         WHERE application_id = ? AND user_id = ?
       `,
@@ -3429,18 +3461,19 @@ export async function setPatternStatus(params: {
   userId: string;
   patternId: string;
   status: string;
-}): Promise<void> {
+}): Promise<boolean> {
   await ensureInitialized();
   const client = getDb();
   const now = new Date().toISOString();
-  await client.execute({
+  const result = await client.execute({
     sql: `
       UPDATE cognitive_patterns
       SET status = ?, updated_at = ?
-      WHERE id = ? AND (user_id = ? OR scope = 'global' OR user_id IS NULL)
+      WHERE id = ? AND user_id = ? AND scope = 'local'
     `,
     args: [params.status, now, params.patternId, params.userId],
   });
+  return (result.rowsAffected ?? 0) > 0;
 }
 
 export async function refreshSkillDraftById(params: {
@@ -3453,7 +3486,7 @@ export async function refreshSkillDraftById(params: {
     sql: `
       SELECT *
       FROM synthesized_skills
-      WHERE id = ? AND (user_id = ? OR scope = 'global' OR user_id IS NULL)
+      WHERE id = ? AND user_id = ? AND scope = 'local'
       LIMIT 1
     `,
     args: [params.skillId, params.userId],

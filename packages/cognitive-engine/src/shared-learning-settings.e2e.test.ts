@@ -26,9 +26,23 @@ describe("shared learning settings", () => {
 
   it("defaults shared learning off and only marks traces share-eligible after opt-in", async () => {
     const userId = "user-settings";
+    const client = turso.getDb();
+    await cognitiveDb.getPatterns(userId);
+
+    const beforeRows = await client.execute({
+      sql: `SELECT COUNT(*) AS count FROM cognitive_user_settings WHERE user_id = ?`,
+      args: [userId],
+    });
+    expect(Number(beforeRows.rows[0]?.count ?? 0)).toBe(0);
 
     const initial = await cognitiveDb.getCognitiveUserSettings(userId);
     expect(initial.sharedLearningEnabled).toBe(false);
+
+    const afterReadRows = await client.execute({
+      sql: `SELECT COUNT(*) AS count FROM cognitive_user_settings WHERE user_id = ?`,
+      args: [userId],
+    });
+    expect(Number(afterReadRows.rows[0]?.count ?? 0)).toBe(0);
 
     const privateTrace = await cognitiveDb.createTrace({
       userId,
@@ -116,5 +130,48 @@ describe("shared learning settings", () => {
     expect(globalPattern).toBeTruthy();
     expect(globalPattern?.sharedSignature).toBeNull();
     expect(globalPattern?.sourceTraceIdsJson).toBe("[]");
+  });
+
+  it("does not let a regular user mutate global patterns or refresh global skills", async () => {
+    const ownerUserId = "user-global-owner";
+    const otherUserId = "user-global-other";
+
+    const globalPattern = await cognitiveDb.createPattern({
+      scope: "global",
+      domain: "nextjs-auth-loop",
+      trigger: {
+        keywords: ["redirect loop", "middleware"],
+        technologies: ["nextjs", "clerk"],
+      },
+      approach: "Keep auth callback routes outside the protected matcher.",
+      steps: ["Inspect matcher", "Exclude callback routes", "Re-run tests"],
+      pitfalls: ["Protecting the auth callback route itself"],
+      confidence: 0.93,
+      successCount: 6,
+      failCount: 0,
+      sourceTraceIds: [],
+      sourceTraceCount: 6,
+      status: "active_global",
+    });
+
+    const updated = await cognitiveDb.setPatternStatus({
+      userId: otherUserId,
+      patternId: globalPattern.id,
+      status: "deprecated",
+    });
+    expect(updated).toBe(false);
+
+    const refreshedPattern = (await cognitiveDb.getPatterns(otherUserId)).find((pattern) => pattern.id === globalPattern.id);
+    expect(refreshedPattern?.status).toBe("active_global");
+
+    const synthesized = await cognitiveDb.synthesizeEligibleSkills({ userId: ownerUserId });
+    const globalSkill = synthesized.find((skill) => skill.scope === "global");
+    expect(globalSkill).toBeTruthy();
+
+    const refreshedSkill = await cognitiveDb.refreshSkillDraftById({
+      userId: otherUserId,
+      skillId: globalSkill!.id,
+    });
+    expect(refreshedSkill).toBeNull();
   });
 });

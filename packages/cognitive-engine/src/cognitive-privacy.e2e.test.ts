@@ -105,6 +105,112 @@ describe("cognitive privacy controls", () => {
     expect(afterDelete.settings.traceRetentionDays).toBe(30);
   });
 
+  it("recomputes pattern impact when old applications are deleted by retention cleanup", async () => {
+    const userId = "user-retention-impact";
+    await cognitiveDb.updateCognitiveUserSettings({
+      userId,
+      sharedLearningEnabled: false,
+      benchmarkInclusionEnabled: false,
+      traceRetentionDays: 365,
+    });
+
+    const trace = await cognitiveDb.createTrace({
+      userId,
+      sessionId: "sess-retention-impact",
+      type: "debugging",
+      problem: "Middleware auth loop needs known pattern",
+      context: {
+        technologies: ["nextjs", "clerk"],
+        files: ["middleware.ts"],
+      },
+      reasoning: "Created to test retention cleanup stat recompute.",
+      approaches: [],
+      solution: "Use the stable auth middleware matcher.",
+      outcome: "success",
+      automatedOutcome: "success",
+      automatedSignals: { strongestSuccessSignal: "tests passed" },
+      toolsUsed: ["npm test"],
+      filesModified: ["middleware.ts"],
+      durationMs: 60000,
+      sanitized: true,
+    });
+
+    const pattern = await cognitiveDb.createPattern({
+      userId,
+      scope: "local",
+      domain: "nextjs-auth",
+      trigger: {
+        keywords: ["middleware", "auth"],
+        technologies: ["nextjs", "clerk"],
+      },
+      approach: "Keep the auth callback outside the protected matcher.",
+      confidence: 0.9,
+      successCount: 6,
+      failCount: 0,
+      sourceTraceIds: [trace.id],
+      status: "active_local",
+    });
+
+    const application = await cognitiveDb.logCognitiveApplication({
+      userId,
+      sessionId: "sess-retention-impact",
+      problem: "Middleware auth loop needs known pattern",
+      endpoint: "context-engine.assemble",
+      traces: [{ id: trace.id, scope: "local", rank: 1 }],
+      patterns: [{ id: pattern.id, scope: "local", rank: 1 }],
+      skills: [],
+    });
+
+    await cognitiveDb.syncTracePatternMatches({
+      userId,
+      traceId: trace.id,
+      patterns: [{ id: pattern.id, score: 0.98 }],
+      matchSource: "trace_capture",
+    });
+
+    await cognitiveDb.updateTraceOutcome({
+      userId,
+      traceId: trace.id,
+      applicationId: application.application.id,
+      outcome: "success",
+      acceptedPatternId: pattern.id,
+      materializedPatternId: pattern.id,
+      retryCount: 1,
+      timeToResolutionMs: 60000,
+      verificationSummary: {
+        verified: true,
+        resolutionKind: "tests_passed",
+      },
+    });
+
+    let refreshedPattern = (await cognitiveDb.getPatterns(userId)).find((entry) => entry.id === pattern.id);
+    expect(refreshedPattern?.applicationCount).toBeGreaterThanOrEqual(1);
+    expect(refreshedPattern?.acceptedApplicationCount).toBeGreaterThanOrEqual(1);
+
+    const client = turso.getDb();
+    const oldIso = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000).toISOString();
+    await client.execute({
+      sql: `UPDATE cognitive_applications SET created_at = ?, updated_at = ? WHERE id = ?`,
+      args: [oldIso, oldIso, application.application.id],
+    });
+    await client.execute({
+      sql: `UPDATE pattern_applications SET created_at = ?, updated_at = ? WHERE application_id = ?`,
+      args: [oldIso, oldIso, application.application.id],
+    });
+
+    const cleanup = await cognitiveDb.cleanupExpiredCognitiveData({
+      userId,
+      benchmarkRetentionDays: 365,
+    });
+    expect(cleanup.applicationsDeleted).toBe(1);
+    expect(cleanup.applicationMatchesDeleted).toBeGreaterThanOrEqual(1);
+
+    refreshedPattern = (await cognitiveDb.getPatterns(userId)).find((entry) => entry.id === pattern.id);
+    expect(refreshedPattern?.applicationCount).toBe(0);
+    expect(refreshedPattern?.acceptedApplicationCount).toBe(0);
+    expect(refreshedPattern?.successfulApplicationCount).toBe(0);
+  });
+
   it("cleans up expired traces, benchmarks, and orphaned local artifacts", async () => {
     const userId = "user-retention";
     await cognitiveDb.updateCognitiveUserSettings({

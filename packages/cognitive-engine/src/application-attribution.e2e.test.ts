@@ -347,4 +347,108 @@ describe("application attribution end-to-end", () => {
     expect(refreshedPattern?.impactScore).toBeGreaterThan(0);
     expect(refreshedPattern?.status).toBe("active_local");
   });
+
+  it("replaces accepted entities instead of leaving multiple matches accepted", async () => {
+    const userId = "user-accepted-switch";
+    const trace = await cognitiveDb.createTrace({
+      userId,
+      sessionId: "session-accepted-switch",
+      type: "debugging",
+      problem: "Switch accepted pattern for the same debugging session",
+      context: {
+        technologies: ["nextjs", "typescript"],
+        files: ["middleware.ts"],
+      },
+      reasoning: "Trace used to test accepted entity replacement.",
+      approaches: [],
+      solution: "Updated the winning pattern selection.",
+      outcome: "success",
+      automatedOutcome: "success",
+      automatedSignals: {},
+      toolsUsed: ["npm test"],
+      filesModified: ["middleware.ts"],
+      durationMs: 120000,
+      sanitized: true,
+    });
+
+    const patternA = await cognitiveDb.createPattern({
+      userId,
+      scope: "local",
+      domain: "nextjs-auth",
+      trigger: { keywords: ["middleware"], technologies: ["nextjs"] },
+      approach: "Pattern A",
+      confidence: 0.8,
+      successCount: 5,
+      failCount: 0,
+      sourceTraceIds: [trace.id],
+      status: "active_local",
+    });
+    const patternB = await cognitiveDb.createPattern({
+      userId,
+      scope: "local",
+      domain: "nextjs-auth",
+      trigger: { keywords: ["redirect"], technologies: ["nextjs"] },
+      approach: "Pattern B",
+      confidence: 0.82,
+      successCount: 5,
+      failCount: 0,
+      sourceTraceIds: [trace.id],
+      status: "active_local",
+    });
+
+    const application = await cognitiveDb.logCognitiveApplication({
+      userId,
+      sessionId: "session-accepted-switch",
+      problem: "Switch accepted pattern for the same debugging session",
+      endpoint: "context-engine.assemble",
+      traces: [{ id: trace.id, scope: "local", rank: 1 }],
+      patterns: [
+        { id: patternA.id, scope: "local", rank: 1 },
+        { id: patternB.id, scope: "local", rank: 2 },
+      ],
+      skills: [],
+    });
+
+    await cognitiveDb.syncTracePatternMatches({
+      userId,
+      traceId: trace.id,
+      patterns: [
+        { id: patternA.id, score: 0.95 },
+        { id: patternB.id, score: 0.9 },
+      ],
+      matchSource: "trace_capture",
+    });
+
+    await cognitiveDb.updateTraceOutcome({
+      userId,
+      traceId: trace.id,
+      applicationId: application.application.id,
+      outcome: "success",
+      acceptedPatternId: patternA.id,
+      materializedPatternId: patternA.id,
+      verificationSummary: {
+        verified: true,
+      },
+    });
+
+    await cognitiveDb.updateTraceOutcome({
+      userId,
+      traceId: trace.id,
+      applicationId: application.application.id,
+      outcome: "success",
+      acceptedPatternId: patternB.id,
+      materializedPatternId: patternB.id,
+      verificationSummary: {
+        verified: true,
+      },
+    });
+
+    const applications = await cognitiveDb.getRecentApplications(userId, 5);
+    const bundle = applications.find((item) => item.application.id === application.application.id);
+    expect(bundle).toBeTruthy();
+
+    const acceptedPatterns = bundle?.matches.filter((match) => match.entityType === "pattern" && match.accepted) ?? [];
+    expect(acceptedPatterns).toHaveLength(1);
+    expect(acceptedPatterns[0]?.entityId).toBe(patternB.id);
+  });
 });

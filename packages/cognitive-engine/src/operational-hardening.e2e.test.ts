@@ -8,6 +8,7 @@ type TursoModule = typeof import("../../../src/lib/turso");
 type AlertsModule = typeof import("../../../src/lib/operational-alerts");
 type AuditModule = typeof import("../../../src/lib/audit-log");
 type CognitiveDbModule = typeof import("../../../src/lib/cognitive-db");
+type RateLimiterModule = typeof import("../../../src/lib/rate-limiter");
 
 describe("operational hardening", () => {
   const dbFile = path.join(os.tmpdir(), `fathippo-operational-hardening-${Date.now()}-${Math.random().toString(16).slice(2)}.db`);
@@ -16,6 +17,7 @@ describe("operational hardening", () => {
   let alerts: AlertsModule;
   let audit: AuditModule;
   let cognitiveDb: CognitiveDbModule;
+  let rateLimiter: RateLimiterModule;
 
   beforeAll(async () => {
     process.env.TURSO_DATABASE_URL = `file:${dbFile}`;
@@ -26,6 +28,7 @@ describe("operational hardening", () => {
     alerts = await import("../../../src/lib/operational-alerts");
     audit = await import("../../../src/lib/audit-log");
     cognitiveDb = await import("../../../src/lib/cognitive-db");
+    rateLimiter = await import("../../../src/lib/rate-limiter");
   });
 
   afterAll(() => {
@@ -130,5 +133,64 @@ describe("operational hardening", () => {
     expect(ids).toContain("stale_cognitive_jobs");
     expect(ids).toContain("failed_benchmark_runs");
     expect(ids).toContain("suspicious_activity");
+  });
+
+  it("enforces the lifetime memory cap even when usage stats are stale", async () => {
+    const userId = "user-quota-sync";
+    await db.listAgentMemories({ userId, limit: 1 });
+    await rateLimiter.ensureRateLimiterInitialized();
+
+    const client = turso.getDb();
+    const now = new Date().toISOString();
+    await client.execute({
+      sql: `
+        WITH RECURSIVE seq(value) AS (
+          SELECT 1
+          UNION ALL
+          SELECT value + 1 FROM seq WHERE value < 1000
+        )
+        INSERT INTO memories (
+          id, user_id, title, source_type, memory_type, importance, tags_csv,
+          content_text, content_hash, sync_status, created_at
+        )
+        SELECT
+          'legacy-memory-' || value,
+          ?,
+          'Legacy memory ' || value,
+          'text',
+          'episodic',
+          5,
+          '',
+          'legacy content',
+          'legacy-hash-' || value,
+          'pending',
+          ?
+        FROM seq
+      `,
+      args: [userId, now],
+    });
+    await client.execute({
+      sql: `
+        INSERT INTO usage_stats (
+          user_id, memories_this_month, memories_total, storage_bytes, api_calls_today,
+          api_calls_this_month, last_reset_day, last_reset_month, updated_at
+        ) VALUES (?, 0, 0, 0, 0, 0, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET memories_total = 0, updated_at = ?
+      `,
+      args: [userId, now.slice(0, 10), now.slice(0, 7), now, now],
+    });
+
+    const stats = await rateLimiter.getUsageStats(userId);
+    expect(stats.memoriesTotal).toBe(1000);
+
+    const tx = await client.transaction("write");
+    try {
+      await expect(rateLimiter.reserveMemoryQuotaInTransaction(tx, userId, 100)).rejects.toMatchObject({
+        code: "QUOTA_MEMORIES",
+      });
+    } finally {
+      await tx.rollback().catch(() => {});
+      tx.close();
+    }
   });
 });

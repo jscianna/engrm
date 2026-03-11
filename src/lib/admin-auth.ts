@@ -50,7 +50,6 @@ export function hasClerkAdminAccess(params: {
   email: string | null;
   publicMetadata?: unknown;
   privateMetadata?: unknown;
-  unsafeMetadata?: unknown;
 }): boolean {
   if (!params.userId) {
     return false;
@@ -70,8 +69,7 @@ export function hasClerkAdminAccess(params: {
 
   return (
     metadataGrantsAdminAccess(params.publicMetadata) ||
-    metadataGrantsAdminAccess(params.privateMetadata) ||
-    metadataGrantsAdminAccess(params.unsafeMetadata)
+    metadataGrantsAdminAccess(params.privateMetadata)
   );
 }
 
@@ -114,7 +112,6 @@ export async function getAdminIdentity(request?: Request): Promise<AdminIdentity
     email,
     publicMetadata: user?.publicMetadata,
     privateMetadata: user?.privateMetadata,
-    unsafeMetadata: user?.unsafeMetadata,
   });
 
   return {

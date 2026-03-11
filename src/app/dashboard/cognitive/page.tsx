@@ -331,10 +331,14 @@ export default async function CognitiveDashboardPage({
                 <p className="mt-2 text-xs text-zinc-500">
                   {Math.round(pattern.confidence * 100)}% confidence · {pattern.successCount} success / {pattern.failCount} fail · {pattern.sourceTraceCount} traces
                 </p>
-                <form action={deprecatePatternAction} className="mt-3">
-                  <input type="hidden" name="patternId" value={pattern.id} />
-                  <Button type="submit" size="xs" variant="outline">Mark Deprecated</Button>
-                </form>
+                {pattern.scope === "local" ? (
+                  <form action={deprecatePatternAction} className="mt-3">
+                    <input type="hidden" name="patternId" value={pattern.id} />
+                    <Button type="submit" size="xs" variant="outline">Mark Deprecated</Button>
+                  </form>
+                ) : (
+                  <p className="mt-3 text-xs text-zinc-500">Global pattern controls require an approved admin or service path.</p>
+                )}
               </div>
             ))}
           </CardContent>

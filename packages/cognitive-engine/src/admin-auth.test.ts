@@ -32,4 +32,15 @@ describe("admin auth", () => {
       }),
     ).toBe(false);
   });
+
+  it("does not grant admin access from unsafe metadata alone", () => {
+    expect(
+      hasClerkAdminAccess({
+        userId: "user_unsafe",
+        email: "member@company.com",
+        // Intentionally cast to validate that unsafe metadata is ignored for authorization.
+        ...( { unsafeMetadata: { role: "admin" } } as Record<string, unknown> ),
+      }),
+    ).toBe(false);
+  });
 });

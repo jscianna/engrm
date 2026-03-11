@@ -67,11 +67,13 @@ export async function ensureRateLimiterInitialized(): Promise<void> {
   await client.execute(`ALTER TABLE usage_stats ADD COLUMN memories_total INTEGER DEFAULT 0`).catch(() => {});
   await client.execute(`
     UPDATE usage_stats
-    SET memories_total = CASE
-      WHEN memories_total < memories_this_month THEN memories_this_month
-      ELSE memories_total
-    END
+    SET memories_total = MAX(
+      memories_total,
+      memories_this_month,
+      COALESCE((SELECT COUNT(*) FROM memories WHERE user_id = usage_stats.user_id), 0)
+    )
     WHERE memories_this_month > 0
+       OR EXISTS (SELECT 1 FROM memories WHERE user_id = usage_stats.user_id)
   `).catch(() => {});
 
   initialized = true;
@@ -291,10 +293,11 @@ async function getOrCreateStats(userId: string): Promise<{
       ON CONFLICT(user_id) DO UPDATE SET
         api_calls_today = CASE WHEN last_reset_day != ? THEN 0 ELSE api_calls_today END,
         api_calls_this_month = CASE WHEN last_reset_month != ? THEN 0 ELSE api_calls_this_month END,
-        memories_total = CASE
-          WHEN memories_total < memories_this_month THEN memories_this_month
-          ELSE memories_total
-        END,
+        memories_total = MAX(
+          memories_total,
+          memories_this_month,
+          COALESCE((SELECT COUNT(*) FROM memories WHERE user_id = usage_stats.user_id), 0)
+        ),
         last_reset_day = ?,
         last_reset_month = ?,
         updated_at = ?
@@ -365,6 +368,20 @@ export async function reserveMemoryQuotaInTransaction(
       ON CONFLICT(user_id) DO NOTHING
     `,
     args: [userId, today, thisMonth, nowIso],
+  });
+
+  await tx.execute({
+    sql: `
+      UPDATE usage_stats
+      SET memories_total = MAX(
+            memories_total,
+            memories_this_month,
+            COALESCE((SELECT COUNT(*) FROM memories WHERE user_id = usage_stats.user_id), 0)
+          ),
+          updated_at = ?
+      WHERE user_id = ?
+    `,
+    args: [nowIso, userId],
   });
 
   const updateResult = await tx.execute({
