@@ -168,29 +168,45 @@ export async function POST(request: Request) {
     const allCritical = [...synthesizedCritical, ...allCriticalMemories];
     const criticalById = new Map(allCritical.map((memory) => [memory.id, memory]));
     
-    // Rank critical memories by relevance and only inject when relevant.
     let criticalMemories: typeof allCritical = [];
+    let hydeDocument: string | undefined;
     if (allCritical.length > 0 && maxCritical > 0) {
-      const vector = await embedText(message);
+      const criticalVector = enableHyDE
+        ? (await embedWithHyDE(message, true)).embedding
+        : await embedText(message);
+
       const criticalHits = await semanticSearchVectors({
         userId: identity.userId,
         query: message,
-        vector,
-        topK: maxCritical * 2,
+        vector: criticalVector,
+        topK: maxCritical * 4,
       });
-      
-      criticalMemories = criticalHits
+
+      let candidateMemories = criticalHits
         .filter((h) => h.score > minCriticalRelevance)
         .map((h) => criticalById.get(h.item.id) ?? null)
-        .filter((memory): memory is NonNullable<typeof memory> => Boolean(memory))
-        .slice(0, maxCritical);
+        .filter((memory): memory is NonNullable<typeof memory> => Boolean(memory));
+
+      if (enableRerank && candidateMemories.length > maxCritical) {
+        const rerankResult = await rerankMemories(message, candidateMemories, {
+          topK: maxCritical * 4,
+          returnK: maxCritical,
+          minScore: 60,
+        });
+
+        if (rerankResult.success) {
+          candidateMemories = rerankResult.memories;
+        } else {
+          candidateMemories = candidateMemories.slice(0, maxCritical);
+        }
+      } else {
+        candidateMemories = candidateMemories.slice(0, maxCritical);
+      }
+
+      criticalMemories = candidateMemories;
     }
 
-    // Get relevant memories based on message (hybrid: vector + BM25)
-    // Use query expansion for decision/technical queries to improve recall
-    // Use HyDE for vague/indirect queries when enabled
     let relevantMemories: typeof criticalMemories = [];
-    let hydeDocument: string | undefined;
 
     try {
       const queryIntent = detectQueryIntent(message);
