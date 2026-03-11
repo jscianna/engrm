@@ -317,6 +317,8 @@ async function synthesizeClusterIfNeeded(
     importanceTier: existing?.importanceTier ?? "normal",
     accessCount: existing?.accessCount ?? 0,
     createdAt: existing?.createdAt ?? new Date().toISOString(),
+    synthesisQualityScore: synthesized.qualityScore,
+    synthesisMetadata: synthesized.metadata,
   });
 
   // Create graph edges linking synthesis to source memories (decentralized graph model)

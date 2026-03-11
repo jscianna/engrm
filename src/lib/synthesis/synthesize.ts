@@ -9,12 +9,24 @@ export type ClusterSynthesis = {
   title: string;
   confidence: number;
   compressionRatio: number;
+  qualityScore: number;
+  metadata: {
+    patterns?: string[];
+    decisions?: string[];
+    constraints?: string[];
+    guidance?: string;
+  };
 };
 
 type SynthesisResponse = {
   topic?: unknown;
   synthesis?: unknown;
   confidence?: unknown;
+  quality_score?: unknown;
+  patterns?: unknown[];
+  decisions?: unknown[];
+  constraints?: unknown[];
+  guidance?: unknown;
 };
 
 function clampConfidence(value: unknown): number {
@@ -27,20 +39,29 @@ function clampConfidence(value: unknown): number {
 
 export async function synthesizeCluster(cluster: MemoryCluster): Promise<ClusterSynthesis> {
   const prompt = `
-You are synthesizing related memories into one compressed semantic memory.
+You are synthesizing related memories into actionable knowledge for an AI agent.
 
 Instructions:
-1. Extract the durable insight, decision, pattern, or architecture truth.
-2. Preserve specific values, numbers, limits, dates, versions, and named entities exactly when they matter.
-3. If the memories conflict, flag the conflict explicitly instead of resolving it.
-4. Write directly in declarative present tense.
-5. Keep the synthesis to 2-4 sentences.
+1. Extract PATTERNS: recurring approaches, techniques, or behaviors that worked.
+2. Extract DECISIONS: explicit choices made (tech stack, architecture, preferences).
+3. Extract CONSTRAINTS: rules, limits, or things to avoid.
+4. Write GUIDANCE: "Next time X happens, do Y" style actionable advice.
+5. Create a SYNTHESIS: 2-4 sentence compressed memory preserving key facts.
+6. Rate QUALITY (0-1): How useful/actionable is this synthesis for future tasks?
+
+Preserve specific values, numbers, dates, versions, and named entities exactly.
+If memories conflict, flag it explicitly.
 
 Output JSON:
 {
   "topic": "short topic",
-  "synthesis": "compressed synthesis",
-  "confidence": 0.0
+  "synthesis": "compressed synthesis (2-4 sentences)",
+  "patterns": ["pattern 1", "pattern 2"],
+  "decisions": ["decision 1"],
+  "constraints": ["constraint 1"],
+  "guidance": "Next time... do this",
+  "confidence": 0.0,
+  "quality_score": 0.0
 }
 
 Source memories:
@@ -53,7 +74,7 @@ ${cluster.memories
   `.trim();
 
   const systemPrompt =
-    "You create compact semantic memories for a long-term memory system. Be precise, keep numbers intact, and never hide contradictions.";
+    "You create actionable knowledge syntheses for an AI agent's long-term memory. Focus on patterns, decisions, and guidance that help with future tasks. Be precise, keep numbers intact, and never hide contradictions.";
 
   const raw = await callLLM(prompt, systemPrompt, { model: SYNTHESIS_MODEL });
   const parsed = JSON.parse(raw) as SynthesisResponse;
@@ -71,10 +92,28 @@ ${cluster.memories
   const sourceTokens = estimateTokens(cluster.memories.map((memory) => memory.text).join("\n\n"));
   const synthesisTokens = estimateTokens(synthesis);
 
+  const patterns = Array.isArray(parsed.patterns)
+    ? parsed.patterns.filter((p): p is string => typeof p === "string")
+    : [];
+  const decisions = Array.isArray(parsed.decisions)
+    ? parsed.decisions.filter((d): d is string => typeof d === "string")
+    : [];
+  const constraints = Array.isArray(parsed.constraints)
+    ? parsed.constraints.filter((c): c is string => typeof c === "string")
+    : [];
+  const guidance = typeof parsed.guidance === "string" ? parsed.guidance.trim() : undefined;
+
   return {
     synthesis,
     title,
     confidence: clampConfidence(parsed.confidence),
     compressionRatio: Number((sourceTokens / Math.max(1, synthesisTokens)).toFixed(2)),
+    qualityScore: clampConfidence(parsed.quality_score),
+    metadata: {
+      patterns: patterns.length > 0 ? patterns : undefined,
+      decisions: decisions.length > 0 ? decisions : undefined,
+      constraints: constraints.length > 0 ? constraints : undefined,
+      guidance,
+    },
   };
 }

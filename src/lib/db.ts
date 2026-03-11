@@ -2755,6 +2755,8 @@ export async function upsertSynthesizedMemory(params: {
   importanceTier?: SynthesizedMemoryRecord["importanceTier"];
   accessCount?: number;
   createdAt?: string;
+  synthesisQualityScore?: number | null;
+  synthesisMetadata?: Record<string, unknown> | null;
 }): Promise<SynthesizedMemoryRecord> {
   await ensureInitialized();
   const client = getDb();
@@ -2763,13 +2765,15 @@ export async function upsertSynthesizedMemory(params: {
   const synthesis = encryptMemoryContent(params.synthesis, params.userId);
   const sourceMemoryIdsJson = JSON.stringify(params.sourceMemoryIds);
 
+  const synthesisMetadataJson = params.synthesisMetadata ? JSON.stringify(params.synthesisMetadata) : null;
+
   await client.execute({
     sql: `
       INSERT INTO synthesized_memories (
         id, user_id, synthesis, title, source_memory_ids, source_count, cluster_id, cluster_topic,
         compression_ratio, confidence, synthesized_at, last_validated_at, stale,
-        importance_tier, access_count, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        importance_tier, access_count, created_at, synthesis_quality_score, synthesis_metadata
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         synthesis = excluded.synthesis,
         title = excluded.title,
@@ -2783,7 +2787,9 @@ export async function upsertSynthesizedMemory(params: {
         last_validated_at = excluded.last_validated_at,
         stale = excluded.stale,
         importance_tier = excluded.importance_tier,
-        access_count = excluded.access_count
+        access_count = excluded.access_count,
+        synthesis_quality_score = excluded.synthesis_quality_score,
+        synthesis_metadata = excluded.synthesis_metadata
     `,
     args: [
       id,
@@ -2802,6 +2808,8 @@ export async function upsertSynthesizedMemory(params: {
       params.importanceTier ?? "normal",
       params.accessCount ?? 0,
       params.createdAt ?? now,
+      params.synthesisQualityScore ?? null,
+      synthesisMetadataJson,
     ],
   });
 
