@@ -26,7 +26,7 @@ import { calculateTypeBoost, type MemoryType } from "@/lib/memory-classifier";
 import { embedWithHyDE } from "@/lib/hyde";
 import { parseTemporalQuery, applyTemporalBoost } from "@/lib/temporal";
 import { rerankMemories } from "@/lib/reranker";
-import { localRetrieve } from "@/lib/local-retrieval";
+import { localRetrieve, localStoreResult } from "@/lib/local-retrieval";
 import type { MemoryRecord } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -384,6 +384,13 @@ export async function POST(request: Request) {
     const dedupedRelevant = relevantMemories
       .filter((m) => !criticalIds.has(m.id))
       .slice(0, maxRelevant);
+
+    if (enableEdgeFirst && !edgeHit) {
+      const candidateIds = dedupedRelevant.map((m) => m.id);
+      if (candidateIds.length > 0) {
+        localStoreResult(identity.userId, message, candidateIds, 0.85);
+      }
+    }
 
     // Build formatted context string
     const lines: string[] = [];
