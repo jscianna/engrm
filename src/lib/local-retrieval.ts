@@ -21,6 +21,9 @@ export type LocalRetrievalMetrics = {
   hitRate: number;
   users: number;
   entries: number;
+  shadowSamples: number;
+  shadowOverlapSum: number;
+  shadowAvgOverlap: number;
 };
 
 const MAX_ENTRIES_PER_USER = 200;
@@ -35,6 +38,8 @@ const metrics = {
   fuzzyHits: 0,
   stores: 0,
   evictions: 0,
+  shadowSamples: 0,
+  shadowOverlapSum: 0,
 };
 
 function normalizeQuery(query: string): string {
@@ -142,6 +147,11 @@ export function localStoreResult(userId: string, query: string, memoryIds: strin
   }
 }
 
+export function recordShadowSample(overlapAtK: number): void {
+  metrics.shadowSamples += 1;
+  metrics.shadowOverlapSum += overlapAtK;
+}
+
 export function getLocalRetrievalMetrics(): LocalRetrievalMetrics {
   let totalEntries = 0;
   for (const userCache of cache.values()) totalEntries += userCache.size;
@@ -151,5 +161,8 @@ export function getLocalRetrievalMetrics(): LocalRetrievalMetrics {
     hitRate: metrics.lookups > 0 ? Number((metrics.hits / metrics.lookups).toFixed(4)) : 0,
     users: cache.size,
     entries: totalEntries,
+    shadowAvgOverlap: metrics.shadowSamples > 0 
+      ? Number((metrics.shadowOverlapSum / metrics.shadowSamples).toFixed(4)) 
+      : 0,
   };
 }

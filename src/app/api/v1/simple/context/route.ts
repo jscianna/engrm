@@ -26,7 +26,7 @@ import { calculateTypeBoost, type MemoryType } from "@/lib/memory-classifier";
 import { embedWithHyDE } from "@/lib/hyde";
 import { parseTemporalQuery, applyTemporalBoost } from "@/lib/temporal";
 import { rerankMemories } from "@/lib/reranker";
-import { localRetrieve, localStoreResult } from "@/lib/local-retrieval";
+import { localRetrieve, localStoreResult, recordShadowSample } from "@/lib/local-retrieval";
 import { isInEdgeRollout } from "@/lib/edge-rollout";
 import type { MemoryRecord } from "@/lib/types";
 
@@ -146,6 +146,7 @@ export async function POST(request: Request) {
     const enableRerank = body.rerank === true;
     const enableTemporal = body.temporal !== false;
     const enableEdgeFirst = body.edgeFirst === true;
+    const enableEdgeShadow = enableEdgeFirst && body.edgeShadowMode === true;
 
     // Edge-first tuning parameters
     const edgeMinConfidence = typeof body.edgeMinConfidence === "number"
@@ -165,6 +166,9 @@ export async function POST(request: Request) {
     let edgeConfidence = 0;
     let edgeCbActive = false;
     let edgeRolloutActive = false;
+    let latencyMsEdgeLookup = 0;
+    const edgeLookupStart = enableEdgeFirst ? performance.now() : 0;
+
     if (enableEdgeFirst) {
       // Check if user is in rollout percentage
       edgeRolloutActive = isInEdgeRollout(identity.userId, edgeRolloutPct, edgeSeed);
@@ -176,9 +180,11 @@ export async function POST(request: Request) {
           cbCooldownRemaining -= 1;
         } else {
           const localResult = await localRetrieve(message, identity.userId);
+          latencyMsEdgeLookup = Math.round(performance.now() - edgeLookupStart);
           edgeConfidence = localResult.confidence;
           edgeHit = localResult.hit && localResult.confidence >= edgeMinConfidence;
-          if (edgeHit) {
+          // In shadow mode, we still compute edge candidates but don't use them for selection
+          if (localResult.hit) {
             edgeMemoryIds = localResult.memoryIds.slice(0, edgeMaxIds);
           }
           // Circuit breaker: track consecutive low-confidence lookups
@@ -264,6 +270,9 @@ export async function POST(request: Request) {
     }
 
     let relevantMemories: typeof criticalMemories = [];
+    let shadowOverlapAtK = 0;
+    let edgeCandidateCount = 0;
+    let hostedCandidateCount = 0;
 
     try {
       const queryIntent = detectQueryIntent(message);
@@ -331,13 +340,14 @@ export async function POST(request: Request) {
       const rrfTopK = enableRerank ? 20 : 10;
       let memoryIds: string[] = [];
 
-      // Edge-first: prepend edge cache hits before hybrid search results
-      if (edgeHit && edgeMemoryIds.length > 0) {
+      // Edge-first: prepend edge cache hits before hybrid search results (unless shadow mode)
+      // In shadow mode, hosted/hybrid selection remains source of truth; edge candidates are only for comparison
+      if (edgeHit && edgeMemoryIds.length > 0 && !enableEdgeShadow) {
         memoryIds = edgeMemoryIds.slice(0, maxRelevant);
       }
 
-      // Add hybrid search results (excluding duplicates from edge)
-      const edgeIdSet = new Set(memoryIds);
+      // Add hybrid search results (excluding duplicates from edge when not in shadow mode)
+      const edgeIdSet = new Set(enableEdgeShadow ? [] : memoryIds);
       let hybridIds: string[] = [];
       if (vectorResults.length > 0 && bm25Results.length > 0) {
         const fused = rrfFusion(vectorResults, bm25Results, {
@@ -358,6 +368,17 @@ export async function POST(request: Request) {
         }
       }
       memoryIds = memoryIds.slice(0, rrfTopK);
+
+      // Compute shadow mode comparison metrics (edge vs hosted)
+      edgeCandidateCount = edgeMemoryIds.length;
+      hostedCandidateCount = memoryIds.length;
+      if (enableEdgeShadow && edgeMemoryIds.length > 0) {
+        const edgeSet = new Set(edgeMemoryIds.slice(0, maxRelevant));
+        const hostedSet = new Set(memoryIds.slice(0, maxRelevant));
+        const intersection = new Set([...edgeSet].filter((id) => hostedSet.has(id)));
+        const union = new Set([...edgeSet, ...hostedSet]);
+        shadowOverlapAtK = union.size > 0 ? intersection.size / union.size : 0;
+      }
 
       if (memoryIds.length > 0) {
         const memories = filterSensitiveMemories(await getAgentMemoriesByIds({
@@ -506,6 +527,15 @@ export async function POST(request: Request) {
       headers["X-FatHippo-Edge-CB"] = edgeCbActive ? "on" : "off";
       headers["X-FatHippo-Edge-Min-Confidence"] = edgeMinConfidence.toFixed(2);
       headers["X-FatHippo-Edge-Rollout"] = edgeRolloutActive ? "active" : "skipped";
+    }
+
+    if (enableEdgeShadow) {
+      headers["X-FatHippo-Edge-Shadow"] = "on";
+      headers["X-FatHippo-Edge-Overlap"] = shadowOverlapAtK.toFixed(4);
+      headers["X-FatHippo-Edge-Latency-Ms"] = String(latencyMsEdgeLookup);
+      headers["X-FatHippo-Edge-Candidates"] = String(edgeCandidateCount);
+      headers["X-FatHippo-Hosted-Candidates"] = String(hostedCandidateCount);
+      recordShadowSample(shadowOverlapAtK);
     }
 
     return new Response(context, {

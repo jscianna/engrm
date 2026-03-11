@@ -16,6 +16,7 @@ Edge-first retrieval uses local cache to serve frequent queries instantly, bypas
 |-----------|------|---------|-------------|
 | `message` | string | **required** | The user message to retrieve context for |
 | `edgeFirst` | boolean | `false` | Enable edge-first cache lookup |
+| `edgeShadowMode` | boolean | `false` | Enable shadow mode (evaluates edge without affecting response) |
 | `edgeMinConfidence` | number | `0.8` | Minimum confidence threshold (0.5-0.98) for cache hits |
 | `edgeMaxIds` | number | `maxRelevant` | Max memory IDs to prepend from cache (1-20) |
 | `edgeRolloutPct` | number | `100` | Percentage of users to include in rollout (0-100) |
@@ -40,6 +41,48 @@ Use `edgeRolloutPct` and `edgeSeed` for gradual, safe rollouts:
 - Changing the seed creates an independent rollout (e.g., `v2` for next iteration)
 - `edgeRolloutPct: 100` includes all users (default)
 - `edgeRolloutPct: 0` disables edge path for all users
+
+## Shadow Mode
+
+Shadow mode lets you evaluate edge cache performance without affecting production responses. When enabled:
+
+- Edge candidates are computed but **not** used for the response
+- Hosted/hybrid selection remains the source of truth
+- Comparison metrics are computed and returned in headers
+- Samples are recorded for aggregate analysis via `/api/v1/edge/metrics`
+
+### Use Cases
+
+- **Pre-rollout validation**: Compare edge vs hosted results before going live
+- **Continuous monitoring**: Track edge quality without user impact
+- **A/B analysis**: Measure overlap between edge and hybrid rankings
+
+### Shadow Mode Request
+
+```json
+{
+  "message": "What's my project status?",
+  "edgeFirst": true,
+  "edgeShadowMode": true
+}
+```
+
+### Shadow Mode Response Headers
+
+When `edgeShadowMode: true` (requires `edgeFirst: true`):
+
+| Header | Value | Description |
+|--------|-------|-------------|
+| `X-FatHippo-Edge-Shadow` | `on` | Shadow mode active |
+| `X-FatHippo-Edge-Overlap` | `0.0000` - `1.0000` | Jaccard overlap between edge and hosted top-k |
+| `X-FatHippo-Edge-Latency-Ms` | integer | Edge lookup latency in milliseconds |
+
+**Overlap interpretation:**
+- `1.0` = Perfect match (edge and hosted return identical top-k)
+- `0.5` = Moderate overlap (half of top-k match)
+- `0.0` = No overlap (completely different results)
+
+Higher overlap = edge cache is safe to enable for real traffic.
 
 ## Response Headers
 
@@ -102,6 +145,31 @@ curl -X POST https://fathippo.ai/api/v1/simple/context \
     "edgeMinConfidence": 0.9,
     "edgeMaxIds": 3
   }'
+```
+
+### Shadow Mode Request
+
+```bash
+curl -X POST https://fathippo.ai/api/v1/simple/context \
+  -H "Authorization: Bearer mem_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "What are my preferences?",
+    "edgeFirst": true,
+    "edgeShadowMode": true
+  }'
+```
+
+Shadow mode response includes additional headers:
+
+```http
+HTTP/1.1 200 OK
+X-FatHippo-Edge-First: on
+X-FatHippo-Edge-Shadow: on
+X-FatHippo-Edge-Overlap: 0.7500
+X-FatHippo-Edge-Latency-Ms: 2
+X-FatHippo-Edge-Hit: true
+X-FatHippo-Edge-Confidence: 0.920
 ```
 
 ## Response Example
