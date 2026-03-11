@@ -1,4 +1,4 @@
-import { PDFParse } from "pdf-parse";
+import PDFParse from "pdf-parse-new";
 import { embedText } from "@/lib/embeddings";
 import { extractEntities } from "@/lib/entities";
 import { insertAgentMemory } from "@/lib/db";
@@ -29,9 +29,7 @@ export async function POST(request: Request) {
       throw new MemryError("VALIDATION_ERROR", { field: "file", reason: "max 10MB" });
     }
 
-    const parser = new PDFParse({ data: Buffer.from(await file.arrayBuffer()) });
-    const parsed = await parser.getText();
-    await parser.destroy();
+    const parsed = await PDFParse(Buffer.from(await file.arrayBuffer()));
 
     const text = cleanText(parsed.text ?? "");
     if (!text) {
@@ -48,7 +46,7 @@ export async function POST(request: Request) {
       entities,
       metadata: {
         mimeType: file.type || "application/pdf",
-        pageCount: parsed.total ?? undefined,
+        pageCount: parsed.numpages ?? undefined,
       },
     });
 

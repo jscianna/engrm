@@ -155,7 +155,8 @@ export async function embedText(input: string): Promise<number[]> {
 
   // 3. Try OpenAI with load balancing (alternate between direct and OpenRouter)
   // This distributes load and provides redundancy if one endpoint is rate-limited
-  const useOpenRouterFirst = (loadBalanceCounter++ % 2) === 1;
+  loadBalanceCounter = (loadBalanceCounter + 1) % 2;
+  const useOpenRouterFirst = loadBalanceCounter === 1;
   
   let result: number[] | null = null;
   

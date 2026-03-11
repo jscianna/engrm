@@ -10,7 +10,6 @@
     "check:cognitive-launch": "./node_modules/.bin/tsc --noEmit && (cd packages/cognitive-engine && ./node_modules/.bin/vitest run src/eval-harness.test.ts src/evidence-weighting.test.ts src/application-attribution.e2e.test.ts src/shared-learning-settings.e2e.test.ts src/api-key-scopes.e2e.test.ts src/operational-hardening.e2e.test.ts src/alert-delivery.test.ts src/operational-alert-dispatch.test.ts src/request-throttle.test.ts src/admin-auth.test.ts src/cognitive-privacy.e2e.test.ts src/heartbeat-thresholds.test.ts src/tool-result-parsing.test.ts)"
   },
   "dependencies": {
-    "framer-motion": "^11.18.0",
     "@clerk/nextjs": "^6.38.2",
     "@libsql/client": "^0.17.0",
     "@radix-ui/react-slider": "^1.3.6",
@@ -19,11 +18,12 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.1",
+    "framer-motion": "^11.18.0",
     "lucide-react": "^0.575.0",
     "next": "16.1.6",
     "next-themes": "^0.4.6",
     "openai": "^6.25.0",
-    "pdf-parse": "^2.4.5",
+    "pdf-parse-new": "^2.0.0",
     "radix-ui": "^1.4.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
