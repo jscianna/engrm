@@ -286,7 +286,7 @@ export async function POST(request: Request) {
       }
 
       if (memoryIds.length > 0) {
-        let memories = filterSensitiveMemories(await getAgentMemoriesByIds({
+        const memories = filterSensitiveMemories(await getAgentMemoriesByIds({
           userId: identity.userId,
           ids: memoryIds,
           excludeAbsorbed: true,
