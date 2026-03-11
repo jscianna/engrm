@@ -11,6 +11,7 @@ Edge-first retrieval uses local cache to serve frequent queries instantly, bypas
 - API key with context access
 - Access to `/api/v1/edge/metrics` (or equivalent monitoring)
 - Smoke test script: `scripts/edge-first-smoke.sh`
+- Metrics snapshot script: `scripts/edge-first-snapshot.sh` (creates timestamped snapshots)
 
 ## Pre-Flight Checks
 
@@ -40,6 +41,14 @@ baseline             -            -            -            -          -
 
 ### Stage 1: 5% Rollout (Canary)
 
+**Before starting, capture baseline metrics:**
+
+```bash
+./scripts/edge-first-snapshot.sh https://fathippo.ai mem_xxx
+```
+
+**Enable 5% rollout:**
+
 ```bash
 curl -X POST https://fathippo.ai/api/v1/simple/context \
   -H "Authorization: Bearer mem_xxx" \
@@ -57,22 +66,80 @@ curl -X POST https://fathippo.ai/api/v1/simple/context \
 - Response headers present (`X-FatHippo-Edge-*`)
 - No unexpected latency spikes
 
+**After 15 minutes, capture metrics snapshot:**
+
+```bash
+./scripts/edge-first-snapshot.sh https://fathippo.ai mem_xxx
+```
+
 ### Stage 2: 20% Rollout
 
-Increase coverage to validate cache effectiveness.
+**Before increasing, capture current metrics:**
+
+```bash
+./scripts/edge-first-snapshot.sh https://fathippo.ai mem_xxx
+```
+
+**Increase coverage to validate cache effectiveness:**
 
 ```bash
 # Update your client configs
 "edgeRolloutPct": 20
 ```
 
+**Monitor for 30 minutes, then capture snapshot:**
+
+```bash
+./scripts/edge-first-snapshot.sh https://fathippo.ai mem_xxx
+```
+
 ### Stage 3: 50% Rollout
 
-Majority coverage to stress-test at scale.
+**Before increasing, capture current metrics:**
+
+```bash
+./scripts/edge-first-snapshot.sh https://fathippo.ai mem_xxx
+```
+
+**Enable majority coverage to stress-test at scale:**
+
+```bash
+# Update your client configs
+"edgeRolloutPct": 50
+```
+
+**Monitor for 60 minutes, then capture snapshot:**
+
+```bash
+./scripts/edge-first-snapshot.sh https://fathippo.ai mem_xxx
+```
 
 ### Stage 4: 100% Rollout
 
-Full enablement.
+**Before final rollout, capture current metrics:**
+
+```bash
+./scripts/edge-first-snapshot.sh https://fathippo.ai mem_xxx
+```
+
+**Enable full rollout:**
+
+```bash
+# Update your client configs
+"edgeRolloutPct": 100
+```
+
+**After full rollout, capture final metrics:**
+
+```bash
+./scripts/edge-first-snapshot.sh https://fathippo.ai mem_xxx
+```
+
+**Compare all snapshots:**
+
+```bash
+ls -la ./tmp/edge-metrics-*.json
+```
 
 ## Key Metrics to Watch
 
@@ -154,9 +221,21 @@ Or disable entirely:
 After each stage increase:
 
 1. Run smoke test
-2. Check metrics for 15 minutes
-3. Verify no alert triggers
-4. Document observations
+2. Capture metrics snapshot (`./scripts/edge-first-snapshot.sh`)
+3. Check metrics for 15 minutes
+4. Verify no alert triggers
+5. Document observations
+
+**Review snapshot history:**
+
+```bash
+# List all captured snapshots
+ls -lt ./tmp/edge-metrics-*.json
+
+# Compare two snapshots
+diff <(jq .localRetrieval.hitRate ./tmp/edge-metrics-YYYYMMDD-HHMMSS.json) \
+     <(jq .localRetrieval.hitRate ./tmp/edge-metrics-YYYYMMDD-HHMMSS.json)
+```
 
 ## Troubleshooting
 
