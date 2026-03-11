@@ -48,6 +48,15 @@ async function ensureVectorTable(): Promise<void> {
     )
   `);
 
+  // Migrate: Add vector_dimension column if it doesn't exist (backward compatibility)
+  try {
+    await client.execute(`
+      ALTER TABLE memory_vectors ADD COLUMN vector_dimension INTEGER NOT NULL DEFAULT 384
+    `);
+  } catch {
+    // Column already exists or table is new - either is fine
+  }
+
   await client.execute(`
     CREATE INDEX IF NOT EXISTS idx_vectors_user_id ON memory_vectors(user_id)
   `);

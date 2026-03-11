@@ -38,7 +38,7 @@ TEST_MESSAGE="What are my project preferences and current status?"
 get_header() {
   local headers_file="$1"
   local header_name="$2"
-  grep -i "^${header_name}:" "$headers_file" | head -1 | sed 's/^[[:space:]]*//' | cut -d: -f2- | sed 's/^[[:space:]]*//'
+  grep -i "^${header_name}:" "$headers_file" | head -1 | tr -d '\r' | sed 's/^[[:space:]]*//' | cut -d: -f2- | sed 's/^[[:space:]]*//'
 }
 
 # Function to print a header row
