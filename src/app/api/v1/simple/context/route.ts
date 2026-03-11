@@ -8,9 +8,9 @@
 import { embedText } from "@/lib/embeddings";
 import { semanticSearchVectors } from "@/lib/qdrant";
 import { bm25Search, rrfFusion, ensureFtsInitialized } from "@/lib/fts";
-import { 
+import {
   filterSensitiveMemories,
-  getCriticalMemories, 
+  getCriticalMemories,
   getAgentMemoriesByIds,
   incrementAccessCounts,
   listCriticalSynthesizedMemories,
@@ -23,6 +23,10 @@ import { isObject } from "@/lib/api-v1";
 import { detectSecretQueryIntent, VAULT_HINT_MESSAGE } from "@/lib/secrets";
 import { expandQuery, detectQueryIntent, mergeExpandedResults } from "@/lib/query-expansion";
 import { calculateTypeBoost, type MemoryType } from "@/lib/memory-classifier";
+import { embedWithHyDE } from "@/lib/hyde";
+import { parseTemporalQuery, applyTemporalBoost } from "@/lib/temporal";
+import { rerankMemories } from "@/lib/reranker";
+import type { MemoryRecord } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -130,6 +134,10 @@ export async function POST(request: Request) {
       ? Math.max(1.0, Math.min(2.0, body.typeBoostFactor))
       : 1.3; // Default: 30% boost for type match
 
+    const enableHyDE = body.hyde === true;
+    const enableRerank = body.rerank === true;
+    const enableTemporal = body.temporal !== false;
+
     // Get critical memories
     const allCriticalMemories = filterSensitiveMemories(
       await getCriticalMemories(identity.userId, {
@@ -180,17 +188,36 @@ export async function POST(request: Request) {
 
     // Get relevant memories based on message (hybrid: vector + BM25)
     // Use query expansion for decision/technical queries to improve recall
+    // Use HyDE for vague/indirect queries when enabled
     let relevantMemories: typeof criticalMemories = [];
+    let hydeDocument: string | undefined;
+
     try {
       const queryIntent = detectQueryIntent(message);
       const queries = queryIntent !== 'general' ? expandQuery(message) : [message];
-      
+
+      // Parse temporal references for time-based boosting
+      const temporalParse = enableTemporal ? parseTemporalQuery(message) : null;
+      const hasTemporalWindow = temporalParse?.hasTemporalReference && temporalParse?.timeWindow;
+
       // Run searches for all query variants in parallel
       const allSearchResults = await Promise.all(
-        queries.map(async (queryText) => {
+        queries.map(async (queryText, queryIndex) => {
           const [vectorResults, bm25Results] = await Promise.all([
             (async () => {
-              const vector = await embedText(queryText);
+              // Use HyDE for the first (primary) query when enabled
+              // HyDE generates a hypothetical answer and embeds that instead of raw query
+              let vector: number[];
+              if (queryIndex === 0 && enableHyDE) {
+                const hydeResult = await embedWithHyDE(queryText, true);
+                vector = hydeResult.embedding;
+                if (hydeResult.usedHyDE) {
+                  hydeDocument = hydeResult.hypotheticalDocument;
+                }
+              } else {
+                vector = await embedText(queryText);
+              }
+
               const hits = await semanticSearchVectors({
                 userId: identity.userId,
                 query: queryText,
@@ -217,7 +244,7 @@ export async function POST(request: Request) {
           return { vectorResults, bm25Results };
         })
       );
-      
+
       // Merge results from all query variants
       const allVectorResults = mergeExpandedResults(
         allSearchResults.map((r) => r.vectorResults)
@@ -227,21 +254,23 @@ export async function POST(request: Request) {
       const bm25Results = allBm25Results;
 
       // Combine with RRF fusion, allowing BM25-only rescues for exact lexical matches.
+      // Get top 20 for reranking pipeline (we'll filter down to 5 after reranking)
+      const rrfTopK = enableRerank ? 20 : 10;
       let memoryIds: string[] = [];
       if (vectorResults.length > 0 && bm25Results.length > 0) {
         const fused = rrfFusion(vectorResults, bm25Results, {
           k: rrfK,
           bm25Weight: bm25Weight,
         });
-        memoryIds = fused.map((r) => r.memoryId).slice(0, 10);
+        memoryIds = fused.map((r) => r.memoryId).slice(0, rrfTopK);
       } else if (vectorResults.length > 0) {
-        memoryIds = vectorResults.slice(0, 10).map((r) => r.id);
+        memoryIds = vectorResults.slice(0, rrfTopK).map((r) => r.id);
       } else if (bm25Results.length > 0) {
-        memoryIds = bm25Results.slice(0, 10).map((r) => r.memoryId);
+        memoryIds = bm25Results.slice(0, rrfTopK).map((r) => r.memoryId);
       }
 
       if (memoryIds.length > 0) {
-        const memories = filterSensitiveMemories(await getAgentMemoriesByIds({
+        let memories = filterSensitiveMemories(await getAgentMemoriesByIds({
           userId: identity.userId,
           ids: memoryIds,
           excludeAbsorbed: true,
@@ -252,27 +281,48 @@ export async function POST(request: Request) {
         );
 
         // Apply type-based boost when query intent matches memory type
+        let scoredMemories: Array<{ memory: typeof relevantMemories[0]; score: number; originalIndex: number }> = [];
         if (queryIntent !== 'general' && relevantMemories.length > 1 && typeBoostFactor > 1.0) {
           // Score each memory based on type match (tunable via typeBoostFactor)
-          const scoredMemories = relevantMemories.map((m, originalIndex) => {
-            // Get classified type from metadata if available
+          scoredMemories = relevantMemories.map((m, originalIndex) => {
             const metadata = m.metadata as Record<string, unknown> | null;
             const classifiedType = (metadata?.classified as Record<string, unknown>)?.type as MemoryType | undefined;
-            
-            // Calculate boost: apply typeBoostFactor if memory type matches query intent
+
             let boost = 1.0;
             if (classifiedType) {
               const baseBoost = calculateTypeBoost(queryIntent, classifiedType);
-              // Scale the boost by the tunable factor (baseBoost is 1.0-1.3, we scale proportionally)
               boost = baseBoost > 1.0 ? 1.0 + (baseBoost - 1.0) * (typeBoostFactor / 1.3) : 1.0;
             }
-            
+
             return { memory: m, score: boost * (1 / (originalIndex + 1)), originalIndex };
           });
-          
-          // Re-sort by boosted score
+
           scoredMemories.sort((a, b) => b.score - a.score);
           relevantMemories = scoredMemories.map((s) => s.memory);
+        }
+
+        // Apply temporal boost when temporal references are detected
+        if (hasTemporalWindow && temporalParse.timeWindow && relevantMemories.length > 0) {
+          const memoriesToBoost = scoredMemories.length > 0
+            ? scoredMemories
+            : relevantMemories.map((m, i) => ({ memory: m, score: 1 / (i + 1), originalIndex: i }));
+
+          const boosted = applyTemporalBoost(memoriesToBoost, temporalParse.timeWindow, 1.4);
+          boosted.sort((a, b) => b.score - a.score);
+          relevantMemories = boosted.map((s) => s.memory);
+        }
+
+        // LLM Reranking: use LLM to judge relevance and return top 5
+        if (enableRerank && relevantMemories.length > 5) {
+          const rerankResult = await rerankMemories(message, relevantMemories, {
+            topK: 20,
+            returnK: 5,
+            minScore: 60,
+          });
+
+          if (rerankResult.success) {
+            relevantMemories = rerankResult.memories;
+          }
         }
 
         // Track access
