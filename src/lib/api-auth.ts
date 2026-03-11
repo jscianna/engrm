@@ -82,3 +82,27 @@ export function withApiAuth(
     }
   };
 }
+
+/**
+ * Validate API key against multiple acceptable scopes.
+ * Returns identity as soon as one scope matches.
+ */
+export async function validateApiKeyAnyScope(
+  request: Request,
+  endpoints: string[],
+): Promise<ApiKeyIdentity> {
+  if (endpoints.length === 0) {
+    throw new MemryError("VALIDATION_ERROR", { reason: "No scopes provided" });
+  }
+
+  let lastError: unknown;
+  for (const endpoint of endpoints) {
+    try {
+      return await validateApiKey(request, endpoint);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw (lastError ?? new MemryError("AUTH_FORBIDDEN"));
+}
