@@ -136,6 +136,24 @@ Use this context to personalize your responses.
 3. **Use seeds for iterations**: `v1` → `v2` → `v3` for independent experiments
 4. **Monitor metrics**: Watch `X-FatHippo-Edge-Hit` and `X-FatHippo-Edge-Confidence`
 
+### Automated Smoke Testing
+
+Use the provided smoke test script to validate rollout behavior before each stage:
+
+```bash
+./scripts/edge-first-smoke.sh https://fathippo.ai mem_xxx
+```
+
+This script verifies:
+- Baseline requests (edgeFirst=false) don't return edge headers
+- 100% rollout always includes the user (active)
+- 0% rollout always excludes the user (skipped)
+
+See the full [Edge-First Rollout Playbook](/docs/operations/EDGE_FIRST_ROLLOUT_PLAYBOOK.md) for detailed operational guidance including:
+- Recommended rollout sequence (5% → 20% → 50% → 100%)
+- Key metrics to monitor
+- Rollback criteria and commands
+
 ## Default Behavior
 
 When `edgeFirst: false` (default):
