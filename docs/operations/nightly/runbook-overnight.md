@@ -80,10 +80,10 @@ Create cron job for hourly execution:
 crontab -e
 
 # Add hourly job (runs at minute 0 every hour)
-0 * * * * cd /Users/clawdaddy/clawd/projects/fathippo && ./scripts/overnight-check.sh >> /tmp/fathippo-overnight.log 2>&1
+0 * * * * cd /Users/clawdaddy/clawd/projects/fathippo && FATHIPPO_API_KEY=mem_xxx ./scripts/overnight-monitor.sh --commit >> /tmp/fathippo-overnight.log 2>&1
 ```
 
-### overnight-check.sh
+### overnight-monitor.sh
 
 ```bash
 #!/usr/bin/env bash
