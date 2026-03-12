@@ -80,6 +80,9 @@ export interface TraceContext {
 export interface Pattern {
   id: string;
   userId?: string;              // null = global pattern
+  scope?: 'local' | 'global' | 'org';
+  orgId?: string | null;
+  sourcePatternId?: string | null;
   
   // What triggers this pattern
   domain: string;               // e.g., "turso", "nextjs-auth", "docker"
@@ -116,8 +119,10 @@ export interface PatternTrigger {
 export type PatternStatus =
   | 'candidate'
   | 'active_local'
+  | 'active_org'
   | 'active_global'
   | 'synthesized_local'
+  | 'synthesized_org'
   | 'synthesized_global'
   | 'deprecated';
 

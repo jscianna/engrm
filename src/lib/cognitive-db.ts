@@ -84,7 +84,7 @@ export interface ApplicationMatch {
   traceId: string | null;
   entityType: "trace" | "pattern" | "skill";
   entityId: string;
-  entityScope: "local" | "global";
+  entityScope: "local" | "global" | "org";
   rank: number;
   accepted: boolean;
   finalOutcome: string | null;
@@ -95,7 +95,9 @@ export interface ApplicationMatch {
 export interface Pattern {
   id: string;
   userId: string | null;
-  scope: "local" | "global";
+  scope: "local" | "global" | "org";
+  orgId: string | null;
+  sourcePatternId: string | null;
   patternKey: string;
   sharedSignature: string | null;
   domain: string;
@@ -175,6 +177,14 @@ export interface CognitiveJobLease {
   checkpointJson?: string | null;
 }
 
+export interface CognitiveOrgMembership {
+  userId: string;
+  orgId: string;
+  role: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CreateTraceInput {
   userId: string;
   sessionId: string;
@@ -201,7 +211,9 @@ export interface CreateTraceInput {
 
 export interface CreatePatternInput {
   userId?: string | null;
-  scope?: "local" | "global";
+  scope?: "local" | "global" | "org";
+  orgId?: string | null;
+  sourcePatternId?: string | null;
   patternKey?: string;
   sharedSignature?: string | null;
   domain: string;
@@ -219,7 +231,7 @@ export interface CreatePatternInput {
 
 export interface ApplicationEntityInput {
   id: string;
-  scope: "local" | "global";
+  scope: "local" | "global" | "org";
   rank: number;
 }
 
@@ -378,6 +390,8 @@ async function ensureInitialized(): Promise<void> {
       id TEXT PRIMARY KEY,
       user_id TEXT,
       scope TEXT NOT NULL DEFAULT 'local',
+      org_id TEXT,
+      source_pattern_id TEXT,
       pattern_key TEXT,
       shared_signature TEXT,
       domain TEXT NOT NULL,
@@ -406,9 +420,20 @@ async function ensureInitialized(): Promise<void> {
     );
 
     CREATE INDEX IF NOT EXISTS idx_patterns_user ON cognitive_patterns(user_id);
+    CREATE INDEX IF NOT EXISTS idx_patterns_org ON cognitive_patterns(org_id, scope, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_patterns_domain ON cognitive_patterns(domain);
     CREATE INDEX IF NOT EXISTS idx_patterns_status ON cognitive_patterns(status);
     CREATE UNIQUE INDEX IF NOT EXISTS uq_patterns_key ON cognitive_patterns(pattern_key);
+
+    CREATE TABLE IF NOT EXISTS cognitive_org_memberships (
+      user_id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'member',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_cognitive_org_memberships_org ON cognitive_org_memberships(org_id, role, updated_at DESC);
 
     CREATE TABLE IF NOT EXISTS trace_pattern_matches (
       id TEXT PRIMARY KEY,
@@ -550,6 +575,8 @@ async function ensureInitialized(): Promise<void> {
   await client.execute(`ALTER TABLE coding_traces ADD COLUMN explicit_feedback_notes TEXT`).catch(() => {});
 
   await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN scope TEXT DEFAULT 'local'`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN org_id TEXT`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN source_pattern_id TEXT`).catch(() => {});
   await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN pattern_key TEXT`).catch(() => {});
   await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN shared_signature TEXT`).catch(() => {});
   await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN source_trace_count INTEGER DEFAULT 0`).catch(() => {});
@@ -586,7 +613,7 @@ async function ensureInitialized(): Promise<void> {
   // Shared/global learning derives cluster keys in memory from sanitized content.
   // Persisted reusable signatures are cleared to reduce cross-session linkability.
   await client.execute(`UPDATE coding_traces SET shared_signature = NULL WHERE shared_signature IS NOT NULL`).catch(() => {});
-  await client.execute(`UPDATE cognitive_patterns SET shared_signature = NULL WHERE scope = 'global' OR user_id IS NULL`).catch(() => {});
+  await client.execute(`UPDATE cognitive_patterns SET shared_signature = NULL WHERE scope = 'global'`).catch(() => {});
 
   initialized = true;
 }
@@ -712,6 +739,8 @@ function rowToPattern(row: Record<string, unknown>): Pattern {
     id: row.id as string,
     userId: (row.user_id as string | null) ?? null,
     scope: (((row.scope as string) ?? "local") as Pattern["scope"]),
+    orgId: (row.org_id as string | null) ?? null,
+    sourcePatternId: (row.source_pattern_id as string | null) ?? null,
     patternKey: (row.pattern_key as string) ?? "",
     sharedSignature: (row.shared_signature as string | null) ?? null,
     domain: row.domain as string,
@@ -735,6 +764,16 @@ function rowToPattern(row: Record<string, unknown>): Pattern {
     promotionReason: (row.promotion_reason as string | null) ?? null,
     status: (row.status as string) ?? "candidate",
     synthesizedIntoSkill: (row.synthesized_into_skill as string | null) ?? null,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+function rowToCognitiveOrgMembership(row: Record<string, unknown>): CognitiveOrgMembership {
+  return {
+    userId: row.user_id as string,
+    orgId: row.org_id as string,
+    role: (row.role as string) ?? "member",
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
@@ -818,6 +857,104 @@ export async function getCognitiveUserSettings(userId: string): Promise<Cognitiv
     trace_retention_days: 30,
     updated_at: now,
   });
+}
+
+function orgMembershipFromEnv(userId: string): CognitiveOrgMembership | null {
+  const mappings = (process.env.FATHIPPO_ORG_MEMBERSHIPS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  for (const mapping of mappings) {
+    const [mappedUserId, mappedOrgId] = mapping.split(":", 2);
+    if (mappedUserId === userId && mappedOrgId) {
+      return {
+        userId,
+        orgId: mappedOrgId,
+        role: "member",
+        createdAt: "",
+        updatedAt: "",
+      };
+    }
+  }
+
+  return null;
+}
+
+export async function getCognitiveOrgMembership(userId: string): Promise<CognitiveOrgMembership | null> {
+  await ensureInitialized();
+  const envMembership = orgMembershipFromEnv(userId);
+  if (envMembership) {
+    return envMembership;
+  }
+
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT user_id, org_id, role, created_at, updated_at
+      FROM cognitive_org_memberships
+      WHERE user_id = ?
+      LIMIT 1
+    `,
+    args: [userId],
+  });
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  return row ? rowToCognitiveOrgMembership(row) : null;
+}
+
+export async function setCognitiveOrgMembership(
+  userId: string,
+  orgId: string,
+  role = "member",
+): Promise<CognitiveOrgMembership> {
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+  await client.execute({
+    sql: `
+      INSERT INTO cognitive_org_memberships (user_id, org_id, role, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        org_id = excluded.org_id,
+        role = excluded.role,
+        updated_at = excluded.updated_at
+    `,
+    args: [userId, orgId, role, now, now],
+  });
+  return {
+    userId,
+    orgId,
+    role,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function promotedOrgPatternStatus(sourceStatus: string): Pattern["status"] {
+  return sourceStatus.startsWith("synthesized_") ? "synthesized_org" : "active_org";
+}
+
+async function getVisiblePatternForUser(userId: string, patternId: string): Promise<Pattern | null> {
+  await ensureInitialized();
+  const client = getDb();
+  const membership = await getCognitiveOrgMembership(userId);
+  const orgId = membership?.orgId ?? null;
+  const result = await client.execute({
+    sql: `
+      SELECT *
+      FROM cognitive_patterns
+      WHERE id = ?
+        AND (
+          user_id = ?
+          OR scope = 'global'
+          OR (scope = 'org' AND org_id = ?)
+        )
+      LIMIT 1
+    `,
+    args: [patternId, userId, orgId],
+  });
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  return row ? rowToPattern(row) : null;
 }
 
 export async function updateCognitiveUserSettings(params: {
@@ -1097,7 +1234,7 @@ export async function revokeSharedLearningForUser(userId: string): Promise<{
       FROM trace_pattern_matches m
       JOIN cognitive_patterns p ON p.id = m.pattern_id
       WHERE m.trace_id IN (${traceIds.map(() => "?").join(",")})
-        AND (p.scope = 'global' OR p.user_id IS NULL)
+        AND p.scope = 'global'
     `,
     args: traceIds,
   });
@@ -1110,7 +1247,7 @@ export async function revokeSharedLearningForUser(userId: string): Promise<{
       DELETE FROM trace_pattern_matches
       WHERE trace_id IN (${traceIds.map(() => "?").join(",")})
         AND pattern_id IN (
-          SELECT id FROM cognitive_patterns WHERE scope = 'global' OR user_id IS NULL
+          SELECT id FROM cognitive_patterns WHERE scope = 'global'
         )
     `,
     args: traceIds,
@@ -1301,7 +1438,7 @@ export async function cleanupExpiredCognitiveData(params?: {
           FROM trace_pattern_matches m
           JOIN cognitive_patterns p ON p.id = m.pattern_id
           WHERE m.trace_id IN (${expiredTraceIds.map(() => "?").join(",")})
-            AND (p.scope = 'global' OR p.user_id IS NULL)
+            AND p.scope = 'global'
         `,
         args: expiredTraceIds,
       });
@@ -1410,7 +1547,7 @@ function rowToApplicationMatch(row: Record<string, unknown>): ApplicationMatch {
     traceId: (row.trace_id as string | null) ?? null,
     entityType: (row.entity_type as "trace" | "pattern" | "skill") ?? "pattern",
     entityId: row.entity_id as string,
-    entityScope: ((row.entity_scope as "local" | "global") ?? "local"),
+    entityScope: ((row.entity_scope as "local" | "global" | "org") ?? "local"),
     rank: Number(row.rank ?? 0),
     accepted: Number(row.accepted ?? 0) === 1,
     finalOutcome: (row.final_outcome as string | null) ?? null,
@@ -2021,22 +2158,25 @@ export async function createPattern(input: CreatePatternInput): Promise<Pattern>
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const scope = input.scope ?? (input.userId ? "local" : "global");
-  const patternKey = input.patternKey ?? `${scope}:${input.userId ?? "global"}:${normalizeForFingerprint(input.domain)}:${crypto.randomUUID()}`;
-  const sharedSignature = scope === "global" ? null : (input.sharedSignature ?? null);
+  const scopeKey = scope === "org" ? input.orgId ?? "org" : input.userId ?? "global";
+  const patternKey = input.patternKey ?? `${scope}:${scopeKey}:${normalizeForFingerprint(input.domain)}:${crypto.randomUUID()}`;
+  const sharedSignature = scope === "global" || scope === "org" ? null : (input.sharedSignature ?? null);
 
   await client.execute({
     sql: `
       INSERT INTO cognitive_patterns (
-        id, user_id, scope, pattern_key, shared_signature, domain, trigger_json,
+        id, user_id, scope, org_id, source_pattern_id, pattern_key, shared_signature, domain, trigger_json,
         approach, steps_json, pitfalls_json, confidence, success_count, fail_count,
         source_trace_count, last_applied, source_trace_ids_json, status, synthesized_into_skill,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, ?, ?)
     `,
     args: [
       id,
       input.userId ?? null,
       scope,
+      input.orgId ?? null,
+      input.sourcePatternId ?? null,
       patternKey,
       sharedSignature,
       input.domain,
@@ -2065,14 +2205,20 @@ export async function createPattern(input: CreatePatternInput): Promise<Pattern>
 export async function getPatterns(userId: string, domain?: string): Promise<Pattern[]> {
   await ensureInitialized();
   const client = getDb();
+  const membership = await getCognitiveOrgMembership(userId);
+  const orgId = membership?.orgId ?? null;
   const result = await client.execute({
     sql: `
       SELECT * FROM cognitive_patterns
-      WHERE (user_id = ? OR scope = 'global' OR user_id IS NULL)
+      WHERE (
+          user_id = ?
+          OR scope = 'global'
+          OR (scope = 'org' AND org_id = ?)
+        )
         ${domain ? "AND domain = ?" : ""}
       ORDER BY scope ASC, confidence DESC, updated_at DESC
     `,
-    args: domain ? [userId, domain] : [userId],
+    args: domain ? [userId, orgId, domain] : [userId, orgId],
   });
   return result.rows.map((row) => rowToPattern(row as Record<string, unknown>));
 }
@@ -2131,7 +2277,7 @@ export async function getRelevantSkills(params: {
     sql: `
       SELECT * FROM synthesized_skills
       WHERE pattern_key IN (${patternKeys.map(() => "?").join(",")})
-        AND (user_id = ? OR scope = 'global' OR user_id IS NULL)
+        AND (user_id = ? OR scope = 'global')
       ORDER BY updated_at DESC
     `,
     args: [...patternKeys, params.userId],
@@ -2158,17 +2304,8 @@ export async function updatePatternFeedback(params: {
   await ensureInitialized();
   const client = getDb();
   const now = new Date().toISOString();
-  const patternResult = await client.execute({
-    sql: `
-      SELECT id, scope, user_id
-      FROM cognitive_patterns
-      WHERE id = ?
-        AND (user_id = ? OR scope = 'global' OR user_id IS NULL)
-      LIMIT 1
-    `,
-    args: [params.patternId, params.userId],
-  });
-  if (!patternResult.rows[0]) {
+  const pattern = await getVisiblePatternForUser(params.userId, params.patternId);
+  if (!pattern) {
     return false;
   }
 
@@ -2207,8 +2344,12 @@ export async function updatePatternFeedback(params: {
       args: [params.outcome, params.notes ?? null, now, params.traceId, params.patternId],
     });
   } else {
-    const patternRow = patternResult.rows[0] as Record<string, unknown>;
-    const matchUserId = (patternRow.scope as string) === "global" || patternRow.user_id == null ? "__global__" : params.userId;
+    const matchUserId =
+      pattern.scope === "global"
+        ? "__global__"
+        : pattern.scope === "org"
+          ? `org:${pattern.orgId ?? "unknown"}`
+          : params.userId;
     await client.execute({
       sql: `
         INSERT INTO trace_pattern_matches (
@@ -2239,7 +2380,7 @@ export async function getSkillCandidates(userId: string): Promise<Pattern[]> {
   const result = await client.execute({
     sql: `
       SELECT * FROM cognitive_patterns
-      WHERE (user_id = ? OR scope = 'global' OR user_id IS NULL)
+      WHERE (user_id = ? OR scope = 'global')
         AND status IN ('active_local', 'active_global', 'synthesized_local', 'synthesized_global')
         AND confidence >= 0.8
         AND success_count >= 5
@@ -2413,7 +2554,8 @@ export async function recomputePatternStats(patternIds: string[]): Promise<void>
   for (const patternId of uniquePatternIds) {
     const patternResult = await client.execute({
       sql: `
-        SELECT scope, status, application_count, accepted_application_count, successful_application_count,
+        SELECT scope, status, confidence, success_count, fail_count, source_trace_count,
+               application_count, accepted_application_count, successful_application_count,
                median_time_to_resolution_ms, median_retries, verification_pass_rate, impact_score, promotion_reason
         FROM cognitive_patterns
         WHERE id = ?
@@ -2425,7 +2567,7 @@ export async function recomputePatternStats(patternIds: string[]): Promise<void>
     if (!patternRow) {
       continue;
     }
-    const patternScope = ((patternRow.scope as "local" | "global" | undefined) ?? "local");
+    const patternScope = ((patternRow.scope as "local" | "global" | "org" | undefined) ?? "local");
     const currentStatus = (patternRow.status as string | undefined) ?? "candidate";
     const stats = await client.execute({
       sql: `
@@ -2453,13 +2595,23 @@ export async function recomputePatternStats(patternIds: string[]): Promise<void>
     });
 
     const summary = summarizePatternEvidence(evidence.map((item) => item.trace));
+    let successCount = summary.successCount;
+    let failCount = summary.failCount;
+    let confidence = summary.confidence;
+    let effectiveEvidence = summary.effectiveEvidence;
+    if (patternScope === "org" && effectiveEvidence < 2.5 && Number(patternRow.source_trace_count ?? 0) > 0) {
+      successCount = Number(patternRow.success_count ?? 0);
+      failCount = Number(patternRow.fail_count ?? 0);
+      confidence = Number(patternRow.confidence ?? 0);
+      effectiveEvidence = Math.max(Number(patternRow.source_trace_count ?? 0), effectiveEvidence);
+    }
     const lastApplied = evidence.reduce<string | null>(
       (latest, item) => (!latest || item.updatedAt > latest ? item.updatedAt : latest),
       null,
     );
     const status = classifyPatternLifecycle({
-      effectiveEvidence: summary.effectiveEvidence,
-      confidence: summary.confidence,
+      effectiveEvidence,
+      confidence,
       scope: patternScope,
       impact: {
         applications: Number(patternRow.application_count ?? 0),
@@ -2489,7 +2641,7 @@ export async function recomputePatternStats(patternIds: string[]): Promise<void>
             updated_at = ?
         WHERE id = ?
       `,
-      args: [summary.successCount, summary.failCount, summary.confidence, nextStatus, lastApplied, now, patternId],
+      args: [successCount, failCount, confidence, nextStatus, lastApplied, now, patternId],
     });
   }
 }
@@ -2573,7 +2725,7 @@ export async function runPatternExtraction(params: {
   let globalPatterns = 0;
   if (params.includeGlobal) {
     const existingGlobalResult = await client.execute({
-      sql: `SELECT id, pattern_key FROM cognitive_patterns WHERE scope = 'global' OR user_id IS NULL`,
+      sql: `SELECT id, pattern_key FROM cognitive_patterns WHERE scope = 'global'`,
       args: [],
     });
     const existingGlobalByKey = new Map(
@@ -3146,7 +3298,7 @@ async function refreshSkillStatuses(userId: string): Promise<void> {
         s.promotion_reason
       FROM synthesized_skills s
       JOIN cognitive_patterns p ON p.id = s.pattern_id
-      WHERE s.user_id = ? OR s.scope = 'global' OR s.user_id IS NULL
+      WHERE s.user_id = ? OR s.scope = 'global'
     `,
     args: [userId],
   });
@@ -3163,7 +3315,7 @@ async function refreshSkillStatuses(userId: string): Promise<void> {
         medianRetries: row.median_retries == null ? null : Number(row.median_retries),
         verificationPassRate: Number(row.verification_pass_rate ?? 0),
         impactScore: Number(row.impact_score ?? 0),
-        promotionReason: (row.promotion_reason as string | null) ?? "skill_impact_refresh",
+        promotionReason: (row.promotion_reason as string | null) ?? "skill_status_refresh",
       },
     });
     if (nextStatus !== ((row.skill_status as string | undefined) ?? "draft")) {
@@ -3402,11 +3554,10 @@ export async function publishSkill(params: {
         AND (
           user_id = ?
           OR (scope = 'global' AND ? = 1)
-          OR (user_id IS NULL AND ? = 1)
         )
       LIMIT 1
     `,
-    args: [params.skillId, params.userId, params.allowGlobal ? 1 : 0, params.allowGlobal ? 1 : 0],
+    args: [params.skillId, params.userId, params.allowGlobal ? 1 : 0],
   });
   if (!skillResult.rows[0]) {
     return null;
@@ -3541,7 +3692,7 @@ export async function getSkills(userId: string): Promise<SynthesizedSkill[]> {
   const result = await client.execute({
     sql: `
       SELECT * FROM synthesized_skills
-      WHERE user_id = ? OR scope = 'global' OR user_id IS NULL
+      WHERE user_id = ? OR scope = 'global'
       ORDER BY success_rate DESC, updated_at DESC
     `,
     args: [userId],
@@ -3556,13 +3707,199 @@ export async function getSkillById(userId: string, skillId: string): Promise<Syn
   const result = await client.execute({
     sql: `
       SELECT * FROM synthesized_skills
-      WHERE id = ? AND (user_id = ? OR scope = 'global' OR user_id IS NULL)
+      WHERE id = ? AND (user_id = ? OR scope = 'global')
       LIMIT 1
     `,
     args: [skillId, userId],
   });
   const row = result.rows[0] as Record<string, unknown> | undefined;
   return row ? rowToSkill(row) : null;
+}
+
+export async function promoteEligiblePatternsToOrg(userId: string): Promise<{
+  orgId: string | null;
+  promotedPatterns: number;
+  touchedPatternIds: string[];
+}> {
+  await ensureInitialized();
+  const membership = await getCognitiveOrgMembership(userId);
+  if (!membership?.orgId) {
+    return {
+      orgId: null,
+      promotedPatterns: 0,
+      touchedPatternIds: [],
+    };
+  }
+
+  const client = getDb();
+  const localResult = await client.execute({
+    sql: `
+      SELECT *
+      FROM cognitive_patterns
+      WHERE user_id = ?
+        AND scope = 'local'
+        AND status IN ('active_local', 'synthesized_local')
+        AND confidence >= 0.8
+        AND successful_application_count >= 3
+        AND verification_pass_rate >= 0.7
+        AND impact_score >= 0.1
+      ORDER BY impact_score DESC, confidence DESC, updated_at DESC
+    `,
+    args: [userId],
+  });
+
+  const now = new Date().toISOString();
+  const touchedPatternIds = new Set<string>();
+  let promotedPatterns = 0;
+
+  for (const row of localResult.rows) {
+    const localPattern = rowToPattern(row as Record<string, unknown>);
+    const existingResult = await client.execute({
+      sql: `
+        SELECT *
+        FROM cognitive_patterns
+        WHERE scope = 'org' AND org_id = ? AND source_pattern_id = ?
+        LIMIT 1
+      `,
+      args: [membership.orgId, localPattern.id],
+    });
+    const existingRow = existingResult.rows[0] as Record<string, unknown> | undefined;
+    if (existingRow) {
+      const existingPattern = rowToPattern(existingRow);
+      if (
+        existingPattern.status === "deprecated" &&
+        typeof existingPattern.promotionReason === "string" &&
+        existingPattern.promotionReason.startsWith("org_rollback")
+      ) {
+        continue;
+      }
+
+      await client.execute({
+        sql: `
+          UPDATE cognitive_patterns
+          SET user_id = NULL,
+              scope = 'org',
+              org_id = ?,
+              source_pattern_id = ?,
+              shared_signature = NULL,
+              domain = ?,
+              trigger_json = ?,
+              approach = ?,
+              steps_json = ?,
+              pitfalls_json = ?,
+              confidence = ?,
+              success_count = ?,
+              fail_count = ?,
+              source_trace_count = ?,
+              source_trace_ids_json = '[]',
+              status = ?,
+              promotion_reason = ?,
+              updated_at = ?
+          WHERE id = ?
+        `,
+        args: [
+          membership.orgId,
+          localPattern.id,
+          localPattern.domain,
+          localPattern.triggerJson,
+          localPattern.approach,
+          localPattern.stepsJson,
+          localPattern.pitfallsJson,
+          localPattern.confidence,
+          localPattern.successCount,
+          localPattern.failCount,
+          localPattern.sourceTraceCount,
+          promotedOrgPatternStatus(localPattern.status),
+          "validated_local_pattern_promoted_to_org",
+          now,
+          existingPattern.id,
+        ],
+      });
+      touchedPatternIds.add(existingPattern.id);
+      promotedPatterns += 1;
+      continue;
+    }
+
+    const promoted = await createPattern({
+      userId: null,
+      scope: "org",
+      orgId: membership.orgId,
+      sourcePatternId: localPattern.id,
+      patternKey: `org:${membership.orgId}:${localPattern.id}`,
+      sharedSignature: null,
+      domain: localPattern.domain,
+      trigger: parseObject(localPattern.triggerJson),
+      approach: localPattern.approach,
+      steps: parseStringArray(localPattern.stepsJson),
+      pitfalls: parseStringArray(localPattern.pitfallsJson),
+      confidence: localPattern.confidence,
+      successCount: localPattern.successCount,
+      failCount: localPattern.failCount,
+      sourceTraceIds: [],
+      sourceTraceCount: localPattern.sourceTraceCount,
+      status: promotedOrgPatternStatus(localPattern.status),
+    });
+    await client.execute({
+      sql: `
+        UPDATE cognitive_patterns
+        SET promotion_reason = ?, updated_at = ?
+        WHERE id = ?
+      `,
+      args: ["validated_local_pattern_promoted_to_org", now, promoted.id],
+    });
+    touchedPatternIds.add(promoted.id);
+    promotedPatterns += 1;
+  }
+
+  return {
+    orgId: membership.orgId,
+    promotedPatterns,
+    touchedPatternIds: [...touchedPatternIds],
+  };
+}
+
+export async function getOrgPromotedPatterns(orgId?: string): Promise<Pattern[]> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT *
+      FROM cognitive_patterns
+      WHERE scope = 'org'
+        ${orgId ? "AND org_id = ?" : ""}
+      ORDER BY updated_at DESC, confidence DESC
+    `,
+    args: orgId ? [orgId] : [],
+  });
+  return result.rows.map((row) => rowToPattern(row as Record<string, unknown>));
+}
+
+export async function rollbackOrgPromotedPattern(params: {
+  orgId: string;
+  patternId: string;
+  reason?: string | null;
+}): Promise<Pattern | null> {
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+  const result = await client.execute({
+    sql: `
+      UPDATE cognitive_patterns
+      SET status = 'deprecated',
+          promotion_reason = ?,
+          updated_at = ?
+      WHERE id = ? AND scope = 'org' AND org_id = ?
+    `,
+    args: [`org_rollback:${params.reason?.trim() || "manual_admin_rollback"}`, now, params.patternId, params.orgId],
+  });
+  if ((result.rowsAffected ?? 0) === 0) {
+    return null;
+  }
+  const refreshed = await client.execute({
+    sql: `SELECT * FROM cognitive_patterns WHERE id = ? LIMIT 1`,
+    args: [params.patternId],
+  });
+  return refreshed.rows[0] ? rowToPattern(refreshed.rows[0] as Record<string, unknown>) : null;
 }
 
 export async function getRecentApplications(userId: string, limit = 25): Promise<Array<{
@@ -3895,6 +4232,8 @@ export async function getCognitiveMetrics(userId: string, days = 7): Promise<{
 }> {
   await ensureInitialized();
   const client = getDb();
+  const membership = await getCognitiveOrgMembership(userId);
+  const orgId = membership?.orgId ?? null;
   const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   const [traces, shared, patterns, skills] = await Promise.all([
     client.execute({
@@ -3911,9 +4250,11 @@ export async function getCognitiveMetrics(userId: string, days = 7): Promise<{
           SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as created_count,
           SUM(CASE WHEN updated_at >= ? AND status = 'deprecated' THEN 1 ELSE 0 END) as deprecated_count
         FROM cognitive_patterns
-        WHERE user_id = ? OR (scope = 'global' AND user_id IS NULL)
+        WHERE user_id = ?
+           OR scope = 'global'
+           OR (scope = 'org' AND org_id = ?)
       `,
-      args: [cutoff, cutoff, userId],
+      args: [cutoff, cutoff, userId, orgId],
     }),
     client.execute({
       sql: `
@@ -3921,7 +4262,7 @@ export async function getCognitiveMetrics(userId: string, days = 7): Promise<{
           SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as created_count,
           SUM(CASE WHEN status = 'stale' THEN 1 ELSE 0 END) as stale_count
         FROM synthesized_skills
-        WHERE user_id = ? OR scope = 'global' OR user_id IS NULL
+        WHERE user_id = ? OR scope = 'global'
       `,
       args: [cutoff, userId],
     }),

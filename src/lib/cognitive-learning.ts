@@ -96,8 +96,10 @@ export type EntityImpactSummary = {
 export type PatternLifecycleStatus =
   | "candidate"
   | "active_local"
+  | "active_org"
   | "active_global"
   | "synthesized_local"
+  | "synthesized_org"
   | "synthesized_global"
   | "deprecated";
 
@@ -629,7 +631,7 @@ export function summarizePatternEvidence(traces: LearningTrace[]): PatternEviden
 export function classifyPatternStatus(params: {
   effectiveEvidence: number;
   confidence: number;
-  scope?: "local" | "global";
+  scope?: "local" | "global" | "org";
   activationEvidence?: number;
   activationConfidence?: number;
   deprecationConfidence?: number;
@@ -639,7 +641,13 @@ export function classifyPatternStatus(params: {
   const deprecationConfidence = params.deprecationConfidence ?? 0.4;
 
   if (params.effectiveEvidence >= activationEvidence && params.confidence >= activationConfidence) {
-    return params.scope === "global" ? "active_global" : "active_local";
+    if (params.scope === "global") {
+      return "active_global";
+    }
+    if (params.scope === "org") {
+      return "active_org";
+    }
+    return "active_local";
   }
   if (params.effectiveEvidence >= activationEvidence && params.confidence < deprecationConfidence) {
     return "deprecated";
@@ -647,21 +655,29 @@ export function classifyPatternStatus(params: {
   return "candidate";
 }
 
-export function synthesizedPatternStatus(scope: "local" | "global"): PatternLifecycleStatus {
-  return scope === "global" ? "synthesized_global" : "synthesized_local";
+export function synthesizedPatternStatus(scope: "local" | "global" | "org"): PatternLifecycleStatus {
+  if (scope === "global") {
+    return "synthesized_global";
+  }
+  if (scope === "org") {
+    return "synthesized_org";
+  }
+  return "synthesized_local";
 }
 
 export function isInjectablePatternStatus(status: string): boolean {
   return (
     status === "active_local" ||
+    status === "active_org" ||
     status === "active_global" ||
     status === "synthesized_local" ||
+    status === "synthesized_org" ||
     status === "synthesized_global"
   );
 }
 
 export function isActivePatternStatus(status: string): boolean {
-  return status === "active_local" || status === "active_global";
+  return status === "active_local" || status === "active_org" || status === "active_global";
 }
 
 export function isSkillSynthesisEligible(params: {
@@ -677,8 +693,8 @@ export function isSkillSynthesisEligible(params: {
   return (
     (
       params.status === "active_local" ||
-      params.status === "active_global" ||
       params.status === "synthesized_local" ||
+      params.status === "active_global" ||
       params.status === "synthesized_global"
     ) &&
     params.confidence >= minConfidence &&
@@ -933,7 +949,7 @@ export function summarizeEntityImpact(observations: ImpactObservation[]): Entity
 }
 
 export function classifyPatternLifecycle(params: {
-  scope: "local" | "global";
+  scope: "local" | "global" | "org";
   effectiveEvidence: number;
   confidence: number;
   impact: EntityImpactSummary;
@@ -946,7 +962,13 @@ export function classifyPatternLifecycle(params: {
     params.impact.verificationPassRate >= 0.5;
 
   if (evidenceReady && impactReady) {
-    return params.scope === "global" ? "active_global" : "active_local";
+    if (params.scope === "global") {
+      return "active_global";
+    }
+    if (params.scope === "org") {
+      return "active_org";
+    }
+    return "active_local";
   }
   if (
     params.impact.applications >= 3 &&

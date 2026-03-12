@@ -1,6 +1,6 @@
 import { validateApiKey } from "@/lib/api-auth";
 import { errorResponse } from "@/lib/errors";
-import { releaseJobLease, runPatternExtraction, tryAcquireJobLease } from "@/lib/cognitive-db";
+import { promoteEligiblePatternsToOrg, releaseJobLease, runPatternExtraction, tryAcquireJobLease } from "@/lib/cognitive-db";
 import { logCognitiveAuditEvent } from "@/lib/cognitive-audit";
 
 export const runtime = "nodejs";
@@ -35,6 +35,7 @@ export async function POST(request: Request) {
         userId: identity.userId,
         includeGlobal: true,
       });
+      const orgPromotion = await promoteEligiblePatternsToOrg(identity.userId);
 
       await releaseJobLease({
         jobName,
@@ -44,6 +45,8 @@ export async function POST(request: Request) {
           userId: identity.userId,
           localPatterns: result.localPatterns,
           globalPatterns: result.globalPatterns,
+          orgId: orgPromotion.orgId,
+          orgPromotedPatterns: orgPromotion.promotedPatterns,
         },
       });
 
@@ -56,6 +59,8 @@ export async function POST(request: Request) {
         metadata: {
           localPatterns: result.localPatterns,
           globalPatterns: result.globalPatterns,
+          orgId: orgPromotion.orgId,
+          orgPromotedPatterns: orgPromotion.promotedPatterns,
           touchedPatternIds: result.touchedPatternIds.length,
         },
       });
@@ -64,7 +69,10 @@ export async function POST(request: Request) {
         ran: true,
         localPatterns: result.localPatterns,
         globalPatterns: result.globalPatterns,
+        orgId: orgPromotion.orgId,
+        orgPromotedPatterns: orgPromotion.promotedPatterns,
         touchedPatternIds: result.touchedPatternIds,
+        promotedPatternIds: orgPromotion.touchedPatternIds,
       });
     } catch (error) {
       await releaseJobLease({
