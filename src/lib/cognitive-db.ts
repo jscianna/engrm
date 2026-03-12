@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type { Client } from "@libsql/client";
+import { ensureDatabaseMigrations } from "@/lib/db-migrations";
 import { getDb } from "@/lib/turso";
 import { embedText } from "@/lib/embeddings";
 import {
@@ -467,6 +468,7 @@ async function ensureInitialized(): Promise<void> {
     return;
   }
 
+  await ensureDatabaseMigrations();
   const client = getDb();
   await client.executeMultiple(`
     CREATE TABLE IF NOT EXISTS coding_traces (

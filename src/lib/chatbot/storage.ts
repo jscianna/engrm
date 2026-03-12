@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { ensureDatabaseMigrations } from "@/lib/db-migrations";
 import { getDb } from "@/lib/turso";
 
 // TODO: public_token exists in storage, but the public chatbot access flow is not finished yet.
@@ -173,6 +174,7 @@ export async function ensureChatbotTables(): Promise<void> {
     return;
   }
 
+  await ensureDatabaseMigrations();
   const client = getDb();
   // TODO: This raw bootstrap DDL overlaps with Drizzle schema definitions in src/lib/db/schema.ts.
   // Pick a single schema source of truth to avoid future drift.

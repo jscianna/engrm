@@ -24,6 +24,7 @@ import {
   ensureRateLimiterInitialized,
   reserveMemoryQuotaInTransaction,
 } from "@/lib/rate-limiter";
+import { ensureDatabaseMigrations } from "@/lib/db-migrations";
 import { containsSecrets } from "@/lib/secrets";
 
 const ENCRYPTION_ALGORITHM = "aes-256-gcm";
@@ -160,6 +161,7 @@ async function ensureInitialized(): Promise<void> {
 
   // Start initialization
   initializingPromise = (async () => {
+    await ensureDatabaseMigrations();
     const client = getDb();
 
     try {

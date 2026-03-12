@@ -4,6 +4,7 @@
  * Storage and retrieval for user constraints.
  */
 
+import { ensureDatabaseMigrations } from "@/lib/db-migrations";
 import { getDb } from "@/lib/turso";
 
 export type ConstraintScope = 'global' | 'template' | 'user' | 'session';
@@ -27,6 +28,7 @@ let initialized = false;
 async function ensureInitialized() {
   if (initialized) return;
   
+  await ensureDatabaseMigrations();
   const client = getDb();
   
   await client.execute(`

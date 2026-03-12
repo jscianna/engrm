@@ -1,3 +1,4 @@
+import { ensureDatabaseMigrations } from "@/lib/db-migrations";
 import { getDb } from "@/lib/turso";
 import { MemryError } from "@/lib/errors";
 import { extractRequestInfo } from "@/lib/audit-log";
@@ -9,6 +10,7 @@ async function ensureRequestThrottleTable(): Promise<void> {
     return;
   }
 
+  await ensureDatabaseMigrations();
   const client = getDb();
   await client.executeMultiple(`
     CREATE TABLE IF NOT EXISTS request_throttles (

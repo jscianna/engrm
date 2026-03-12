@@ -9,6 +9,8 @@
     "dev": "next dev",
     "build": "npm run build:packages && next build --webpack",
     "build:packages": "npm run build --workspaces --if-present --include-workspace-root=false",
+    "db:migrate": "node scripts/db-migrate.mjs",
+    "db:migrate:status": "node scripts/db-migrate.mjs --status",
     "start": "next start",
     "lint": "eslint",
     "check:examples": "./node_modules/.bin/tsc -p examples/tsconfig.json --noEmit",

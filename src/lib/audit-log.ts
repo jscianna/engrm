@@ -8,6 +8,7 @@
 // TODO: Currently unused. Wire this into the authenticated mutation/read paths.
 
 import crypto from "node:crypto";
+import { ensureDatabaseMigrations } from "./db-migrations";
 import { getDb } from "./turso";
 
 // =============================================================================
@@ -68,6 +69,7 @@ let initialized = false;
 async function ensureAuditTable(): Promise<void> {
   if (initialized) return;
 
+  await ensureDatabaseMigrations();
   const client = getDb();
   await client.executeMultiple(`
     CREATE TABLE IF NOT EXISTS audit_logs (

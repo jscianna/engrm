@@ -7,6 +7,7 @@
  * Data is portable - vectors stored as JSON, easy to export.
  */
 
+import { ensureDatabaseMigrations } from "./db-migrations";
 import { getDb } from "./turso";
 
 // Expected embedding dimensions by model
@@ -33,6 +34,7 @@ let initialized = false;
 async function ensureVectorTable(): Promise<void> {
   if (initialized) return;
 
+  await ensureDatabaseMigrations();
   const client = getDb();
   await client.execute(`
     CREATE TABLE IF NOT EXISTS memory_vectors (

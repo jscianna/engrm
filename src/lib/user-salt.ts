@@ -11,6 +11,7 @@
  */
 
 import crypto from "node:crypto";
+import { ensureDatabaseMigrations } from "./db-migrations";
 import { getDb } from "./turso";
 
 // =============================================================================
@@ -28,6 +29,7 @@ let initialized = false;
 async function ensureSaltTable(): Promise<void> {
   if (initialized) return;
 
+  await ensureDatabaseMigrations();
   const client = getDb();
   
   // Create user_salts table with salt and hmac_secret

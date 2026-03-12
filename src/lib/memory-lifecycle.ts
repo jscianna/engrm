@@ -9,6 +9,7 @@
  * Based on MoA synthesis for optimal thresholds.
  */
 
+import { ensureDatabaseMigrations } from "./db-migrations";
 import { getDb } from "./turso";
 import { deleteMemoryVector } from "./qdrant";
 
@@ -187,6 +188,7 @@ let initialized = false;
 async function ensureLifecycleTable(): Promise<void> {
   if (initialized) return;
   
+  await ensureDatabaseMigrations();
   const client = getDb();
   
   // Add archived_at and is_identity columns if not exist

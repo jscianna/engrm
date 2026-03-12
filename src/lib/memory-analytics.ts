@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { ensureCoreMemoryTables } from "@/lib/db";
+import { ensureDatabaseMigrations } from "@/lib/db-migrations";
 import { getDb } from "@/lib/turso";
 
 type InjectionEventRecord = {
@@ -131,6 +132,7 @@ async function ensureAnalyticsTables(): Promise<void> {
 
   const client = getDb();
   initializingPromise = (async () => {
+    await ensureDatabaseMigrations();
     const injectionColumns = await getTableColumns("injection_events");
     if (injectionColumns.length === 0) {
       await client.executeMultiple(`
