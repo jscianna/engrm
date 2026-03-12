@@ -164,6 +164,33 @@ export function shouldUseHyDE(query: string): boolean {
 }
 
 /**
+ * Confidence-gated HyDE embedding.
+ *
+ * Runs a cheap first-pass embedding. If retrieval confidence (computed
+ * from the first-pass results) is below the threshold, re-embeds with
+ * HyDE to improve recall. Saves the LLM call when results are already
+ * strong.
+ *
+ * @param query User query
+ * @param retrievalConfidence 0–1 confidence from first-pass results
+ * @param confidenceThreshold Gate threshold (default 0.72)
+ * @returns Embedding result with `gated` flag
+ */
+export async function embedWithHyDEIfNeeded(
+  query: string,
+  retrievalConfidence: number,
+  confidenceThreshold: number = 0.72,
+): Promise<{ embedding: number[]; usedHyDE: boolean; hypotheticalDocument?: string; gated: boolean }> {
+  if (retrievalConfidence >= confidenceThreshold) {
+    const embedding = await embedText(query);
+    return { embedding, usedHyDE: false, gated: true };
+  }
+
+  const result = await embedWithHyDE(query, true);
+  return { ...result, gated: false };
+}
+
+/**
  * Main HyDE function - generates embedding with optional HyDE enhancement.
  * 
  * @param query The user query

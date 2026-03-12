@@ -221,6 +221,38 @@ export async function rerankMemoriesBatched(
 }
 
 /**
+ * Confidence-gated reranking.
+ *
+ * Only invokes the hosted LLM reranker when retrieval confidence is
+ * below `confidenceThreshold`. When confidence is sufficient the
+ * original candidates are returned as-is, saving latency and cost.
+ *
+ * @param query The user query
+ * @param candidates Candidate memories from local/hybrid search
+ * @param retrievalConfidence 0–1 confidence from computeRetrievalConfidence
+ * @param confidenceThreshold Gate threshold (default 0.72)
+ * @param options Standard RerankOptions
+ * @returns RerankResult – with `gated: true` when reranking was skipped
+ */
+export async function rerankIfNeeded<T extends RerankableMemory>(
+  query: string,
+  candidates: T[],
+  retrievalConfidence: number,
+  confidenceThreshold: number = 0.72,
+  options: RerankOptions = {},
+): Promise<RerankResult<T> & { gated: boolean }> {
+  if (retrievalConfidence >= confidenceThreshold) {
+    const returnK = options.returnK ?? 5;
+    const trimmed = candidates.slice(0, returnK);
+    const scores = new Map(trimmed.map((m, i) => [m.id, 100 - i * 5]));
+    return { memories: trimmed, scores, success: true, gated: true };
+  }
+
+  const result = await rerankMemories(query, candidates, options);
+  return { ...result, gated: false };
+}
+
+/**
  * Apply reranking scores as a boost to existing scores.
  * This combines the semantic search score with the LLM judgment.
  * 
