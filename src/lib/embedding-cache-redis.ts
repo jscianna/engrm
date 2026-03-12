@@ -14,7 +14,7 @@ import { Redis } from "@upstash/redis";
 import crypto from "crypto";
 
 const CACHE_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
-const CACHE_PREFIX = "emb:";
+const CACHE_PREFIX = "emb:v2-384:";
 
 let redis: Redis | null = null;
 

@@ -167,7 +167,15 @@ export async function ensureCollection(): Promise<void> {
  * Get vector name based on dimension
  */
 function getVectorName(dimension: number): "minilm" | "openai" {
-  return dimension === 384 ? "minilm" : "openai";
+  if (dimension === 384) {
+    return "minilm";
+  }
+  if (dimension === 1536) {
+    return "openai";
+  }
+  throw new Error(
+    `Unsupported Qdrant vector dimension: ${dimension}. Expected 384 or 1536.`,
+  );
 }
 
 /**

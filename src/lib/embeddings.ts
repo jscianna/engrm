@@ -20,6 +20,33 @@ import { getCachedEmbeddingPersistent, setCachedEmbeddingPersistent } from "./em
 
 const EMBEDDING_DIMENSION = 384; // Standardized output dimension
 
+function normalizeEmbedding(vector: unknown, source: string): number[] | null {
+  if (!Array.isArray(vector)) {
+    return null;
+  }
+
+  const numeric = vector.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  if (numeric.length === 0) {
+    return null;
+  }
+
+  if (numeric.length === EMBEDDING_DIMENSION) {
+    return numeric;
+  }
+
+  if (numeric.length > EMBEDDING_DIMENSION) {
+    console.warn(
+      `[Embeddings] Normalizing ${source} vector from ${numeric.length} to ${EMBEDDING_DIMENSION} dimensions`,
+    );
+    return numeric.slice(0, EMBEDDING_DIMENSION);
+  }
+
+  console.warn(
+    `[Embeddings] Padding ${source} vector from ${numeric.length} to ${EMBEDDING_DIMENSION} dimensions`,
+  );
+  return [...numeric, ...new Array(EMBEDDING_DIMENSION - numeric.length).fill(0)];
+}
+
 // OpenAI embeddings
 async function embedWithOpenAI(input: string): Promise<number[] | null> {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -45,7 +72,7 @@ async function embedWithOpenAI(input: string): Promise<number[] | null> {
     }
 
     const data = await response.json();
-    return data.data?.[0]?.embedding ?? null;
+    return normalizeEmbedding(data.data?.[0]?.embedding ?? null, "OpenAI");
   } catch (error) {
     console.error("[Embeddings] OpenAI failed:", error);
     return null;
@@ -79,7 +106,7 @@ async function embedWithOpenRouter(input: string): Promise<number[] | null> {
     }
 
     const data = await response.json();
-    return data.data?.[0]?.embedding ?? null;
+    return normalizeEmbedding(data.data?.[0]?.embedding ?? null, "OpenRouter");
   } catch (error) {
     console.error("[Embeddings] OpenRouter failed:", error);
     return null;
@@ -116,18 +143,7 @@ async function embedWithCohere(input: string): Promise<number[] | null> {
     }
 
     const data = await response.json();
-    const embedding = data.embeddings?.[0];
-    
-    if (!embedding) return null;
-    
-    // Cohere returns 1024 dims, truncate/pad to our standard dimension
-    if (embedding.length > EMBEDDING_DIMENSION) {
-      return embedding.slice(0, EMBEDDING_DIMENSION);
-    }
-    if (embedding.length < EMBEDDING_DIMENSION) {
-      return [...embedding, ...new Array(EMBEDDING_DIMENSION - embedding.length).fill(0)];
-    }
-    return embedding;
+    return normalizeEmbedding(data.embeddings?.[0] ?? null, "Cohere");
   } catch (error) {
     console.error("[Embeddings] Cohere failed:", error);
     return null;
@@ -140,13 +156,13 @@ export async function embedText(input: string): Promise<number[]> {
   }
 
   // 1. Check in-memory cache (fastest - same lambda instance)
-  const memoryCached = getCachedEmbedding(input);
+  const memoryCached = normalizeEmbedding(getCachedEmbedding(input), "memory cache");
   if (memoryCached) {
     return memoryCached;
   }
 
   // 2. Check persistent cache (Upstash Redis - survives cold starts)
-  const persistentCached = await getCachedEmbeddingPersistent(input);
+  const persistentCached = normalizeEmbedding(await getCachedEmbeddingPersistent(input), "persistent cache");
   if (persistentCached) {
     // Warm the in-memory cache too
     setCachedEmbedding(input, persistentCached);

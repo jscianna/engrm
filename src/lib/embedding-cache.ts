@@ -12,12 +12,13 @@ interface CacheEntry {
 
 const CACHE_TTL_MS = 1000 * 60 * 60; // 1 hour
 const MAX_CACHE_SIZE = 500;
+const CACHE_VERSION = "v2-384";
 
 const cache = new Map<string, CacheEntry>();
 
 function hashQuery(query: string): string {
   const normalized = query.toLowerCase().trim();
-  return `emb_${crypto.createHash("sha256").update(normalized).digest("hex")}`;
+  return `emb_${CACHE_VERSION}_${crypto.createHash("sha256").update(normalized).digest("hex")}`;
 }
 
 export function getCachedEmbedding(query: string): number[] | null {
