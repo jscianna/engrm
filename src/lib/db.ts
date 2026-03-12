@@ -210,6 +210,13 @@ async function ensureInitialized(): Promise<void> {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS user_entitlements (
+      user_id TEXT PRIMARY KEY,
+      plan TEXT NOT NULL DEFAULT 'free',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS api_keys (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -599,6 +606,16 @@ export type ApiKeyIdentity = {
   scopes: string[];
 };
 
+export type EntitlementPlan = "free" | "hosted" | "cognition";
+
+export type UserEntitlement = {
+  userId: string;
+  plan: EntitlementPlan;
+  source: "default" | "env" | "db";
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
 export const DEFAULT_AGENT_API_KEY_SCOPES = [
   "analytics",
   "chatbots.*",
@@ -634,6 +651,37 @@ export const DEFAULT_AGENT_API_KEY_SCOPES = [
   "syntheses.*",
 ] as const;
 
+function normalizeEntitlementPlan(value: unknown): EntitlementPlan {
+  if (value === "hosted" || value === "cognition") {
+    return value;
+  }
+  return "free";
+}
+
+function planFromEnv(userId: string): EntitlementPlan | null {
+  const cognitionUsers = new Set(
+    (process.env.FATHIPPO_COGNITION_USER_IDS ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+  if (cognitionUsers.has(userId)) {
+    return "cognition";
+  }
+
+  const hostedUsers = new Set(
+    (process.env.FATHIPPO_HOSTED_USER_IDS ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+  if (hostedUsers.has(userId)) {
+    return "hosted";
+  }
+
+  return null;
+}
+
 function normalizeApiKeyScopes(scopes?: string[] | null): string[] {
   const source = Array.isArray(scopes) ? scopes : [...DEFAULT_AGENT_API_KEY_SCOPES];
   const normalized = Array.from(
@@ -661,6 +709,79 @@ function parseApiKeyScopes(raw: unknown): string[] {
   } catch {
     return ["*"];
   }
+}
+
+export async function getUserEntitlement(userId: string): Promise<UserEntitlement> {
+  await ensureInitialized();
+  const envPlan = planFromEnv(userId);
+  if (envPlan) {
+    return {
+      userId,
+      plan: envPlan,
+      source: "env",
+      createdAt: null,
+      updatedAt: null,
+    };
+  }
+
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT user_id, plan, created_at, updated_at
+      FROM user_entitlements
+      WHERE user_id = ?
+      LIMIT 1
+    `,
+    args: [userId],
+  });
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  if (!row) {
+    return {
+      userId,
+      plan: "free",
+      source: "default",
+      createdAt: null,
+      updatedAt: null,
+    };
+  }
+
+  return {
+    userId,
+    plan: normalizeEntitlementPlan(row.plan),
+    source: "db",
+    createdAt: typeof row.created_at === "string" ? row.created_at : null,
+    updatedAt: typeof row.updated_at === "string" ? row.updated_at : null,
+  };
+}
+
+export async function getUserEntitlementPlan(userId: string): Promise<EntitlementPlan> {
+  const entitlement = await getUserEntitlement(userId);
+  return entitlement.plan;
+}
+
+export async function setUserEntitlementPlan(userId: string, plan: EntitlementPlan): Promise<UserEntitlement> {
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+  const normalizedPlan = normalizeEntitlementPlan(plan);
+  await client.execute({
+    sql: `
+      INSERT INTO user_entitlements (user_id, plan, created_at, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        plan = excluded.plan,
+        updated_at = excluded.updated_at
+    `,
+    args: [userId, normalizedPlan, now, now],
+  });
+
+  return {
+    userId,
+    plan: normalizedPlan,
+    source: "db",
+    createdAt: now,
+    updatedAt: now,
+  };
 }
 
 export type NamespaceRecord = {

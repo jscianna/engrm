@@ -1,6 +1,7 @@
 import { validateApiKey as validateApiKeyInDb } from "@/lib/db";
 import { MemryError, ApiAuthError, errorResponse } from "@/lib/errors";
 import { checkRateLimit } from "@/lib/rate-limiter";
+import { assertEntitlement, featureForEndpoint } from "@/lib/entitlements";
 
 // Re-export for backward compatibility
 export { ApiAuthError };
@@ -57,6 +58,11 @@ export async function validateApiKey(
     throw new MemryError("AUTH_FORBIDDEN", {
       requiredScope: endpoint,
     });
+  }
+
+  const feature = featureForEndpoint(endpoint);
+  if (feature) {
+    await assertEntitlement(identity.userId, feature);
   }
 
   // Check rate limits and record the API call

@@ -18,6 +18,7 @@ import {
 } from "@/lib/db";
 import { recordInjectionEvent } from "@/lib/memory-analytics";
 import { validateApiKey } from "@/lib/api-auth";
+import { assertEntitlement, EntitlementFeature, hasEntitlement } from "@/lib/entitlements";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 import { detectSecretQueryIntent, VAULT_HINT_MESSAGE } from "@/lib/secrets";
@@ -160,11 +161,28 @@ export async function POST(request: Request) {
     
     // New confidence-gated hosted services (from config or request override)
     const retrievalConfig = getRetrievalConfig();
-    const hostedHydeEnabled = body.hostedHyde === true || retrievalConfig.hostedHydeEnabled;
-    const hostedRerankEnabled = body.hostedRerank === true || retrievalConfig.hostedRerankEnabled;
+    const requestedHostedHyde = enableHyDE || body.hostedHyde === true;
+    const requestedHostedRerank = enableRerank || body.hostedRerank === true;
+    let hostedHydeEnabled = requestedHostedHyde || retrievalConfig.hostedHydeEnabled;
+    let hostedRerankEnabled = requestedHostedRerank || retrievalConfig.hostedRerankEnabled;
     const confidenceThreshold = typeof body.confidenceThreshold === "number"
       ? Math.max(0.5, Math.min(0.95, body.confidenceThreshold))
       : retrievalConfig.confidenceThreshold;
+
+    if (requestedHostedHyde) {
+      await assertEntitlement(identity.userId, EntitlementFeature.HostedHyde);
+    } else if (hostedHydeEnabled && !(await hasEntitlement(identity.userId, EntitlementFeature.HostedHyde))) {
+      hostedHydeEnabled = false;
+    }
+
+    if (requestedHostedRerank) {
+      await assertEntitlement(identity.userId, EntitlementFeature.HostedRerank);
+    } else if (
+      hostedRerankEnabled &&
+      !(await hasEntitlement(identity.userId, EntitlementFeature.HostedRerank))
+    ) {
+      hostedRerankEnabled = false;
+    }
     
     // Initialize metrics for hosted service tracking
     const hostedMetrics: HostedServiceMetrics = createHostedMetrics();

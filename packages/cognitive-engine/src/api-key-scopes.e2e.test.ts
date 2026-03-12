@@ -32,6 +32,7 @@ describe("api key scopes", () => {
       "memories.list",
       "cognitive.traces.*",
     ]);
+    await db.setUserEntitlementPlan("user-scope-test", "cognition");
 
     const allowedRequest = new Request("http://localhost/api/v1/memories", {
       headers: {

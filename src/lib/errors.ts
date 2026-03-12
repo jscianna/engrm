@@ -8,6 +8,7 @@ export type ErrorCode =
   | "AUTH_INVALID"
   | "AUTH_INVALID_KEY"
   | "AUTH_FORBIDDEN"
+  | "ENTITLEMENT_REQUIRED"
   | "RATE_LIMIT_MINUTE"
   | "RATE_LIMIT_DAILY"
   | "RATE_LIMIT_ACTION"
@@ -46,6 +47,11 @@ const ERROR_DETAILS: Record<ErrorCode, { status: number; message: string; userMe
     status: 403,
     message: "Forbidden",
     userMessage: "You do not have permission to perform this action.",
+  },
+  ENTITLEMENT_REQUIRED: {
+    status: 403,
+    message: "Entitlement required",
+    userMessage: "This feature is not included on your current plan. Upgrade to enable it.",
   },
   RATE_LIMIT_MINUTE: {
     status: 429,
