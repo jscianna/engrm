@@ -51,6 +51,7 @@ export type DreamCycleResult = {
   promotions: DreamPromotionSuggestion[];
   decay: DreamDecayPoint[];
   syntheses: SynthesizedMemoryRecord[];
+  warnings?: string[];
 };
 
 function dayDiff(createdAt: string): number {
@@ -76,6 +77,7 @@ export async function saveBond(params: {
 }
 
 export async function runDreamCycle(userId: string): Promise<DreamCycleResult> {
+  const warnings: string[] = [];
   const memories = await listMemoryRecordsByUser(userId, 120);
   const memoryById = new Map(memories.map((memory) => [memory.id, { id: memory.id, userId: memory.userId, title: memory.title }]));
   const existingEdges = await listMemoryEdgesByUser(userId, 600);
@@ -226,20 +228,36 @@ export async function runDreamCycle(userId: string): Promise<DreamCycleResult> {
     };
   });
 
-  await processCompletedMemories(userId);
-  await processEphemeralMemories(userId);
+  try {
+    await processCompletedMemories(userId);
+  } catch (error) {
+    console.warn("[DreamCycle] Completed-memory analysis skipped:", error);
+    warnings.push("Skipped completed-task analysis because the configured chat model was unavailable.");
+  }
+
+  try {
+    await processEphemeralMemories(userId);
+  } catch (error) {
+    console.warn("[DreamCycle] Ephemeral-memory processing skipped:", error);
+    warnings.push("Skipped ephemeral-memory consolidation because the configured chat model was unavailable.");
+  }
 
   const criticalClusters = await clusterCriticalMemories(userId);
   for (const cluster of criticalClusters) {
     if (cluster.memories.length < 2) {
       continue;
     }
-    const synthesis = await synthesizeClusterToPrinciple(userId, cluster);
-    await absorbCriticalMemoriesIntoSynthesis(
-      userId,
-      synthesis.id,
-      cluster.memories.map((memory) => memory.id),
-    );
+    try {
+      const synthesis = await synthesizeClusterToPrinciple(userId, cluster);
+      await absorbCriticalMemoriesIntoSynthesis(
+        userId,
+        synthesis.id,
+        cluster.memories.map((memory) => memory.id),
+      );
+    } catch (error) {
+      console.warn("[DreamCycle] Critical synthesis skipped:", error);
+      warnings.push(`Skipped critical synthesis for cluster "${cluster.theme}" because the configured chat model was unavailable.`);
+    }
   }
 
   const clusters = await clusterMemories(userId);
@@ -264,13 +282,23 @@ export async function runDreamCycle(userId: string): Promise<DreamCycleResult> {
 
   const syntheses: SynthesizedMemoryRecord[] = [];
   for (const cluster of clusters) {
-    const synthesized = await synthesizeClusterIfNeeded(userId, cluster);
-    if (synthesized) {
-      syntheses.push(synthesized);
+    try {
+      const synthesized = await synthesizeClusterIfNeeded(userId, cluster);
+      if (synthesized) {
+        syntheses.push(synthesized);
+      }
+    } catch (error) {
+      console.warn("[DreamCycle] Cluster synthesis skipped:", error);
+      warnings.push(`Skipped synthesis for cluster "${cluster.topic}" because the configured chat model was unavailable.`);
     }
   }
 
-  await validateSynthesizedMemories(userId);
+  try {
+    await validateSynthesizedMemories(userId);
+  } catch (error) {
+    console.warn("[DreamCycle] Synthesis validation skipped:", error);
+    warnings.push("Skipped synthesis validation because the configured chat model was unavailable.");
+  }
 
   return {
     generatedAt: new Date().toISOString(),
@@ -278,6 +306,7 @@ export async function runDreamCycle(userId: string): Promise<DreamCycleResult> {
     promotions,
     decay,
     syntheses,
+    warnings: warnings.length > 0 ? Array.from(new Set(warnings)) : undefined,
   };
 }
 
