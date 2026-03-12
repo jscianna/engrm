@@ -1,6 +1,6 @@
 # @fathippo/context-engine
 
-FatHippo Context Engine for OpenClaw — encrypted agent memory with semantic search, Dream Cycle synthesis, and tiered intelligence.
+FatHippo Context Engine for OpenClaw — persistent agent memory with hosted cognition or private local mode.
 
 ## Installation
 
@@ -19,12 +19,13 @@ plugins:
     fathippo-context-engine:
       enabled: true
       config:
-        apiKey: "${FATHIPPO_API_KEY}"
+        mode: hosted                # hosted or local
+        apiKey: "${FATHIPPO_API_KEY}" # Hosted mode only
         # Optional settings
         injectCritical: true        # Auto-inject critical memories (default: true)
         injectLimit: 20             # Max memories per turn (default: 20)
         captureUserOnly: true       # Only capture user messages (default: true)
-        dreamCycleOnCompact: true   # Run Dream Cycle on /compact (default: true)
+        dreamCycleOnCompact: true   # Run Dream Cycle on /compact in hosted mode
 ```
 
 ## What It Does
@@ -33,21 +34,21 @@ Instead of bolting memory onto OpenClaw, this makes FatHippo the **entire contex
 
 | Hook | What Happens |
 |------|-------------|
-| **bootstrap** | Loads critical memories + recent context on session start |
-| **ingest** | Captures user messages, filters noise, stores to FatHippo |
-| **assemble** | Queries FatHippo, injects relevant memories per turn |
-| **compact** | Runs Dream Cycle (synthesis, decay) instead of lossy compaction |
-| **afterTurn** | Invalidates caches, triggers async processing |
+| **bootstrap** | Loads hosted critical context or initializes local workspace memory |
+| **ingest** | Captures user messages, filters noise, stores hosted or local memory |
+| **assemble** | Queries hosted FatHippo or local store and injects relevant context per turn |
+| **compact** | Runs hosted Dream Cycle or skips hosted compaction in local mode |
+| **afterTurn** | Invalidates caches and captures hosted or local learning signals |
 | **prepareSubagentSpawn** | Scopes memories for spawned agents |
 | **onSubagentEnded** | Absorbs learnings from completed subagents |
 
 ## Features
 
-- **Encrypted at rest** — AES-256-GCM, per-user keys
-- **Semantic search** — Vector + BM25 hybrid search
-- **Tiered intelligence** — Critical/high/normal/low importance
-- **Dream Cycle** — Automatic synthesis, decay, and cleanup
-- **Cross-device** — Cloud-native, works across all your agents
+- **Hosted mode** — Full FatHippo retrieval, cognition, sync, and receipts
+- **Local mode** — Private on-device memory plus lightweight local workflow/fix learning
+- **Semantic search** — Hosted hybrid search or local memory ranking
+- **Dream Cycle** — Automatic synthesis, decay, and cleanup in hosted mode
+- **Cross-device** — Hosted mode follows your account across devices
 
 ## API Key
 

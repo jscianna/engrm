@@ -3,13 +3,16 @@
  */
 
 export interface FatHippoConfig {
-  apiKey: string;
+  apiKey?: string;
   baseUrl?: string;
+  mode?: "auto" | "hosted" | "local";
   injectCritical?: boolean;
   injectLimit?: number;
   captureUserOnly?: boolean;
   dreamCycleOnCompact?: boolean;
   conversationId?: string | null;
+  localProfileId?: string | null;
+  localStoragePath?: string;
   /** Enable cognitive engine features (trace capture, pattern injection). Default: true */
   cognitiveEnabled?: boolean;
   /** Run extraction and synthesis from heartbeat turns. Default: true */
@@ -20,6 +23,10 @@ export interface FatHippoConfig {
   adaptivePolicyEnabled?: boolean;
   /** Allow occasional user-visible hippo acknowledgements when FatHippo materially helps. Default: true */
   hippoNodsEnabled?: boolean;
+  /** Internal: plugin version attached to hosted requests for dashboard visibility. */
+  pluginVersion?: string;
+  /** Internal: plugin id attached to hosted requests for dashboard visibility. */
+  pluginId?: string;
 }
 
 export interface Memory {

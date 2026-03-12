@@ -10,34 +10,57 @@ export default function OpenClawGuidePage() {
     <>
       <H1>OpenClaw Integration</H1>
       <P>
-        Add persistent memory to OpenClaw-powered agents. This guide shows how to 
-        integrate FatHippo for cross-session memory, context injection, and learning storage.
+        Add persistent memory to OpenClaw-powered agents. This guide shows how to
+        connect FatHippo after OpenClaw is already part of your workflow, then let it quietly improve recall,
+        workflows, and repeated fixes over time.
       </P>
 
       <H2 id="plugin">Plugin Installation (Recommended)</H2>
       <P>
-        Install the <InlineCode>@fathippo/context-engine</InlineCode> plugin to make FatHippo the active context layer for OpenClaw.
+        OpenClaw users only install <InlineCode>@fathippo/context-engine</InlineCode>. The other Fathippo packages are
+        developer boundaries, not separate end-user installs.
       </P>
 
+      <H3>Hosted Mode</H3>
       <CodeBlock language="bash">{`# Install the plugin
 openclaw plugins install @fathippo/context-engine
 
 # Set as context engine
 openclaw config set plugins.slots.contextEngine=fathippo-context-engine
 
-# Configure your API key
+# Configure hosted mode + your API key
+openclaw config set plugins.entries.fathippo-context-engine.config.mode=hosted
 openclaw config set plugins.entries.fathippo-context-engine.config.apiKey=mem_your_key
 
 # Restart
 openclaw gateway restart`}</CodeBlock>
 
+      <H3>Local-Only Mode (No API Key)</H3>
+      <CodeBlock language="bash">{`# Install the plugin
+openclaw plugins install @fathippo/context-engine
+
+# Set as context engine
+openclaw config set plugins.slots.contextEngine=fathippo-context-engine
+
+# Configure local mode
+openclaw config set plugins.entries.fathippo-context-engine.config.mode=local
+
+# Restart
+openclaw gateway restart`}</CodeBlock>
+
+      <Note type="tip">
+        Hosted mode reports the plugin version back to your FatHippo dashboard and unlocks hosted cognition, sync,
+        and import features. Local-only mode stays private, does not send version telemetry to the hosted dashboard,
+        and only uses lightweight on-device learning stored locally on disk.
+      </Note>
+
       <H3>Features</H3>
       <ul className="list-disc list-inside text-zinc-400 space-y-2 mb-4">
         <li><strong>Per-turn context injection:</strong> Retrieves relevant memories for each user turn</li>
         <li><strong>Auto-capture:</strong> Stores useful user insights while filtering noise</li>
-        <li><strong>Dream Cycle compaction:</strong> Uses FatHippo synthesis on compaction</li>
+        <li><strong>Dream Cycle compaction:</strong> Hosted mode uses FatHippo synthesis on compaction</li>
         <li><strong>Subagent context handoff:</strong> Preserves context across spawned agents</li>
-        <li><strong>Encrypted:</strong> AES-256-GCM at rest</li>
+        <li><strong>Storage:</strong> Hosted mode uses your FatHippo account; local mode stores private data in its configured local file.</li>
       </ul>
 
       <H3>Configuration Options</H3>
@@ -51,6 +74,7 @@ openclaw gateway restart`}</CodeBlock>
         "enabled": true,
         "config": {
           "apiKey": "mem_your_key",
+          "mode": "hosted",
           "injectCritical": true,
           "injectLimit": 20,
           "captureUserOnly": true,

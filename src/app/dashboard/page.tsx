@@ -11,6 +11,7 @@ import { buildFathippoReceipt, isOpenClawAgentName } from "@/lib/cognitive-recei
 import { getRecentApplications } from "@/lib/cognitive-db";
 import { listApiKeys } from "@/lib/db";
 import { getCachedMemories, getCachedMemoryStats } from "@/lib/memories";
+import { getOpenClawPluginStatus, pickPreferredOpenClawKey } from "@/lib/openclaw-plugin";
 
 const DreamCycleCard = dynamic(
   () => import("@/components/dream-cycle-card").then((module) => module.DreamCycleCard),
@@ -131,7 +132,10 @@ async function FathippoHelpSection({ userId }: { userId: string }) {
     getRecentApplications(userId, 8),
     listApiKeys(userId),
   ]);
-  const openClawKey = apiKeys.find((key) => isOpenClawAgentName(key.agentName));
+  const openClawKey = pickPreferredOpenClawKey(
+    apiKeys.filter((key) => isOpenClawAgentName(key.agentName)),
+  );
+  const pluginStatus = await getOpenClawPluginStatus(openClawKey ?? null);
   const receipts = applications
     .map((bundle) => buildFathippoReceipt(bundle))
     .filter((receipt): receipt is NonNullable<typeof receipt> => receipt != null)
@@ -146,7 +150,9 @@ async function FathippoHelpSection({ userId }: { userId: string }) {
   const connectionDescription = !openClawKey
     ? "Create one key, paste four commands into your terminal, and Fathippo will start learning from future sessions."
     : openClawKey.lastUsed
-      ? `Fathippo has been helping OpenClaw recently. Last seen ${formatUsageDate(openClawKey.lastUsed)}.`
+      ? pluginStatus.lastSeenVersion
+        ? `Fathippo has been helping OpenClaw recently. Last seen v${pluginStatus.lastSeenVersion} in ${pluginStatus.lastSeenMode ?? "hosted"} mode on ${formatUsageDate(pluginStatus.lastSeenAt ?? openClawKey.lastUsed)}.`
+        : `Fathippo has been helping OpenClaw recently. Last seen ${formatUsageDate(openClawKey.lastUsed)}.`
       : "You already have an OpenClaw key. Finish the terminal setup and Fathippo will start showing receipts here.";
 
   return (
@@ -211,6 +217,18 @@ async function FathippoHelpSection({ userId }: { userId: string }) {
             FatHippo works best when OpenClaw is already part of your daily workflow. Connect it once, then let it
             quietly improve retrieval, repeated fixes, and debugging order over time.
           </div>
+
+          {pluginStatus.lastSeenVersion ? (
+            <div className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-3 text-xs text-zinc-400">
+              Connected plugin: <span className="text-zinc-100">v{pluginStatus.lastSeenVersion}</span>
+              {pluginStatus.lastSeenMode ? ` (${pluginStatus.lastSeenMode})` : ""}
+              {pluginStatus.updateAvailable ? (
+                <Badge className="ml-2 bg-amber-500/15 text-amber-300 hover:bg-amber-500/15">
+                  Update available: v{pluginStatus.publishedVersion ?? pluginStatus.currentVersion}
+                </Badge>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="mt-4 flex flex-wrap gap-2">
             <Button asChild className="bg-cyan-400 text-zinc-950 hover:bg-cyan-300">

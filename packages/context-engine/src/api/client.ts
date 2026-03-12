@@ -51,10 +51,16 @@ function mapMemoryRecord(record: {
 export class FatHippoClient {
   private apiKey: string;
   private baseUrl: string;
+  private pluginHeaders: Record<string, string>;
 
   constructor(config: FatHippoConfig) {
-    this.apiKey = config.apiKey;
+    this.apiKey = config.apiKey ?? "";
     this.baseUrl = config.baseUrl || DEFAULT_BASE_URL;
+    this.pluginHeaders = {
+      "X-Fathippo-Plugin-Id": config.pluginId ?? "fathippo-context-engine",
+      "X-Fathippo-Plugin-Version": config.pluginVersion ?? "unknown",
+      "X-Fathippo-Plugin-Mode": config.mode === "local" ? "local" : "hosted",
+    };
   }
 
   private async request<T>(
@@ -65,6 +71,7 @@ export class FatHippoClient {
     const headers = {
       Authorization: `Bearer ${this.apiKey}`,
       "Content-Type": "application/json",
+      ...this.pluginHeaders,
       ...options.headers,
     };
 

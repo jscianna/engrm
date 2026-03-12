@@ -11,21 +11,40 @@ type OpenClawConnectCardProps = {
   hasExistingOpenClawKey: boolean;
   isActive: boolean;
   lastUsed: string | null;
+  currentPluginVersion: string;
+  publishedPluginVersion: string | null;
+  lastSeenPluginVersion: string | null;
+  lastSeenPluginMode: string | null;
+  lastSeenPluginAt: string | null;
+  updateAvailable: boolean;
+  hasConnectedPlugin: boolean;
 };
 
 export function OpenClawConnectCard(props: OpenClawConnectCardProps) {
   const [creating, setCreating] = useState(false);
   const [createdKey, setCreatedKey] = useState<string | null>(null);
 
-  const installBlock = useMemo(() => {
+  const hostedInstallBlock = useMemo(() => {
     const keyValue = createdKey ?? "mem_your_openclaw_key";
     return [
       "openclaw plugins install @fathippo/context-engine",
       "openclaw config set plugins.slots.contextEngine=fathippo-context-engine",
+      "openclaw config set plugins.entries.fathippo-context-engine.config.mode=hosted",
       `openclaw config set plugins.entries.fathippo-context-engine.config.apiKey=${keyValue}`,
       "openclaw gateway restart",
     ].join("\n");
   }, [createdKey]);
+
+  const localInstallBlock = useMemo(
+    () =>
+      [
+        "openclaw plugins install @fathippo/context-engine",
+        "openclaw config set plugins.slots.contextEngine=fathippo-context-engine",
+        "openclaw config set plugins.entries.fathippo-context-engine.config.mode=local",
+        "openclaw gateway restart",
+      ].join("\n"),
+    [],
+  );
 
   async function createOpenClawKey() {
     try {
@@ -58,11 +77,14 @@ export function OpenClawConnectCard(props: OpenClawConnectCardProps) {
   }
 
   const statusLabel =
-    props.lastUsed
-      ? `OpenClaw has used this connection recently (${new Date(props.lastUsed).toLocaleDateString()}).`
-      : props.hasExistingOpenClawKey && props.isActive
-        ? "You already have an active OpenClaw key. If you have not connected it yet, create a fresh one below."
-        : "Connect Fathippo to the OpenClaw you already use in four commands.";
+    props.lastSeenPluginVersion
+      ? `OpenClaw last checked in with v${props.lastSeenPluginVersion}${props.lastSeenPluginMode ? ` in ${props.lastSeenPluginMode} mode` : ""}${props.lastSeenPluginAt ? ` on ${new Date(props.lastSeenPluginAt).toLocaleDateString()}` : ""}.`
+      : props.lastUsed
+        ? `OpenClaw has used this connection recently (${new Date(props.lastUsed).toLocaleDateString()}).`
+        : props.hasExistingOpenClawKey && props.isActive
+          ? "You already have an active OpenClaw key. If you have not connected it yet, create a fresh one below."
+          : "Connect Fathippo to the OpenClaw you already use in four commands."
+;
 
   return (
     <Card className="border-zinc-800 bg-zinc-900/60">
@@ -82,10 +104,34 @@ export function OpenClawConnectCard(props: OpenClawConnectCardProps) {
               <p className="text-sm font-medium text-zinc-100">Connection status</p>
               <p className="mt-1 text-xs text-zinc-400">{statusLabel}</p>
             </div>
-            {props.hasExistingOpenClawKey && props.isActive ? (
+            {props.hasConnectedPlugin ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs text-emerald-300">
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 Ready
+              </span>
+            ) : props.hasExistingOpenClawKey && props.isActive ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-zinc-800 px-2.5 py-1 text-xs text-zinc-300">
+                Key ready
+              </span>
+            ) : null}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+            <span className="rounded-full bg-zinc-800 px-2.5 py-1 text-zinc-300">
+              Dashboard package: v{props.currentPluginVersion}
+            </span>
+            {props.publishedPluginVersion ? (
+              <span className="rounded-full bg-zinc-800 px-2.5 py-1 text-zinc-300">
+                Published plugin: v{props.publishedPluginVersion}
+              </span>
+            ) : null}
+            {props.lastSeenPluginVersion ? (
+              <span className="rounded-full bg-zinc-800 px-2.5 py-1 text-zinc-300">
+                Last seen: v{props.lastSeenPluginVersion}
+              </span>
+            ) : null}
+            {props.updateAvailable ? (
+              <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-amber-300">
+                Update available
               </span>
             ) : null}
           </div>
@@ -126,27 +172,51 @@ export function OpenClawConnectCard(props: OpenClawConnectCardProps) {
         <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-zinc-100">Paste this into your terminal</p>
+              <p className="text-sm font-medium text-zinc-100">Hosted mode (recommended when you want dashboard receipts)</p>
               <p className="mt-1 text-xs text-zinc-500">
-                If you already have OpenClaw installed, this is the full Fathippo connection flow.
+                This connects OpenClaw to your FatHippo account, unlocks hosted retrieval and cognition features, supports account-backed sync and imports, and reports plugin version back to the dashboard.
+              </p>
+              <p className="mt-1 text-xs text-zinc-600">
+                The install command below pulls the latest published plugin package from npm.
               </p>
             </div>
-            <Button type="button" size="sm" variant="outline" onClick={() => void copyBlock(installBlock, "OpenClaw setup commands")}>
+            <Button type="button" size="sm" variant="outline" onClick={() => void copyBlock(hostedInstallBlock, "Hosted OpenClaw setup commands")}>
               <Copy className="h-4 w-4" />
               Copy Commands
             </Button>
           </div>
           <pre className="mt-3 overflow-x-auto rounded-lg bg-zinc-950 px-3 py-3 text-xs text-zinc-200">
-            <code>{installBlock}</code>
+            <code>{hostedInstallBlock}</code>
+          </pre>
+        </div>
+
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-zinc-100">Local-only mode (no API key)</p>
+              <p className="mt-1 text-xs text-zinc-500">
+                Good for a private free setup. Fathippo keeps memory and lightweight private learning on the machine running OpenClaw, but it does not use hosted cognition, sync, imports, or dashboard receipts.
+              </p>
+              <p className="mt-1 text-xs text-zinc-600">
+                Local mode stores its data on disk at the configured local storage path instead of checking in with the hosted dashboard.
+              </p>
+            </div>
+            <Button type="button" size="sm" variant="outline" onClick={() => void copyBlock(localInstallBlock, "Local-only OpenClaw setup commands")}>
+              <Copy className="h-4 w-4" />
+              Copy Commands
+            </Button>
+          </div>
+          <pre className="mt-3 overflow-x-auto rounded-lg bg-zinc-950 px-3 py-3 text-xs text-zinc-200">
+            <code>{localInstallBlock}</code>
           </pre>
         </div>
 
         <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4 text-sm text-zinc-300">
           <p className="font-medium text-zinc-100">What happens after you connect it</p>
           <ul className="mt-2 space-y-1 text-xs text-zinc-400">
-            <li>FatHippo quietly learns repeated fixes, better retrieval mixes, and better debugging workflows.</li>
-            <li>You will see lightweight receipts in the dashboard when Fathippo reused a pattern, suggested a workflow, or likely saved retries.</li>
-            <li>No hardware training setup is required.</li>
+            <li>Hosted mode adds the full cognitive loop: repeated fixes, better retrieval mixes, workflow learning, sync, and account-backed receipts.</li>
+            <li>Local-only mode keeps everything private on-device and still learns lightweight repeated fixes and workflow hints for that workspace.</li>
+            <li>No hardware training setup is required in either mode.</li>
           </ul>
         </div>
       </CardContent>

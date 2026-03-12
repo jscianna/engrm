@@ -13,6 +13,7 @@
     "openclaw.plugin.json"
   ],
   "scripts": {
+    "prebuild": "npm --prefix ../local run build",
     "build": "tsc",
     "dev": "tsc --watch",
     "prepublishOnly": "npm run build"
@@ -33,6 +34,9 @@
   },
   "peerDependencies": {
     "openclaw": ">=2026.3.7"
+  },
+  "dependencies": {
+    "@fathippo/local": "^0.1.0"
   },
   "devDependencies": {
     "typescript": "^5.9.0",

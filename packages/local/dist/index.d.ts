@@ -1,3 +1,4 @@
 export { getLocalRetrievalMetrics, invalidateAllLocalResultsForUser, invalidateLocalResultsByMemoryIds, localRetrieve, localStoreResult, recordShadowSample, type LocalRetrievalMetrics, type LocalRetrievalResult, } from "./local-retrieval.js";
 export { appendEdgeSnapshot, getEdgeSnapshotAggregate24h } from "./edge-metrics-store.js";
+export { createLocalMemoryStore, type LocalCognitiveContext, type LocalIndexedMemoriesResponse, type LocalIndexedMemory, type LocalMemoryImportanceTier, type LocalMemorySearchResult, type LocalMemoryStore, type LocalMemoryStoreOptions, type LocalPatternRecommendation, type LocalStoredMemory, type LocalStoredTrace, type LocalTraceInput, type LocalToolSignal, type LocalWorkflowRecommendation, type LocalWorkflowStrategyKey, } from "./local-memory-store.js";
 //# sourceMappingURL=index.d.ts.map

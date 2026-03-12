@@ -6,6 +6,7 @@ import { UsageCard } from "@/components/usage-card";
 import { hasClerkAdminAccess } from "@/lib/admin-auth";
 import { isOpenClawAgentName } from "@/lib/cognitive-receipts";
 import { listApiKeys } from "@/lib/db";
+import { getOpenClawPluginStatus, pickPreferredOpenClawKey } from "@/lib/openclaw-plugin";
 
 export default async function SettingsPage() {
   const [{ userId }, user] = await Promise.all([auth(), currentUser()]);
@@ -14,7 +15,10 @@ export default async function SettingsPage() {
   }
 
   const apiKeys = await listApiKeys(userId);
-  const openClawKey = apiKeys.find((key) => isOpenClawAgentName(key.agentName));
+  const openClawKey = pickPreferredOpenClawKey(
+    apiKeys.filter((key) => isOpenClawAgentName(key.agentName)),
+  );
+  const pluginStatus = await getOpenClawPluginStatus(openClawKey ?? null);
 
   const primaryEmail = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress ?? null;
   const isAdmin = hasClerkAdminAccess({
@@ -33,6 +37,13 @@ export default async function SettingsPage() {
         hasExistingOpenClawKey={Boolean(openClawKey)}
         isActive={openClawKey?.isActive ?? false}
         lastUsed={openClawKey?.lastUsed ?? null}
+        currentPluginVersion={pluginStatus.currentVersion}
+        publishedPluginVersion={pluginStatus.publishedVersion}
+        lastSeenPluginVersion={pluginStatus.lastSeenVersion}
+        lastSeenPluginMode={pluginStatus.lastSeenMode}
+        lastSeenPluginAt={pluginStatus.lastSeenAt}
+        updateAvailable={pluginStatus.updateAvailable}
+        hasConnectedPlugin={pluginStatus.hasConnectedPlugin}
       />
 
       {/* Profile */}

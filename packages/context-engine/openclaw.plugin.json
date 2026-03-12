@@ -1,13 +1,19 @@
 {
   "id": "fathippo-context-engine",
   "name": "FatHippo Context Engine",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "kind": "context-engine",
-  "description": "Encrypted agent memory with semantic search, Dream Cycle synthesis, and tiered intelligence",
+  "description": "Persistent agent memory with hosted cognition or private local mode",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {
+      "mode": {
+        "type": "string",
+        "description": "Run FatHippo in auto, hosted, or local-only mode",
+        "default": "auto",
+        "enum": ["auto", "hosted", "local"]
+      },
       "apiKey": {
         "type": "string",
         "description": "FatHippo API key"
@@ -34,12 +40,12 @@
       },
       "dreamCycleOnCompact": {
         "type": "boolean",
-        "description": "Run Dream Cycle during compaction instead of lossy summarization",
+        "description": "Run Dream Cycle during compaction instead of lossy summarization (hosted mode)",
         "default": true
       },
       "cognitiveEnabled": {
         "type": "boolean",
-        "description": "Enable trace capture, constraints, and cognitive context",
+        "description": "Enable hosted trace capture, constraints, and cognitive context",
         "default": true
       },
       "cognitiveHeartbeatEnabled": {
@@ -55,11 +61,22 @@
       "conversationId": {
         "type": "string",
         "description": "Scope memories to a specific conversation/project (null = derive from session)"
+      },
+      "localProfileId": {
+        "type": "string",
+        "description": "Profile key for local-only mode memory storage"
+      },
+      "localStoragePath": {
+        "type": "string",
+        "description": "Filesystem path for local-only mode storage"
       }
     },
-    "required": ["apiKey"]
+    "required": []
   },
   "uiHints": {
+    "mode": {
+      "label": "Mode"
+    },
     "apiKey": {
       "label": "API Key",
       "sensitive": true,
@@ -92,6 +109,14 @@
     },
     "conversationId": {
       "label": "Conversation ID",
+      "advanced": true
+    },
+    "localProfileId": {
+      "label": "Local Profile ID",
+      "advanced": true
+    },
+    "localStoragePath": {
+      "label": "Local Storage Path",
       "advanced": true
     }
   }

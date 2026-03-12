@@ -22,15 +22,22 @@ function mapMemoryRecord(record) {
 export class FatHippoClient {
     apiKey;
     baseUrl;
+    pluginHeaders;
     constructor(config) {
-        this.apiKey = config.apiKey;
+        this.apiKey = config.apiKey ?? "";
         this.baseUrl = config.baseUrl || DEFAULT_BASE_URL;
+        this.pluginHeaders = {
+            "X-Fathippo-Plugin-Id": config.pluginId ?? "fathippo-context-engine",
+            "X-Fathippo-Plugin-Version": config.pluginVersion ?? "unknown",
+            "X-Fathippo-Plugin-Mode": config.mode === "local" ? "local" : "hosted",
+        };
     }
     async request(path, options = {}) {
         const url = `${this.baseUrl}${path}`;
         const headers = {
             Authorization: `Bearer ${this.apiKey}`,
             "Content-Type": "application/json",
+            ...this.pluginHeaders,
             ...options.headers,
         };
         const response = await fetch(url, {

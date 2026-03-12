@@ -18,6 +18,7 @@ Set these before launch:
 - `OPS_ALERT_WEBHOOK_FORMAT=generic` or `slack`
 - `OPS_ALERT_WEBHOOK_BEARER_TOKEN=<optional webhook bearer token>`
 - `OPS_ALERT_DISPATCH_SECRET=<bearer secret for scheduled alert dispatch>` or `CRON_SECRET=<bearer secret for platform cron>`
+- `OPENCLAW_PUBLISHED_PLUGIN_VERSION=<latest published @fathippo/context-engine version>` to enable dashboard update badges
 
 Recommended:
 

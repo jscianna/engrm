@@ -1,10 +1,14 @@
 /**
  * FatHippo Context Engine
  *
- * Implements OpenClaw's ContextEngine interface for encrypted agent memory.
+ * Implements OpenClaw's ContextEngine interface for hosted or local agent memory.
  */
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { createLocalMemoryStore, invalidateAllLocalResultsForUser, localRetrieve, localStoreResult, } from "@fathippo/local";
 import { FatHippoClient } from "./api/client.js";
 import { buildStructuredTrace, getMessageText, shouldCaptureCodingTrace } from "./cognitive/trace-capture.js";
+import { CONTEXT_ENGINE_ID, CONTEXT_ENGINE_VERSION } from "./version.js";
 import { formatMemoriesForInjection, dedupeMemories, estimateTokens, } from "./utils/formatting.js";
 import { detectPromptInjection, matchesCapturePatterns, sanitizeContent, } from "./utils/filtering.js";
 /**
@@ -12,17 +16,20 @@ import { detectPromptInjection, matchesCapturePatterns, sanitizeContent, } from 
  */
 export class FatHippoContextEngine {
     info = {
-        id: "fathippo-context-engine",
+        id: CONTEXT_ENGINE_ID,
         name: "FatHippo Context Engine",
-        version: "0.1.1",
+        version: CONTEXT_ENGINE_VERSION,
         ownsCompaction: true, // We handle compaction via Dream Cycle
     };
     client;
     config;
+    mode;
+    localStore;
     cachedCritical = null;
     // Cognitive engine state
     sessionStartTimes = new Map();
     sessionApplicationIds = new Map();
+    sessionLocalProfiles = new Map();
     sessionHippoNodState = new Map();
     cognitiveEnabled;
     static TRIVIAL_ACKS = new Set([
@@ -44,9 +51,19 @@ export class FatHippoContextEngine {
     static HIPPO_NOD_MIN_MESSAGE_GAP = 6;
     constructor(config) {
         this.config = config;
-        this.client = new FatHippoClient(config);
+        this.mode = config.mode === "local" || (!config.apiKey && config.mode !== "hosted") ? "local" : "hosted";
+        if (this.mode === "hosted" && !config.apiKey) {
+            throw new Error("FatHippo hosted mode requires an API key. Pass apiKey or switch mode to local/auto.");
+        }
+        this.client = this.mode === "hosted" ? new FatHippoClient(config) : null;
+        this.localStore =
+            this.mode === "local"
+                ? createLocalMemoryStore({
+                    storagePath: config.localStoragePath,
+                })
+                : null;
         // Enable cognitive features if configured (default: true)
-        this.cognitiveEnabled = config.cognitiveEnabled !== false;
+        this.cognitiveEnabled = this.mode === "hosted" && config.cognitiveEnabled !== false;
     }
     /**
      * Initialize engine state for a session
@@ -54,11 +71,24 @@ export class FatHippoContextEngine {
     async bootstrap(params) {
         try {
             this.sessionStartTimes.set(params.sessionId, Date.now());
+            if (this.mode === "local") {
+                this.sessionLocalProfiles.set(params.sessionId, this.deriveLocalProfileId(params.sessionId, params.sessionFile));
+                return {
+                    bootstrapped: true,
+                    importedMessages: 0,
+                };
+            }
             // Prefetch critical memories for this session
-            const critical = await this.client.getCriticalMemories({
+            const critical = await this.client?.getCriticalMemories({
                 limit: 30,
                 excludeAbsorbed: true,
             });
+            if (!critical) {
+                return {
+                    bootstrapped: true,
+                    importedMessages: 0,
+                };
+            }
             this.cachedCritical = {
                 memories: critical.memories,
                 syntheses: critical.syntheses,
@@ -108,10 +138,21 @@ export class FatHippoContextEngine {
             return { ingested: false };
         }
         try {
-            await this.client.remember({
-                content: sanitizeContent(content),
-                conversationId: this.config.conversationId || params.sessionId,
-            });
+            if (this.mode === "local") {
+                const profileId = this.getLocalProfileId(params.sessionId);
+                await this.localStore?.remember({
+                    profileId,
+                    content: sanitizeContent(content),
+                    title: this.buildLocalTitle(content),
+                });
+                invalidateAllLocalResultsForUser(profileId);
+            }
+            else {
+                await this.client?.remember({
+                    content: sanitizeContent(content),
+                    conversationId: this.config.conversationId || params.sessionId,
+                });
+            }
             return { ingested: true };
         }
         catch (error) {
@@ -157,7 +198,14 @@ export class FatHippoContextEngine {
             this.cachedCritical = null;
         }
         // Capture cognitive trace for coding sessions
-        if (this.cognitiveEnabled) {
+        if (this.mode === "local") {
+            await this.captureLocalTrace({
+                sessionId: params.sessionId,
+                sessionFile: params.sessionFile,
+                messages: params.messages,
+            });
+        }
+        else if (this.cognitiveEnabled) {
             await this.captureStructuredTrace({
                 sessionId: params.sessionId,
                 sessionFile: params.sessionFile,
@@ -183,10 +231,20 @@ export class FatHippoContextEngine {
      */
     async assemble(params) {
         const lastUserMessage = this.findLastUserMessage(params.messages)?.trim() ?? "";
+        if (this.mode === "local") {
+            return this.assembleLocalContext(params, lastUserMessage);
+        }
+        const client = this.client;
+        if (!client) {
+            return {
+                messages: params.messages,
+                estimatedTokens: this.estimateMessageTokens(params.messages),
+            };
+        }
         // Always fetch indexed summaries (they're compact)
         let indexedContext = "";
         try {
-            const indexed = await this.client.getIndexedSummaries();
+            const indexed = await client.getIndexedSummaries();
             if (indexed.count > 0) {
                 indexedContext = `\n## Indexed Memory (use GET /indexed/:key for full content)\n${indexed.contextFormat}\n`;
             }
@@ -210,7 +268,7 @@ export class FatHippoContextEngine {
         let hasRelevantCriticalMatch = false;
         try {
             // Search for relevant memories based on query
-            const results = await this.client.search({
+            const results = await client.search({
                 query: lastUserMessage,
                 limit: this.config.injectLimit || 20,
                 excludeAbsorbed: true,
@@ -230,7 +288,7 @@ export class FatHippoContextEngine {
                     criticalSyntheses = this.cachedCritical.syntheses;
                 }
                 else {
-                    const critical = await this.client.getCriticalMemories({
+                    const critical = await client.getCriticalMemories({
                         limit: 15,
                         excludeAbsorbed: true,
                     });
@@ -314,6 +372,107 @@ export class FatHippoContextEngine {
             systemPromptAddition: fullContext.trim() || undefined,
         };
     }
+    async assembleLocalContext(params, lastUserMessage) {
+        const profileId = this.getLocalProfileId(params.sessionId);
+        const indexed = await this.localStore?.getIndexedSummaries({
+            profileId,
+            limit: 18,
+        });
+        const indexedContext = indexed && indexed.count > 0
+            ? `\n## Indexed Local Memory\n${indexed.contextFormat}\n`
+            : "";
+        const baseTokens = this.estimateMessageTokens(params.messages);
+        if (!lastUserMessage || this.isTrivialQuery(lastUserMessage)) {
+            return {
+                messages: params.messages,
+                estimatedTokens: baseTokens + estimateTokens(indexedContext),
+                systemPromptAddition: indexedContext || undefined,
+            };
+        }
+        let memories = [];
+        let localCognitiveContext = null;
+        try {
+            let localMemories = [];
+            const cached = await localRetrieve(lastUserMessage, profileId);
+            if (cached.hit) {
+                localMemories = await this.localStore?.getMemoriesByIds(profileId, cached.memoryIds) ?? [];
+            }
+            if (localMemories.length === 0) {
+                const searchResults = await this.localStore?.search({
+                    profileId,
+                    query: lastUserMessage,
+                    limit: Math.max(3, Math.min(this.config.injectLimit || 12, 12)),
+                }) ?? [];
+                localMemories = searchResults.map((result) => result.memory);
+                if (searchResults.length > 0) {
+                    const avgScore = searchResults.reduce((sum, result) => sum + result.score, 0) / searchResults.length;
+                    localStoreResult(profileId, lastUserMessage, searchResults.map((result) => result.memory.id), avgScore);
+                }
+            }
+            const critical = this.config.injectCritical !== false
+                ? await this.localStore?.getCriticalMemories({ profileId, limit: 10 }) ?? []
+                : [];
+            localCognitiveContext = await this.localStore?.getCognitiveContext({
+                profileId,
+                problem: lastUserMessage,
+                limit: 3,
+            }) ?? null;
+            memories = dedupeMemories([
+                ...critical.map((memory) => this.mapLocalMemory(memory, profileId)),
+                ...localMemories.map((memory) => this.mapLocalMemory(memory, profileId)),
+            ]).slice(0, this.config.injectLimit || 20);
+        }
+        catch (error) {
+            console.error("[FatHippo] Local assemble error:", error);
+        }
+        const memoryBlock = formatMemoriesForInjection(memories, []);
+        const workflowBlock = localCognitiveContext?.workflow
+            ? `## Recommended Workflow\n${localCognitiveContext.workflow.steps.map((step) => `- ${step}`).join("\n")}\n\nStrategy: ${localCognitiveContext.workflow.title} (${localCognitiveContext.workflow.rationale})\n`
+            : "";
+        const patternBlock = localCognitiveContext && localCognitiveContext.patterns.length > 0
+            ? `## Local Learned Fixes\n${localCognitiveContext.patterns
+                .map((pattern) => `- ${pattern.title}: ${pattern.approach}`)
+                .join("\n")}\n`
+            : "";
+        const hippoNodInstruction = this.buildHippoNodInstruction({
+            sessionId: params.sessionId,
+            messageCount: params.messages.length,
+            lastUserMessage,
+            cue: localCognitiveContext?.workflow
+                ? {
+                    kind: "workflow",
+                    reason: "Fathippo reused a locally learned workflow for this reply.",
+                }
+                : (localCognitiveContext?.patterns.length ?? 0) > 0
+                    ? {
+                        kind: "learned_fix",
+                        reason: "Fathippo reused a locally learned fix for this reply.",
+                    }
+                    : memories.length > 0
+                        ? {
+                            kind: "memory",
+                            reason: "Fathippo recalled local memory for this reply.",
+                        }
+                        : null,
+        });
+        const fullContext = typeof params.tokenBudget === "number" && params.tokenBudget > 0
+            ? this.fitContextToBudget({
+                sections: [
+                    workflowBlock,
+                    patternBlock,
+                    memoryBlock ? `${memoryBlock}\n` : "",
+                    indexedContext,
+                    hippoNodInstruction,
+                ],
+                contextBudget: Math.max(0, params.tokenBudget - baseTokens),
+            })
+            : workflowBlock + patternBlock + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + hippoNodInstruction;
+        return {
+            messages: params.messages,
+            estimatedTokens: baseTokens + estimateTokens(fullContext),
+            systemPromptAddition: fullContext.trim() || undefined,
+        };
+    }
     /**
      * Check if query looks like a coding task
      */
@@ -333,9 +492,7 @@ export class FatHippoContextEngine {
         const baseUrl = this.getApiBaseUrl();
         const response = await fetch(`${baseUrl}/v1/cognitive/constraints`, {
             method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${this.config.apiKey}`,
-            },
+            headers: this.getHostedHeaders(false),
         });
         if (!response.ok)
             return '';
@@ -350,10 +507,7 @@ export class FatHippoContextEngine {
         try {
             await fetch(`${baseUrl}/v1/cognitive/constraints`, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.config.apiKey}`,
-                    'Content-Type': 'application/json',
-                },
+                headers: this.getHostedHeaders(),
                 body: JSON.stringify({ message }),
             });
         }
@@ -368,10 +522,7 @@ export class FatHippoContextEngine {
         const baseUrl = this.getApiBaseUrl();
         const response = await fetch(`${baseUrl}/v1/cognitive/traces/relevant`, {
             method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${this.config.apiKey}`,
-                'Content-Type': 'application/json',
-            },
+            headers: this.getHostedHeaders(),
             body: JSON.stringify({
                 sessionId,
                 endpoint: "context-engine.assemble",
@@ -486,10 +637,7 @@ export class FatHippoContextEngine {
             const baseUrl = this.getApiBaseUrl();
             const response = await fetch(`${baseUrl}/v1/cognitive/traces`, {
                 method: "POST",
-                headers: {
-                    Authorization: `Bearer ${this.config.apiKey}`,
-                    "Content-Type": "application/json",
-                },
+                headers: this.getHostedHeaders(),
                 body: JSON.stringify({
                     ...payload,
                     applicationId: this.sessionApplicationIds.get(params.sessionId) ?? null,
@@ -509,10 +657,7 @@ export class FatHippoContextEngine {
     }
     async runCognitiveHeartbeat() {
         const baseUrl = this.getApiBaseUrl();
-        const headers = {
-            Authorization: `Bearer ${this.config.apiKey}`,
-            "Content-Type": "application/json",
-        };
+        const headers = this.getHostedHeaders();
         try {
             const response = await fetch(`${baseUrl}/v1/cognitive/patterns/extract`, {
                 method: "POST",
@@ -560,16 +705,126 @@ export class FatHippoContextEngine {
         if (!sessionFile) {
             return undefined;
         }
-        const normalized = sessionFile.replace(/\\/g, "/");
-        const segments = normalized.split("/").filter(Boolean);
-        if (segments.length <= 1) {
-            return normalized;
+        const resolved = path.resolve(sessionFile);
+        let candidate = path.extname(resolved) ? path.dirname(resolved) : resolved;
+        const markers = [
+            ".git",
+            "package.json",
+            "pnpm-workspace.yaml",
+            "yarn.lock",
+            "package-lock.json",
+            "bun.lockb",
+            "turbo.json",
+            "nx.json",
+            "deno.json",
+        ];
+        while (candidate && candidate !== path.dirname(candidate)) {
+            if (markers.some((marker) => existsSync(path.join(candidate, marker)))) {
+                return candidate;
+            }
+            candidate = path.dirname(candidate);
         }
-        return `/${segments.slice(0, -1).join("/")}`;
+        return path.extname(resolved) ? path.dirname(resolved) : resolved;
+    }
+    deriveLocalProfileId(sessionId, sessionFile) {
+        if (this.config.localProfileId) {
+            return this.config.localProfileId;
+        }
+        if (this.config.conversationId) {
+            return this.config.conversationId;
+        }
+        const workspaceRoot = sessionFile ? this.detectWorkspaceRoot(sessionFile) : undefined;
+        return workspaceRoot || this.sessionLocalProfiles.get(sessionId) || "openclaw-local-default";
+    }
+    getLocalProfileId(sessionId) {
+        return this.sessionLocalProfiles.get(sessionId) || this.deriveLocalProfileId(sessionId);
+    }
+    buildLocalTitle(content) {
+        const normalized = content.trim().replace(/\s+/g, " ");
+        return normalized.length > 72 ? `${normalized.slice(0, 69)}...` : normalized;
+    }
+    mapLocalMemory(memory, profileId) {
+        return {
+            id: memory.id,
+            title: memory.title,
+            content: memory.content,
+            userId: profileId,
+            createdAt: memory.createdAt,
+            updatedAt: memory.updatedAt,
+            accessCount: memory.accessCount,
+            importanceTier: memory.importanceTier,
+        };
+    }
+    toLocalToolSignals(payload) {
+        return [...payload.toolCalls, ...payload.toolResults]
+            .filter((signal) => Boolean(signal) && typeof signal === "object" && !Array.isArray(signal))
+            .map((signal) => ({
+            category: typeof signal.category === "string" ? signal.category : undefined,
+            command: typeof signal.command === "string" ? signal.command : undefined,
+            success: typeof signal.success === "boolean" ? signal.success : undefined,
+        }));
+    }
+    async captureLocalTrace(params) {
+        if (!shouldCaptureCodingTrace(params.messages)) {
+            return;
+        }
+        if (!this.sessionStartTimes.has(params.sessionId)) {
+            this.sessionStartTimes.set(params.sessionId, Date.now() - 60_000);
+        }
+        const payload = buildStructuredTrace({
+            sessionId: params.sessionId,
+            messages: params.messages,
+            toolsUsed: this.detectToolsUsed(params.messages),
+            filesModified: this.detectFilesModified(params.sessionFile, params.messages),
+            workspaceRoot: this.detectWorkspaceRoot(params.sessionFile),
+            startTime: this.sessionStartTimes.get(params.sessionId) ?? Date.now() - 60_000,
+            endTime: Math.min(Date.now(), (this.sessionStartTimes.get(params.sessionId) ?? Date.now()) + 30 * 60 * 1000),
+        });
+        if (!payload) {
+            this.sessionStartTimes.set(params.sessionId, Date.now());
+            return;
+        }
+        const profileId = this.deriveLocalProfileId(params.sessionId, params.sessionFile);
+        this.sessionLocalProfiles.set(params.sessionId, profileId);
+        try {
+            await this.localStore?.learnTrace({
+                profileId,
+                type: payload.type,
+                problem: payload.problem,
+                reasoning: payload.reasoning,
+                solution: payload.solution,
+                outcome: payload.outcome,
+                technologies: payload.context.technologies,
+                errorMessages: payload.context.errorMessages,
+                verificationCommands: payload.verificationCommands,
+                filesModified: payload.filesModified,
+                durationMs: payload.durationMs,
+                toolSignals: this.toLocalToolSignals(payload),
+            });
+            this.sessionStartTimes.delete(params.sessionId);
+        }
+        catch (error) {
+            console.error("[FatHippo] Local trace capture error:", error);
+            this.sessionStartTimes.set(params.sessionId, Date.now());
+        }
     }
     getApiBaseUrl() {
         const baseUrl = this.config.baseUrl || "https://www.fathippo.com/api";
         return baseUrl.replace(/\/v1$/, "");
+    }
+    getHostedHeaders(includeContentType = true) {
+        const headers = {
+            "X-Fathippo-Plugin-Id": this.config.pluginId ?? CONTEXT_ENGINE_ID,
+            "X-Fathippo-Plugin-Version": this.config.pluginVersion ?? CONTEXT_ENGINE_VERSION,
+            "X-Fathippo-Plugin-Mode": this.mode,
+        };
+        if (this.config.apiKey) {
+            headers.Authorization = `Bearer ${this.config.apiKey}`;
+        }
+        if (includeContentType) {
+            headers["Content-Type"] = "application/json";
+        }
+        return headers;
     }
     buildHippoNodInstruction(params) {
         if (this.config.hippoNodsEnabled === false || !params.cue) {
@@ -627,18 +882,24 @@ export class FatHippoContextEngine {
      */
     async compact(params) {
         void params;
+        if (this.mode === "local") {
+            return { ok: true, compacted: false, reason: "local mode has no hosted Dream Cycle" };
+        }
         if (this.config.dreamCycleOnCompact === false) {
             // Fall back to default compaction
             return { ok: true, compacted: false, reason: "dreamCycleOnCompact disabled" };
         }
         try {
-            const result = await this.client.runDreamCycle({
+            const result = await this.client?.runDreamCycle({
                 processCompleted: true,
                 processEphemeral: true,
                 synthesizeCritical: true,
                 applyDecay: true,
                 updateGraph: true,
             });
+            if (!result) {
+                return { ok: false, compacted: false, reason: "hosted client unavailable" };
+            }
             // Invalidate cache after dream cycle
             this.cachedCritical = null;
             return {
@@ -682,6 +943,9 @@ export class FatHippoContextEngine {
      */
     async dispose() {
         this.cachedCritical = null;
+        this.sessionApplicationIds.clear();
+        this.sessionLocalProfiles.clear();
+        this.sessionStartTimes.clear();
         this.sessionHippoNodState.clear();
     }
     // --- Helper methods ---

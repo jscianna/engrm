@@ -9,6 +9,7 @@ import { getOperationalAlertDeliveryConfig } from "@/lib/alert-delivery";
 import { getOperationalAlertsSummary } from "@/lib/operational-alerts";
 import { getApiKeyScopeMigrationStatus } from "@/lib/db";
 import { getCognitiveJobHealth, getRecentBenchmarkRuns } from "@/lib/cognitive-db";
+import { getPublishedOpenClawPluginVersion } from "@/lib/openclaw-plugin";
 import { applyApiKeyBackfillAction, sendOperationalAlertTestAction } from "./actions";
 
 function formatDate(value: string | null | undefined): string {
@@ -60,6 +61,7 @@ export default async function AdminDashboardPage({
     getCognitiveJobHealth(),
     identity.userId ? getRecentBenchmarkRuns(identity.userId, 6) : Promise.resolve([]),
   ]);
+  const publishedOpenClawPluginVersion = getPublishedOpenClawPluginVersion();
 
   return (
     <div className="space-y-6">
@@ -146,6 +148,10 @@ export default async function AdminDashboardPage({
             <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-300" /> Benchmark runs passing</p>
             <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-300" /> No stale heartbeat jobs</p>
             <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-300" /> No unexpected wildcard keys</p>
+            <p className="flex items-center gap-2">
+              <CheckCircle2 className={`h-4 w-4 ${publishedOpenClawPluginVersion ? "text-emerald-300" : "text-amber-300"}`} />
+              {publishedOpenClawPluginVersion ? "OpenClaw published plugin version configured" : "Set OPENCLAW_PUBLISHED_PLUGIN_VERSION"}
+            </p>
             <p className="pt-2 text-xs text-zinc-500">Reference: docs/PRODUCTION-LAUNCH-RUNBOOK.md</p>
           </CardContent>
         </Card>
@@ -186,6 +192,35 @@ export default async function AdminDashboardPage({
             <p><span className="text-zinc-500">Auth:</span> {delivery.hasBearerToken ? "Bearer token configured" : "No bearer token"}</p>
             <p><span className="text-zinc-500">Schedule:</span> every {delivery.schedule.intervalMinutes} min, repeat every {delivery.schedule.repeatMinutes} min</p>
             <p><span className="text-zinc-500">Dispatch secret:</span> {delivery.schedule.secretConfigured ? "Configured" : "Missing dispatch secret"}</p>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+        <Card className="border-zinc-800 bg-zinc-900/60">
+          <CardHeader>
+            <CardTitle>OpenClaw Plugin Release Tracking</CardTitle>
+            <CardDescription>Controls whether the user dashboard can show a real plugin update badge.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-zinc-300">
+            <p><span className="text-zinc-500">Status:</span> {publishedOpenClawPluginVersion ? "Configured" : "Missing"}</p>
+            <p><span className="text-zinc-500">Published plugin version:</span> {publishedOpenClawPluginVersion ?? "Missing OPENCLAW_PUBLISHED_PLUGIN_VERSION"}</p>
+            <p className="text-xs text-zinc-500">
+              Set <code>OPENCLAW_PUBLISHED_PLUGIN_VERSION</code> in your deployment environment to the latest published
+              <code> @fathippo/context-engine</code> version after each npm release.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-zinc-800 bg-zinc-900/60">
+          <CardHeader>
+            <CardTitle>Recommended Server Env</CardTitle>
+            <CardDescription>Copy this into your deployment provider when you publish a new OpenClaw plugin.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-zinc-300">
+            <pre className="overflow-x-auto rounded-lg bg-zinc-950 px-3 py-3 text-xs text-zinc-200">
+              <code>{`OPENCLAW_PUBLISHED_PLUGIN_VERSION=${publishedOpenClawPluginVersion ?? "0.1.1"}`}</code>
+            </pre>
           </CardContent>
         </Card>
       </section>

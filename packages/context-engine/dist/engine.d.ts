@@ -1,7 +1,7 @@
 /**
  * FatHippo Context Engine
  *
- * Implements OpenClaw's ContextEngine interface for encrypted agent memory.
+ * Implements OpenClaw's ContextEngine interface for hosted or local agent memory.
  */
 import type { AssembleResult, BootstrapResult, CompactResult, ContextEngine, ContextEngineInfo, IngestBatchResult, IngestResult, SubagentEndReason, SubagentSpawnPreparation } from "openclaw/plugin-sdk";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
@@ -13,9 +13,12 @@ export declare class FatHippoContextEngine implements ContextEngine {
     readonly info: ContextEngineInfo;
     private client;
     private config;
+    private mode;
+    private localStore;
     private cachedCritical;
     private sessionStartTimes;
     private sessionApplicationIds;
+    private sessionLocalProfiles;
     private sessionHippoNodState;
     private cognitiveEnabled;
     private static readonly TRIVIAL_ACKS;
@@ -69,6 +72,7 @@ export declare class FatHippoContextEngine implements ContextEngine {
         messages: AgentMessage[];
         tokenBudget?: number;
     }): Promise<AssembleResult>;
+    private assembleLocalContext;
     /**
      * Check if query looks like a coding task
      */
@@ -89,7 +93,14 @@ export declare class FatHippoContextEngine implements ContextEngine {
     private runCognitiveHeartbeat;
     private detectFilesModified;
     private detectWorkspaceRoot;
+    private deriveLocalProfileId;
+    private getLocalProfileId;
+    private buildLocalTitle;
+    private mapLocalMemory;
+    private toLocalToolSignals;
+    private captureLocalTrace;
     private getApiBaseUrl;
+    private getHostedHeaders;
     private buildHippoNodInstruction;
     private isHighUrgencyOrFormalMoment;
     /**

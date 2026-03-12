@@ -5,6 +5,7 @@ import type { FatHippoConfig, Memory, SearchResult, CriticalMemoriesResponse, Re
 export declare class FatHippoClient {
     private apiKey;
     private baseUrl;
+    private pluginHeaders;
     constructor(config: FatHippoConfig);
     private request;
     /**

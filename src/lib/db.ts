@@ -227,6 +227,10 @@ async function ensureInitialized(): Promise<void> {
       agent_name TEXT,
       created_at TEXT NOT NULL,
       last_used TEXT,
+      last_plugin_id TEXT,
+      last_plugin_version TEXT,
+      last_plugin_mode TEXT,
+      last_plugin_seen_at TEXT,
       revoked_at TEXT,
       expires_at TEXT
     );
@@ -478,6 +482,10 @@ async function ensureApiKeysColumns(client: Client): Promise<void> {
   const requiredColumns: Array<{ name: string; ddl: string }> = [
     { name: "key_suffix", ddl: "TEXT" },
     { name: "scopes_json", ddl: `TEXT NOT NULL DEFAULT '["*"]'` },
+    { name: "last_plugin_id", ddl: "TEXT" },
+    { name: "last_plugin_version", ddl: "TEXT" },
+    { name: "last_plugin_mode", ddl: "TEXT" },
+    { name: "last_plugin_seen_at", ddl: "TEXT" },
   ];
 
   const tableInfo = await client.execute("PRAGMA table_info(api_keys)");
@@ -2006,6 +2014,10 @@ export async function listApiKeys(userId: string): Promise<Array<{
   keySuffix: string;
   createdAt: string;
   lastUsed: string;
+  lastPluginId: string | null;
+  lastPluginVersion: string | null;
+  lastPluginMode: string | null;
+  lastPluginSeenAt: string | null;
   revokedAt: string | null;
   expiresAt: string | null;
   isActive: boolean;
@@ -2016,7 +2028,7 @@ export async function listApiKeys(userId: string): Promise<Array<{
 
   const result = await client.execute({
     sql: `
-      SELECT id, agent_id, agent_name, key_suffix, scopes_json, created_at, last_used, revoked_at, expires_at
+      SELECT id, agent_id, agent_name, key_suffix, scopes_json, created_at, last_used, last_plugin_id, last_plugin_version, last_plugin_mode, last_plugin_seen_at, revoked_at, expires_at
       FROM api_keys
       WHERE user_id = ?
       ORDER BY created_at DESC
@@ -2040,11 +2052,48 @@ export async function listApiKeys(userId: string): Promise<Array<{
       keySuffix: (row.key_suffix as string) || "???",
       createdAt: row.created_at as string,
       lastUsed: row.last_used as string,
+      lastPluginId: (row.last_plugin_id as string | null) ?? null,
+      lastPluginVersion: (row.last_plugin_version as string | null) ?? null,
+      lastPluginMode: (row.last_plugin_mode as string | null) ?? null,
+      lastPluginSeenAt: (row.last_plugin_seen_at as string | null) ?? null,
       revokedAt,
       expiresAt,
       isActive,
       scopes: parseApiKeyScopes(row.scopes_json),
     };
+  });
+}
+
+export async function recordApiKeyPluginMetadata(params: {
+  keyId: string;
+  pluginId?: string | null;
+  pluginVersion?: string | null;
+  pluginMode?: string | null;
+}): Promise<void> {
+  const pluginId = typeof params.pluginId === "string" && params.pluginId.trim().length > 0 ? params.pluginId.trim().slice(0, 120) : null;
+  const pluginVersion =
+    typeof params.pluginVersion === "string" && params.pluginVersion.trim().length > 0
+      ? params.pluginVersion.trim().slice(0, 64)
+      : null;
+  const pluginMode =
+    typeof params.pluginMode === "string" && params.pluginMode.trim().length > 0
+      ? params.pluginMode.trim().slice(0, 32)
+      : null;
+
+  if (!pluginId && !pluginVersion && !pluginMode) {
+    return;
+  }
+
+  await ensureInitialized();
+  const client = getDb();
+  const seenAt = new Date().toISOString();
+  await client.execute({
+    sql: `
+      UPDATE api_keys
+      SET last_plugin_id = ?, last_plugin_version = ?, last_plugin_mode = ?, last_plugin_seen_at = ?
+      WHERE id = ?
+    `,
+    args: [pluginId, pluginVersion, pluginMode, seenAt, params.keyId],
   });
 }
 

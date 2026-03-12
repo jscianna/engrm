@@ -10,6 +10,7 @@ import { getQdrantStatus } from "@/lib/qdrant";
 import { assertAdminAccess } from "@/lib/admin-auth";
 import { getOperationalAlertDeliveryConfig } from "@/lib/alert-delivery";
 import { getApiKeyScopeMigrationStatus } from "@/lib/db";
+import { getPublishedOpenClawPluginVersion } from "@/lib/openclaw-plugin";
 import { getOperationalAlertsSummary } from "@/lib/operational-alerts";
 import { buildThrottleActorKey, enforceRequestThrottle } from "@/lib/request-throttle";
 
@@ -39,6 +40,7 @@ export async function GET(request: Request) {
   }
 
   const qdrantStatus = getQdrantStatus();
+  const publishedOpenClawPluginVersion = getPublishedOpenClawPluginVersion();
   const [apiKeyScopeStatus, operationalAlerts, alertDelivery] = await Promise.all([
     getApiKeyScopeMigrationStatus(),
     getOperationalAlertsSummary(),
@@ -152,6 +154,10 @@ export async function GET(request: Request) {
       alertCount: operationalAlerts.alerts.length,
       generatedAt: operationalAlerts.generatedAt,
       delivery: alertDelivery,
+      openClawPluginRelease: {
+        configured: Boolean(publishedOpenClawPluginVersion),
+        version: publishedOpenClawPluginVersion,
+      },
     },
 
     // Recommendations
@@ -162,6 +168,7 @@ export async function GET(request: Request) {
       apiKeyScopeStatus.revocableWildcardKeys > 0 && "Rotate or scope down wildcard API keys before launch",
       !alertDelivery.configured && "Configure OPS_ALERT_WEBHOOK_URL before launch so critical alerts can be delivered",
       !alertDelivery.schedule.secretConfigured && "Configure an operational alert dispatch secret before enabling automated delivery",
+      !publishedOpenClawPluginVersion && "Set OPENCLAW_PUBLISHED_PLUGIN_VERSION so the dashboard can show real OpenClaw plugin update badges",
       operationalAlerts.alerts.length > 0 && "Clear current operational alerts before launch",
     ].filter(Boolean),
   };

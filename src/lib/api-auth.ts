@@ -1,4 +1,7 @@
-import { validateApiKey as validateApiKeyInDb } from "@/lib/db";
+import {
+  recordApiKeyPluginMetadata,
+  validateApiKey as validateApiKeyInDb,
+} from "@/lib/db";
 import { MemryError, ApiAuthError, errorResponse } from "@/lib/errors";
 import { checkRateLimit } from "@/lib/rate-limiter";
 import { assertEntitlement, featureForEndpoint } from "@/lib/entitlements";
@@ -68,6 +71,22 @@ export async function validateApiKey(
   // Check rate limits and record the API call
   // Pass raw token for elevated limit checks (testing/enterprise keys)
   await checkRateLimit(identity.userId, identity.keyId, endpoint, token);
+
+  const pluginId = request.headers.get("x-fathippo-plugin-id");
+  const pluginVersion = request.headers.get("x-fathippo-plugin-version");
+  const pluginMode = request.headers.get("x-fathippo-plugin-mode");
+  if (pluginId || pluginVersion || pluginMode) {
+    try {
+      await recordApiKeyPluginMetadata({
+        keyId: identity.keyId,
+        pluginId,
+        pluginVersion,
+        pluginMode,
+      });
+    } catch (error) {
+      console.warn("[API Auth] Failed to persist plugin metadata:", error);
+    }
+  }
 
   return identity;
 }
