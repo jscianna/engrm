@@ -11,7 +11,7 @@
  * Usage: Call once at session start with first user message
  */
 
-import { embedText } from "@/lib/embeddings";
+import { embedQuery } from "@/lib/embeddings";
 import { semanticSearchVectors } from "@/lib/qdrant";
 import {
   filterSensitiveMemories,
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     let highMemories: typeof criticalMemories = [];
     
     if (message && includeHigh) {
-      const vector = await embedText(message);
+      const vector = await embedQuery(message);
       const hits = await semanticSearchVectors({
         userId: identity.userId,
         query: message,

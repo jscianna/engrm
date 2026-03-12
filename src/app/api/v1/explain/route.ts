@@ -10,7 +10,7 @@
  * Response: { query, threshold, results: [...], tokenEstimate }
  */
 
-import { embedText } from "@/lib/embeddings";
+import { embedQuery } from "@/lib/embeddings";
 import { countEntityOverlap, extractEntities } from "@/lib/entities";
 import { semanticSearchVectors } from "@/lib/qdrant";
 import { getAgentMemoriesByIds, getAgentMemoryById } from "@/lib/db";
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     const topK = typeof body.topK === "number" ? Math.min(Math.max(body.topK, 1), 50) : 20;
 
     // Embed the query
-    const vector = await embedText(query);
+    const vector = await embedQuery(query);
     const queryEntities = extractEntities(query);
 
     let results: ExplainResult[] = [];

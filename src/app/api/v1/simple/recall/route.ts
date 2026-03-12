@@ -5,7 +5,7 @@
  * Auto-tracks access and reinforces retrieved memories.
  */
 
-import { embedText } from "@/lib/embeddings";
+import { embedQuery } from "@/lib/embeddings";
 import { semanticSearchVectors } from "@/lib/qdrant";
 import { 
   getAgentMemoriesByIds, 
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     const limit = normalizeLimit(body.limit, 5, 20);
 
     // Search
-    const vector = await embedText(query);
+    const vector = await embedQuery(query);
     const hits = await semanticSearchVectors({
       userId: identity.userId,
       query,

@@ -1,4 +1,4 @@
-import { embedText } from "@/lib/embeddings";
+import { embedQuery } from "@/lib/embeddings";
 import { countEntityOverlap, extractEntities } from "@/lib/entities";
 import { semanticSearchVectors } from "@/lib/qdrant";
 import { bm25Search, rrfFusion, ensureFtsInitialized } from "@/lib/fts";
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
 
     if (mode === "hybrid" || mode === "vector") {
       // Vector search
-      const vector = await embedText(queryText);
+      const vector = await embedQuery(queryText);
       const hits = await semanticSearchVectors({
         userId: identity.userId,
         query: queryText,

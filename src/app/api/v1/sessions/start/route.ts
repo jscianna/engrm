@@ -5,7 +5,7 @@
  * Returns critical and high-tier memories relevant to the first message.
  */
 
-import { embedText } from "@/lib/embeddings";
+import { embedQuery } from "@/lib/embeddings";
 import { semanticSearchVectors } from "@/lib/qdrant";
 import { 
   filterSensitiveMemories,
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
     
     if (firstMessage) {
       try {
-        const vector = await embedText(firstMessage);
+        const vector = await embedQuery(firstMessage);
         const hits = await semanticSearchVectors({
           userId: identity.userId,
           query: firstMessage,

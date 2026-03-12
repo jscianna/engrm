@@ -8,7 +8,7 @@
  * POST /api/v1/context/refresh
  */
 
-import { embedText } from "@/lib/embeddings";
+import { embedQuery } from "@/lib/embeddings";
 import { semanticSearchVectors } from "@/lib/qdrant";
 import { getAgentMemoriesByIds } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
 
     // Combine recent messages for embedding
     const combinedMessages = recentMessages.join(" ");
-    const vector = await embedText(combinedMessages);
+    const vector = await embedQuery(combinedMessages);
 
     // Search for relevant high-tier memories based on recent conversation
     const hits = await semanticSearchVectors({

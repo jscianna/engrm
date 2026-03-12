@@ -2184,7 +2184,7 @@ export async function createTrace(input: CreateTraceInput): Promise<CodingTrace>
 
   let embedding: number[] | null = null;
   try {
-    embedding = await embedText(`${input.problem}\n${input.reasoning}`.slice(0, 8000));
+    embedding = await embedText(`${input.problem}\n${input.reasoning}`.slice(0, 8000), { purpose: "document" });
   } catch {
     // Embeddings are best effort.
   }
@@ -2305,7 +2305,7 @@ export async function getRelevantTraces(userId: string, problem: string, limit =
 
   let embedding: number[] | null = null;
   try {
-    embedding = await embedText(problem);
+    embedding = await embedText(problem, { purpose: "query" });
   } catch {
     // Fall back to lexical scoring.
   }

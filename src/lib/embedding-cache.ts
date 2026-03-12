@@ -12,17 +12,17 @@ interface CacheEntry {
 
 const CACHE_TTL_MS = 1000 * 60 * 60; // 1 hour
 const MAX_CACHE_SIZE = 500;
-const CACHE_VERSION = "v2-384";
+const CACHE_VERSION = "v3";
 
 const cache = new Map<string, CacheEntry>();
 
-function hashQuery(query: string): string {
+function hashQuery(query: string, namespace: string): string {
   const normalized = query.toLowerCase().trim();
-  return `emb_${CACHE_VERSION}_${crypto.createHash("sha256").update(normalized).digest("hex")}`;
+  return `emb_${CACHE_VERSION}_${namespace}_${crypto.createHash("sha256").update(normalized).digest("hex")}`;
 }
 
-export function getCachedEmbedding(query: string): number[] | null {
-  const key = hashQuery(query);
+export function getCachedEmbedding(query: string, namespace = "default"): number[] | null {
+  const key = hashQuery(query, namespace);
   const entry = cache.get(key);
   
   if (!entry) return null;
@@ -36,8 +36,8 @@ export function getCachedEmbedding(query: string): number[] | null {
   return entry.vector;
 }
 
-export function setCachedEmbedding(query: string, vector: number[]): void {
-  const key = hashQuery(query);
+export function setCachedEmbedding(query: string, vector: number[], namespace = "default"): void {
+  const key = hashQuery(query, namespace);
   
   // Evict oldest entries if cache is full
   if (cache.size >= MAX_CACHE_SIZE) {

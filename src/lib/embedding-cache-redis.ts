@@ -14,7 +14,7 @@ import { Redis } from "@upstash/redis";
 import crypto from "crypto";
 
 const CACHE_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
-const CACHE_PREFIX = "emb:v2-384:";
+const CACHE_PREFIX = "emb:v3:";
 
 let redis: Redis | null = null;
 
@@ -32,17 +32,17 @@ function getRedis(): Redis | null {
   return redis;
 }
 
-function hashKey(text: string): string {
+function hashKey(text: string, namespace: string): string {
   const normalized = text.trim().toLowerCase();
-  return CACHE_PREFIX + crypto.createHash("sha256").update(normalized).digest("hex");
+  return `${CACHE_PREFIX}${namespace}:${crypto.createHash("sha256").update(normalized).digest("hex")}`;
 }
 
-export async function getCachedEmbeddingPersistent(text: string): Promise<number[] | null> {
+export async function getCachedEmbeddingPersistent(text: string, namespace = "default"): Promise<number[] | null> {
   try {
     const client = getRedis();
     if (!client) return null;
     
-    const key = hashKey(text);
+    const key = hashKey(text, namespace);
     const cached = await client.get<number[]>(key);
     
     if (cached) {
@@ -57,12 +57,12 @@ export async function getCachedEmbeddingPersistent(text: string): Promise<number
   }
 }
 
-export async function setCachedEmbeddingPersistent(text: string, embedding: number[]): Promise<void> {
+export async function setCachedEmbeddingPersistent(text: string, embedding: number[], namespace = "default"): Promise<void> {
   try {
     const client = getRedis();
     if (!client) return;
     
-    const key = hashKey(text);
+    const key = hashKey(text, namespace);
     await client.set(key, embedding, { ex: CACHE_TTL_SECONDS });
   } catch (error) {
     console.error("[EmbeddingCache] Set error:", error);

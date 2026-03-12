@@ -5,7 +5,7 @@
  * Returns whether context refresh is needed and tracks memory usage.
  */
 
-import { embedText } from "@/lib/embeddings";
+import { embedQuery } from "@/lib/embeddings";
 import { semanticSearchVectors } from "@/lib/qdrant";
 import { 
   recordSessionTurn, 
@@ -124,7 +124,7 @@ export async function POST(request: Request, props: Props) {
             })),
             ...criticalMemories,
           ];
-          const vector = await embedText(lastUserMessage);
+          const vector = await embedQuery(lastUserMessage);
           const hits = await semanticSearchVectors({
             userId: identity.userId,
             query: lastUserMessage,

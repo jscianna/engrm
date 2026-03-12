@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { cache } from "react";
-import { embedText } from "@/lib/embeddings";
+import { embedDocument, embedQuery } from "@/lib/embeddings";
 import { cleanText, extractUrlContent, hashContent } from "@/lib/content";
 import { containsSecrets } from "@/lib/secrets";
 import {
@@ -209,7 +209,7 @@ async function generateEmbedding(memory: MemoryRecord) {
       return;
     }
 
-    const vector = await embedText(memory.contentText.slice(0, 6000));
+    const vector = await embedDocument(memory.contentText.slice(0, 6000));
     await upsertMemoryVector({
       memoryId: memory.id,
       userId: memory.userId,
@@ -331,7 +331,7 @@ export async function searchMemories(userId: string, query: string): Promise<Mem
     return [];
   }
 
-  const vector = await embedText(cleaned);
+  const vector = await embedQuery(cleaned);
   const hits = await semanticSearchVectors({
     userId,
     query: cleaned,
@@ -367,7 +367,7 @@ export async function getRelatedMemories(params: {
   contentText: string;
   topK?: number;
 }): Promise<MemorySearchResult[]> {
-  const vector = await embedText(params.contentText.slice(0, 6000));
+  const vector = await embedQuery(params.contentText.slice(0, 6000));
   const hits = await semanticSearchVectors({
     userId: params.userId,
     query: params.contentText.slice(0, 600),

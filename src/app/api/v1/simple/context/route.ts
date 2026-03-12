@@ -5,7 +5,7 @@
  * Returns human-readable text, not JSON.
  */
 
-import { embedText } from "@/lib/embeddings";
+import { embedQuery } from "@/lib/embeddings";
 import { semanticSearchVectors } from "@/lib/qdrant";
 import { bm25Search, rrfFusion, ensureFtsInitialized } from "@/lib/fts";
 import {
@@ -280,7 +280,7 @@ export async function POST(request: Request) {
       // First pass: get initial embedding (may use legacy HyDE flag)
       const criticalVector = enableHyDE
         ? (await embedWithHyDE(message, true)).embedding
-        : await embedText(message);
+        : await embedQuery(message);
 
       const criticalHits = await semanticSearchVectors({
         userId: identity.userId,
@@ -366,7 +366,7 @@ export async function POST(request: Request) {
                 if (hostedHydeEnabled && !enableHyDE) {
                   // Confidence-gated HyDE: will be applied after first-pass retrieval
                   // For now, just embed normally
-                  vector = await embedText(queryText);
+                  vector = await embedQuery(queryText);
                 } else {
                   // Legacy: always use HyDE when flag is set
                   const hydeResult = await embedWithHyDE(queryText, true);
@@ -376,7 +376,7 @@ export async function POST(request: Request) {
                   }
                 }
               } else {
-                vector = await embedText(queryText);
+                vector = await embedQuery(queryText);
               }
 
               const hits = await semanticSearchVectors({

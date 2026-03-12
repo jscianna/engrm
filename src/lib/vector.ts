@@ -8,17 +8,10 @@
  */
 
 import { ensureDatabaseMigrations } from "./db-migrations";
+import { getEmbeddingConfig, getEmbeddingDimension } from "./embeddings";
 import { getDb } from "./turso";
 
-// Expected embedding dimensions by model
-export const EMBEDDING_DIMENSIONS = {
-  "all-MiniLM-L6-v2": 384,
-  "text-embedding-ada-002": 1536,
-  "text-embedding-3-small": 1536,
-} as const;
-
-// Default dimension for validation
-const DEFAULT_DIMENSION = 384; // MiniLM
+const ACTIVE_EMBEDDING = getEmbeddingConfig();
 
 type MemoryVectorMetadata = {
   userId: string;
@@ -87,7 +80,7 @@ function cosineSimilarity(a: number[], b: number[]): number {
  * Validate vector dimensions
  */
 export function validateVector(vector: number[], expectedDimension?: number): { valid: boolean; error?: string } {
-  const dim = expectedDimension ?? DEFAULT_DIMENSION;
+  const dim = expectedDimension ?? getEmbeddingDimension();
   
   if (!Array.isArray(vector)) {
     return { valid: false, error: "Vector must be an array" };
@@ -98,7 +91,10 @@ export function validateVector(vector: number[], expectedDimension?: number): { 
   }
   
   if (vector.length !== dim) {
-    return { valid: false, error: `Vector dimension mismatch: expected ${dim}, got ${vector.length}` };
+    return {
+      valid: false,
+      error: `Vector dimension mismatch: expected ${dim}, got ${vector.length} for ${ACTIVE_EMBEDDING.provider}/${ACTIVE_EMBEDDING.model}`,
+    };
   }
   
   if (!vector.every((v) => typeof v === "number" && !isNaN(v) && isFinite(v))) {

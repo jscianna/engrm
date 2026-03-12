@@ -11,6 +11,7 @@
     "build:packages": "npm run build --workspaces --if-present --include-workspace-root=false",
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:migrate:status": "node scripts/db-migrate.mjs --status",
+    "embeddings:reindex": "node scripts/reindex-embeddings.mjs",
     "start": "next start",
     "lint": "eslint",
     "check:examples": "./node_modules/.bin/tsc -p examples/tsconfig.json --noEmit",

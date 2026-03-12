@@ -15,8 +15,11 @@ interface RerankableMemory {
   text: string;
 }
 
-// Use a fast model for reranking
-const RERANK_MODEL = "gpt-4o-mini";
+type RerankProvider = "voyage" | "llm";
+
+const VOYAGE_RERANK_URL = "https://api.voyageai.com/v1/rerank";
+const DEFAULT_VOYAGE_RERANK_MODEL = "rerank-2.5-lite";
+const DEFAULT_LLM_RERANK_MODEL = "gpt-4o-mini";
 
 export interface RerankResult<T extends RerankableMemory = RerankableMemory> {
   /** Reranked and filtered memories */
@@ -67,6 +70,94 @@ Respond ONLY with a JSON object in this exact format:
   ]
 }`;
 
+function resolveRerankProvider(): RerankProvider {
+  const configured = process.env.RERANK_PROVIDER?.trim().toLowerCase();
+  if (configured === "voyage") {
+    return "voyage";
+  }
+  if (configured === "llm" || configured === "openai") {
+    return "llm";
+  }
+  return process.env.VOYAGE_API_KEY ? "voyage" : "llm";
+}
+
+function normalizeScore(rawScore: unknown): number {
+  if (typeof rawScore !== "number" || !Number.isFinite(rawScore)) {
+    return 0;
+  }
+
+  const scaled = rawScore <= 1 ? rawScore * 100 : rawScore;
+  return Math.max(0, Math.min(100, Math.round(scaled)));
+}
+
+async function rerankWithVoyage<T extends RerankableMemory>(
+  query: string,
+  candidates: T[],
+): Promise<Map<string, { score: number }>> {
+  const apiKey = process.env.VOYAGE_API_KEY;
+  if (!apiKey) {
+    throw new Error("VOYAGE_API_KEY is required for Voyage reranking");
+  }
+
+  const response = await fetch(VOYAGE_RERANK_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: process.env.VOYAGE_RERANK_MODEL || DEFAULT_VOYAGE_RERANK_MODEL,
+      query,
+      documents: candidates.map((candidate) => candidate.text.slice(0, 4000)),
+      top_k: candidates.length,
+      truncation: true,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Voyage rerank failed with ${response.status}: ${await response.text()}`);
+  }
+
+  const data = await response.json();
+  const results = Array.isArray(data.data) ? data.data : Array.isArray(data.results) ? data.results : [];
+  const scoreMap = new Map<string, { score: number }>();
+
+  for (const item of results) {
+    const index =
+      typeof item.index === "number"
+        ? item.index
+        : typeof item.document_index === "number"
+          ? item.document_index
+          : -1;
+    const candidate = candidates[index];
+    if (!candidate) {
+      continue;
+    }
+
+    scoreMap.set(candidate.id, {
+      score: normalizeScore(item.relevance_score ?? item.score),
+    });
+  }
+
+  return scoreMap;
+}
+
+async function rerankWithLLM<T extends RerankableMemory>(
+  query: string,
+  candidates: T[],
+): Promise<Map<string, { score: number; reason?: string }>> {
+  const prompt = buildRerankPrompt(query, candidates);
+  const response = await callLLM(prompt, RERANK_SYSTEM_PROMPT, {
+    model: process.env.RERANK_LLM_MODEL || DEFAULT_LLM_RERANK_MODEL,
+  });
+  const parsed = parseRerankResponse(response);
+  const scoreMap = new Map<string, { score: number; reason?: string }>();
+  for (const item of parsed.scores) {
+    scoreMap.set(item.id, { score: item.score, reason: item.reason });
+  }
+  return scoreMap;
+}
+
 /**
  * Rerank memories using an LLM to judge relevance.
  * 
@@ -100,21 +191,19 @@ export async function rerankMemories<T extends RerankableMemory>(
 
   // Limit to topK candidates for reranking
   const candidatesToRerank = candidates.slice(0, topK);
+  const rerankProvider = resolveRerankProvider();
 
   try {
-    // Build the prompt with query and candidate memories
-    const prompt = buildRerankPrompt(query, candidatesToRerank);
-
-    // Call LLM for reranking
-    const response = await callLLM(prompt, RERANK_SYSTEM_PROMPT, { model: RERANK_MODEL });
-
-    // Parse the response
-    const parsed = parseRerankResponse(response);
-
-    // Create score map
-    const scoreMap = new Map<string, { score: number; reason?: string }>();
-    for (const item of parsed.scores) {
-      scoreMap.set(item.id, { score: item.score, reason: item.reason });
+    let scoreMap: Map<string, { score: number; reason?: string }>;
+    if (rerankProvider === "voyage") {
+      try {
+        scoreMap = await rerankWithVoyage(query, candidatesToRerank);
+      } catch (error) {
+        console.warn("[Reranker] Voyage reranking failed, falling back to LLM:", error);
+        scoreMap = await rerankWithLLM(query, candidatesToRerank);
+      }
+    } else {
+      scoreMap = await rerankWithLLM(query, candidatesToRerank);
     }
 
     // Filter and sort memories based on LLM scores

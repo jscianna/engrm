@@ -7,11 +7,12 @@
  * Environment:
  *   QDRANT_URL      - Cluster URL (e.g., https://xxx.us-east4-0.gcp.cloud.qdrant.io:6333)
  *   QDRANT_API_KEY  - API key from Qdrant Cloud dashboard
- *   QDRANT_COLLECTION - Collection name (default: "memories")
+ *   QDRANT_COLLECTION - Optional override for the provider-specific default collection
  * 
  * Migration: Run migrateFromTurso() once to move existing vectors.
  */
 
+import { getDefaultQdrantCollectionName, getEmbeddingConfig } from "./embeddings";
 import { getDb } from "./turso";
 
 // =============================================================================
@@ -20,14 +21,9 @@ import { getDb } from "./turso";
 
 const QDRANT_URL = process.env.QDRANT_URL;
 const QDRANT_API_KEY = process.env.QDRANT_API_KEY;
-const COLLECTION_NAME = process.env.QDRANT_COLLECTION || "memories";
-
-// Supported embedding dimensions
-export const EMBEDDING_DIMENSIONS = {
-  "all-MiniLM-L6-v2": 384,
-  "text-embedding-ada-002": 1536,
-  "text-embedding-3-small": 1536,
-} as const;
+const EMBEDDING_CONFIG = getEmbeddingConfig();
+const COLLECTION_NAME = process.env.QDRANT_COLLECTION || getDefaultQdrantCollectionName();
+const ACTIVE_VECTOR_NAME = "embedding";
 
 // =============================================================================
 // Types
@@ -108,9 +104,29 @@ async function qdrantFetch(
 
 let collectionInitialized = false;
 
+function collectionMatchesActiveSchema(collection: unknown): boolean {
+  if (!collection || typeof collection !== "object") {
+    return false;
+  }
+
+  const result = collection as {
+    config?: { params?: { vectors?: { size?: number } | Record<string, { size?: number }> } };
+  };
+  const vectors = result.config?.params?.vectors;
+  if (!vectors || typeof vectors !== "object") {
+    return false;
+  }
+
+  if ("size" in vectors && typeof vectors.size === "number") {
+    return vectors.size === EMBEDDING_CONFIG.dimension;
+  }
+
+  const named = vectors as Record<string, { size?: number }>;
+  return named[ACTIVE_VECTOR_NAME]?.size === EMBEDDING_CONFIG.dimension;
+}
+
 /**
  * Ensure collection exists with correct schema
- * Supports multi-vector (384 + 1536 dim) via named vectors
  */
 export async function ensureCollection(): Promise<void> {
   if (!isQdrantEnabled() || collectionInitialized) return;
@@ -121,21 +137,29 @@ export async function ensureCollection(): Promise<void> {
     const checkData = await checkResponse.json();
     
     if (checkData.result) {
+      if (!collectionMatchesActiveSchema(checkData.result)) {
+        throw new Error(
+          `[Qdrant] Collection "${COLLECTION_NAME}" does not match ${EMBEDDING_CONFIG.provider}/${EMBEDDING_CONFIG.model} (${EMBEDDING_CONFIG.dimension} dims). Use a fresh collection name or reindex into a new collection.`,
+        );
+      }
       collectionInitialized = true;
       return;
     }
-  } catch {
-    // Collection doesn't exist, create it
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("does not match")) {
+      throw error;
+    }
+    if (!(error instanceof Error) || !error.message.includes("404")) {
+      throw error;
+    }
   }
 
-  // Create collection with named vectors for both dimensions
+  // Create a provider-specific collection for the active embedding config.
   await qdrantFetch(`/collections/${COLLECTION_NAME}`, {
     method: "PUT",
     body: JSON.stringify({
       vectors: {
-        // Named vectors for different embedding models
-        "minilm": { size: 384, distance: "Cosine" },
-        "openai": { size: 1536, distance: "Cosine" },
+        [ACTIVE_VECTOR_NAME]: { size: EMBEDDING_CONFIG.dimension, distance: "Cosine" },
       },
       // Optimize for filtering by user_id
       optimizers_config: {
@@ -166,15 +190,12 @@ export async function ensureCollection(): Promise<void> {
 /**
  * Get vector name based on dimension
  */
-function getVectorName(dimension: number): "minilm" | "openai" {
-  if (dimension === 384) {
-    return "minilm";
-  }
-  if (dimension === 1536) {
-    return "openai";
+function getVectorName(dimension: number): string {
+  if (dimension === EMBEDDING_CONFIG.dimension) {
+    return ACTIVE_VECTOR_NAME;
   }
   throw new Error(
-    `Unsupported Qdrant vector dimension: ${dimension}. Expected 384 or 1536.`,
+    `Unsupported Qdrant vector dimension: ${dimension}. Expected ${EMBEDDING_CONFIG.dimension} for ${EMBEDDING_CONFIG.provider}/${EMBEDDING_CONFIG.model}.`,
   );
 }
 
@@ -222,6 +243,13 @@ export async function upsertMemoryVector(params: {
       ],
     }),
   });
+
+  try {
+    const { upsertMemoryVector: tursoUpsert } = await import("./vector");
+    await tursoUpsert(params);
+  } catch (error) {
+    console.warn("[Qdrant] Failed to mirror vector into Turso:", error);
+  }
 }
 
 /**
@@ -241,6 +269,13 @@ export async function deleteMemoryVector(memoryId: string): Promise<void> {
       points: [memoryId],
     }),
   });
+
+  try {
+    const { deleteMemoryVector: tursoDelete } = await import("./vector");
+    await tursoDelete(memoryId);
+  } catch (error) {
+    console.warn("[Qdrant] Failed to mirror vector delete into Turso:", error);
+  }
 }
 
 /**
@@ -275,6 +310,13 @@ export async function deleteAllUserVectors(userId: string): Promise<number> {
       },
     }),
   });
+
+  try {
+    const { deleteAllUserVectors: tursoDelete } = await import("./vector");
+    await tursoDelete(userId);
+  } catch (error) {
+    console.warn("[Qdrant] Failed to mirror user vector delete into Turso:", error);
+  }
 
   return count;
 }
@@ -410,6 +452,10 @@ export async function migrateFromTurso(userId?: string): Promise<{
       const vectorJson = row.vector_json as string;
       const vector = JSON.parse(vectorJson) as number[];
       const dimension = vector.length; // Infer from actual vector
+      if (dimension !== EMBEDDING_CONFIG.dimension) {
+        stats.skipped++;
+        continue;
+      }
       const vectorName = getVectorName(dimension);
 
       points.push({
@@ -461,10 +507,16 @@ export function getQdrantStatus(): {
   enabled: boolean;
   url: string | null;
   collection: string;
+  dimension: number;
+  provider: string;
+  model: string;
 } {
   return {
     enabled: isQdrantEnabled(),
     url: QDRANT_URL ?? null,
     collection: COLLECTION_NAME,
+    dimension: EMBEDDING_CONFIG.dimension,
+    provider: EMBEDDING_CONFIG.provider,
+    model: EMBEDDING_CONFIG.model,
   };
 }

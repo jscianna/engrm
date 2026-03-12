@@ -10,7 +10,7 @@
  */
 
 import { callLLM, LLMError } from "./llm";
-import { embedText } from "./embeddings";
+import { embedDocument, embedQuery } from "./embeddings";
 
 // Use a fast model for HyDE generation
 const HYDE_MODEL = "gpt-4o-mini";
@@ -70,7 +70,7 @@ export async function generateHypotheticalDocument(query: string): Promise<HyDER
     }
 
     // Generate embedding for the hypothetical document
-    const embedding = await embedText(cleanDocument);
+    const embedding = await embedDocument(cleanDocument);
 
     return {
       hypotheticalDocument: cleanDocument,
@@ -88,7 +88,7 @@ export async function generateHypotheticalDocument(query: string): Promise<HyDER
 
     return {
       hypotheticalDocument: query, // Fall back to original query
-      embedding: await embedText(query), // Fall back to query embedding
+      embedding: await embedQuery(query), // Fall back to query embedding
       success: false,
       error: errorMessage,
     };
@@ -182,7 +182,7 @@ export async function embedWithHyDEIfNeeded(
   confidenceThreshold: number = 0.72,
 ): Promise<{ embedding: number[]; usedHyDE: boolean; hypotheticalDocument?: string; gated: boolean }> {
   if (retrievalConfidence >= confidenceThreshold) {
-    const embedding = await embedText(query);
+    const embedding = await embedQuery(query);
     return { embedding, usedHyDE: false, gated: true };
   }
 
@@ -202,7 +202,7 @@ export async function embedWithHyDE(
   enableHyDE: boolean = false
 ): Promise<{ embedding: number[]; usedHyDE: boolean; hypotheticalDocument?: string }> {
   // Get base query embedding first (always needed)
-  const queryEmbedding = await embedText(query);
+  const queryEmbedding = await embedQuery(query);
 
   if (!enableHyDE) {
     return { embedding: queryEmbedding, usedHyDE: false };
