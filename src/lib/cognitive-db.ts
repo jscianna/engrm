@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import type { Client } from "@libsql/client";
 import { getDb } from "@/lib/turso";
 import { embedText } from "@/lib/embeddings";
 import {
@@ -399,6 +400,38 @@ export interface CognitiveRetentionCleanupResult {
 
 let initialized = false;
 
+async function ensureCognitiveIndexes(client: Client): Promise<void> {
+  const statements = [
+    `CREATE INDEX IF NOT EXISTS idx_traces_user ON coding_traces(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_traces_user_type ON coding_traces(user_id, type)`,
+    `CREATE INDEX IF NOT EXISTS idx_traces_timestamp ON coding_traces(timestamp DESC)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_traces_user_hash ON coding_traces(user_id, trace_hash)`,
+    `CREATE INDEX IF NOT EXISTS idx_traces_shared_signature ON coding_traces(shared_signature)`,
+    `CREATE INDEX IF NOT EXISTS idx_patterns_user ON cognitive_patterns(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_patterns_org ON cognitive_patterns(org_id, scope, updated_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_patterns_domain ON cognitive_patterns(domain)`,
+    `CREATE INDEX IF NOT EXISTS idx_patterns_status ON cognitive_patterns(status)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_patterns_key ON cognitive_patterns(pattern_key)`,
+    `CREATE INDEX IF NOT EXISTS idx_cognitive_org_memberships_org ON cognitive_org_memberships(org_id, role, updated_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_trace_pattern_matches_trace ON trace_pattern_matches(trace_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_trace_pattern_matches_pattern ON trace_pattern_matches(pattern_id)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_trace_pattern_matches ON trace_pattern_matches(trace_id, pattern_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_skills_user_scope ON synthesized_skills(user_id, scope)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_skills_pattern_key ON synthesized_skills(pattern_key)`,
+    `CREATE INDEX IF NOT EXISTS idx_cognitive_applications_user ON cognitive_applications(user_id, created_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_cognitive_applications_session ON cognitive_applications(session_id, created_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_cognitive_applications_baseline ON cognitive_applications(user_id, baseline_group_key, created_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_pattern_applications_application ON pattern_applications(application_id, rank ASC)`,
+    `CREATE INDEX IF NOT EXISTS idx_pattern_applications_entity ON pattern_applications(entity_type, entity_id, updated_at DESC)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_pattern_applications ON pattern_applications(application_id, entity_type, entity_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_cognitive_benchmark_runs_user ON cognitive_benchmark_runs(user_id, created_at DESC)`,
+  ];
+
+  for (const statement of statements) {
+    await client.execute(statement).catch(() => {});
+  }
+}
+
 async function ensureInitialized(): Promise<void> {
   if (initialized) {
     return;
@@ -437,11 +470,6 @@ async function ensureInitialized(): Promise<void> {
       explicit_feedback_notes TEXT
     );
 
-    CREATE INDEX IF NOT EXISTS idx_traces_user ON coding_traces(user_id);
-    CREATE INDEX IF NOT EXISTS idx_traces_user_type ON coding_traces(user_id, type);
-    CREATE INDEX IF NOT EXISTS idx_traces_timestamp ON coding_traces(timestamp DESC);
-    CREATE UNIQUE INDEX IF NOT EXISTS uq_traces_user_hash ON coding_traces(user_id, trace_hash);
-
     CREATE TABLE IF NOT EXISTS cognitive_patterns (
       id TEXT PRIMARY KEY,
       user_id TEXT,
@@ -476,12 +504,6 @@ async function ensureInitialized(): Promise<void> {
       updated_at TEXT NOT NULL
     );
 
-    CREATE INDEX IF NOT EXISTS idx_patterns_user ON cognitive_patterns(user_id);
-    CREATE INDEX IF NOT EXISTS idx_patterns_org ON cognitive_patterns(org_id, scope, updated_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_patterns_domain ON cognitive_patterns(domain);
-    CREATE INDEX IF NOT EXISTS idx_patterns_status ON cognitive_patterns(status);
-    CREATE UNIQUE INDEX IF NOT EXISTS uq_patterns_key ON cognitive_patterns(pattern_key);
-
     CREATE TABLE IF NOT EXISTS cognitive_org_memberships (
       user_id TEXT PRIMARY KEY,
       org_id TEXT NOT NULL,
@@ -489,8 +511,6 @@ async function ensureInitialized(): Promise<void> {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
-
-    CREATE INDEX IF NOT EXISTS idx_cognitive_org_memberships_org ON cognitive_org_memberships(org_id, role, updated_at DESC);
 
     CREATE TABLE IF NOT EXISTS cognitive_org_policies (
       org_id TEXT PRIMARY KEY,
@@ -511,10 +531,6 @@ async function ensureInitialized(): Promise<void> {
       updated_at TEXT,
       created_at TEXT NOT NULL
     );
-
-    CREATE INDEX IF NOT EXISTS idx_trace_pattern_matches_trace ON trace_pattern_matches(trace_id);
-    CREATE INDEX IF NOT EXISTS idx_trace_pattern_matches_pattern ON trace_pattern_matches(pattern_id);
-    CREATE UNIQUE INDEX IF NOT EXISTS uq_trace_pattern_matches ON trace_pattern_matches(trace_id, pattern_id);
 
     CREATE TABLE IF NOT EXISTS synthesized_skills (
       id TEXT PRIMARY KEY,
@@ -546,9 +562,6 @@ async function ensureInitialized(): Promise<void> {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
-
-    CREATE INDEX IF NOT EXISTS idx_skills_user_scope ON synthesized_skills(user_id, scope);
-    CREATE UNIQUE INDEX IF NOT EXISTS uq_skills_pattern_key ON synthesized_skills(pattern_key);
 
     CREATE TABLE IF NOT EXISTS cognitive_jobs (
       job_name TEXT PRIMARY KEY,
@@ -592,10 +605,6 @@ async function ensureInitialized(): Promise<void> {
       updated_at TEXT NOT NULL
     );
 
-    CREATE INDEX IF NOT EXISTS idx_cognitive_applications_user ON cognitive_applications(user_id, created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_cognitive_applications_session ON cognitive_applications(session_id, created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_cognitive_applications_baseline ON cognitive_applications(user_id, baseline_group_key, created_at DESC);
-
     CREATE TABLE IF NOT EXISTS pattern_applications (
       id TEXT PRIMARY KEY,
       application_id TEXT NOT NULL,
@@ -612,10 +621,6 @@ async function ensureInitialized(): Promise<void> {
       updated_at TEXT NOT NULL
     );
 
-    CREATE INDEX IF NOT EXISTS idx_pattern_applications_application ON pattern_applications(application_id, rank ASC);
-    CREATE INDEX IF NOT EXISTS idx_pattern_applications_entity ON pattern_applications(entity_type, entity_id, updated_at DESC);
-    CREATE UNIQUE INDEX IF NOT EXISTS uq_pattern_applications ON pattern_applications(application_id, entity_type, entity_id);
-
     CREATE TABLE IF NOT EXISTS cognitive_benchmark_runs (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -625,8 +630,6 @@ async function ensureInitialized(): Promise<void> {
       gate_json TEXT,
       created_at TEXT NOT NULL
     );
-
-    CREATE INDEX IF NOT EXISTS idx_cognitive_benchmark_runs_user ON cognitive_benchmark_runs(user_id, created_at DESC);
 
     CREATE TABLE IF NOT EXISTS cognitive_user_settings (
       user_id TEXT PRIMARY KEY,
@@ -666,6 +669,8 @@ async function ensureInitialized(): Promise<void> {
   await client.execute(`ALTER TABLE trace_pattern_matches ADD COLUMN explicit_outcome TEXT`).catch(() => {});
   await client.execute(`ALTER TABLE trace_pattern_matches ADD COLUMN feedback_notes TEXT`).catch(() => {});
   await client.execute(`ALTER TABLE trace_pattern_matches ADD COLUMN updated_at TEXT`).catch(() => {});
+  await client.execute(`ALTER TABLE synthesized_skills ADD COLUMN scope TEXT DEFAULT 'local'`).catch(() => {});
+  await client.execute(`ALTER TABLE synthesized_skills ADD COLUMN pattern_key TEXT DEFAULT ''`).catch(() => {});
   await client.execute(`ALTER TABLE synthesized_skills ADD COLUMN source_trace_count INTEGER DEFAULT 0`).catch(() => {});
   await client.execute(`ALTER TABLE synthesized_skills ADD COLUMN accepted_application_count INTEGER DEFAULT 0`).catch(() => {});
   await client.execute(`ALTER TABLE synthesized_skills ADD COLUMN successful_application_count INTEGER DEFAULT 0`).catch(() => {});
@@ -698,6 +703,7 @@ async function ensureInitialized(): Promise<void> {
   // Persisted reusable signatures are cleared to reduce cross-session linkability.
   await client.execute(`UPDATE coding_traces SET shared_signature = NULL WHERE shared_signature IS NOT NULL`).catch(() => {});
   await client.execute(`UPDATE cognitive_patterns SET shared_signature = NULL WHERE scope = 'global'`).catch(() => {});
+  await ensureCognitiveIndexes(client);
 
   initialized = true;
 }
