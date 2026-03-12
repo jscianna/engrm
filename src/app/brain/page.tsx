@@ -685,8 +685,13 @@ function generateDemoData(): { nodes: MemoryNode[]; edges: MemoryEdge[] } {
 // Main Page Component
 // =============================================================================
 
-export default function BrainPage() {
-  const { isLoaded, isSignedIn } = useAuth();
+function BrainPageContent({
+  isLoaded,
+  isSignedIn,
+}: {
+  isLoaded: boolean;
+  isSignedIn: boolean;
+}) {
   const [nodes, setNodes] = useState<MemoryNode[]>([]);
   const [edges, setEdges] = useState<MemoryEdge[]>([]);
   const [stats, setStats] = useState<BrainStats>({
@@ -1072,4 +1077,20 @@ export default function BrainPage() {
       )}
     </div>
   );
+}
+
+function BrainPageWithClerk() {
+  const { isLoaded, isSignedIn } = useAuth();
+
+  return <BrainPageContent isLoaded={isLoaded} isSignedIn={Boolean(isSignedIn)} />;
+}
+
+function BrainPageDemoOnly() {
+  return <BrainPageContent isLoaded={true} isSignedIn={false} />;
+}
+
+export default function BrainPage() {
+  const hasClerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+
+  return hasClerk ? <BrainPageWithClerk /> : <BrainPageDemoOnly />;
 }

@@ -46,10 +46,3 @@ export default clerkMiddleware(async (auth, request) => {
     await auth.protect();
   }
 });
-
-export const config = {
-  matcher: [
-    "/dashboard/:path*",
-    "/api/:path*",
-  ],
-};

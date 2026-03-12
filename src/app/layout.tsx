@@ -51,15 +51,22 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const clerkKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
+  const content = (
+    <html lang="en" className={inter.variable}>
+      <body className="font-sans antialiased tracking-tight">
+        {children}
+        <Toaster richColors theme="dark" />
+      </body>
+    </html>
+  );
+
+  if (!clerkKey) {
+    return content;
+  }
 
   return (
     <ClerkProvider publishableKey={clerkKey}>
-      <html lang="en" className={inter.variable}>
-        <body className="font-sans antialiased tracking-tight">
-          {children}
-          <Toaster richColors theme="dark" />
-        </body>
-      </html>
+      {content}
     </ClerkProvider>
   );
 }
