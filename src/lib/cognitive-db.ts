@@ -400,35 +400,65 @@ export interface CognitiveRetentionCleanupResult {
 
 let initialized = false;
 
+async function getTableColumns(client: Client, tableName: string): Promise<Set<string>> {
+  const result = await client.execute(`PRAGMA table_info(${tableName})`).catch(() => null);
+  const rows = result?.rows ?? [];
+  return new Set(
+    rows
+      .map((row) => {
+        const record = row as Record<string, unknown>;
+        return typeof record.name === "string" ? record.name : null;
+      })
+      .filter((name): name is string => Boolean(name)),
+  );
+}
+
 async function ensureCognitiveIndexes(client: Client): Promise<void> {
-  const statements = [
-    `CREATE INDEX IF NOT EXISTS idx_traces_user ON coding_traces(user_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_traces_user_type ON coding_traces(user_id, type)`,
-    `CREATE INDEX IF NOT EXISTS idx_traces_timestamp ON coding_traces(timestamp DESC)`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS uq_traces_user_hash ON coding_traces(user_id, trace_hash)`,
-    `CREATE INDEX IF NOT EXISTS idx_traces_shared_signature ON coding_traces(shared_signature)`,
-    `CREATE INDEX IF NOT EXISTS idx_patterns_user ON cognitive_patterns(user_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_patterns_org ON cognitive_patterns(org_id, scope, updated_at DESC)`,
-    `CREATE INDEX IF NOT EXISTS idx_patterns_domain ON cognitive_patterns(domain)`,
-    `CREATE INDEX IF NOT EXISTS idx_patterns_status ON cognitive_patterns(status)`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS uq_patterns_key ON cognitive_patterns(pattern_key)`,
-    `CREATE INDEX IF NOT EXISTS idx_cognitive_org_memberships_org ON cognitive_org_memberships(org_id, role, updated_at DESC)`,
-    `CREATE INDEX IF NOT EXISTS idx_trace_pattern_matches_trace ON trace_pattern_matches(trace_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_trace_pattern_matches_pattern ON trace_pattern_matches(pattern_id)`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS uq_trace_pattern_matches ON trace_pattern_matches(trace_id, pattern_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_skills_user_scope ON synthesized_skills(user_id, scope)`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS uq_skills_pattern_key ON synthesized_skills(pattern_key)`,
-    `CREATE INDEX IF NOT EXISTS idx_cognitive_applications_user ON cognitive_applications(user_id, created_at DESC)`,
-    `CREATE INDEX IF NOT EXISTS idx_cognitive_applications_session ON cognitive_applications(session_id, created_at DESC)`,
-    `CREATE INDEX IF NOT EXISTS idx_cognitive_applications_baseline ON cognitive_applications(user_id, baseline_group_key, created_at DESC)`,
-    `CREATE INDEX IF NOT EXISTS idx_pattern_applications_application ON pattern_applications(application_id, rank ASC)`,
-    `CREATE INDEX IF NOT EXISTS idx_pattern_applications_entity ON pattern_applications(entity_type, entity_id, updated_at DESC)`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS uq_pattern_applications ON pattern_applications(application_id, entity_type, entity_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_cognitive_benchmark_runs_user ON cognitive_benchmark_runs(user_id, created_at DESC)`,
+  const tableColumns = {
+    coding_traces: await getTableColumns(client, "coding_traces"),
+    cognitive_patterns: await getTableColumns(client, "cognitive_patterns"),
+    cognitive_org_memberships: await getTableColumns(client, "cognitive_org_memberships"),
+    trace_pattern_matches: await getTableColumns(client, "trace_pattern_matches"),
+    synthesized_skills: await getTableColumns(client, "synthesized_skills"),
+    cognitive_applications: await getTableColumns(client, "cognitive_applications"),
+    pattern_applications: await getTableColumns(client, "pattern_applications"),
+    cognitive_benchmark_runs: await getTableColumns(client, "cognitive_benchmark_runs"),
+  };
+
+  type IndexedTable = keyof typeof tableColumns;
+
+  const statements: Array<{ sql: string; table: IndexedTable; columns: string[] }> = [
+    { sql: `CREATE INDEX IF NOT EXISTS idx_traces_user ON coding_traces(user_id)`, table: "coding_traces", columns: ["user_id"] },
+    { sql: `CREATE INDEX IF NOT EXISTS idx_traces_user_type ON coding_traces(user_id, type)`, table: "coding_traces", columns: ["user_id", "type"] },
+    { sql: `CREATE INDEX IF NOT EXISTS idx_traces_timestamp ON coding_traces(timestamp DESC)`, table: "coding_traces", columns: ["timestamp"] },
+    { sql: `CREATE UNIQUE INDEX IF NOT EXISTS uq_traces_user_hash ON coding_traces(user_id, trace_hash)`, table: "coding_traces", columns: ["user_id", "trace_hash"] },
+    { sql: `CREATE INDEX IF NOT EXISTS idx_traces_shared_signature ON coding_traces(shared_signature)`, table: "coding_traces", columns: ["shared_signature"] },
+    { sql: `CREATE INDEX IF NOT EXISTS idx_patterns_user ON cognitive_patterns(user_id)`, table: "cognitive_patterns", columns: ["user_id"] },
+    { sql: `CREATE INDEX IF NOT EXISTS idx_patterns_org ON cognitive_patterns(org_id, scope, updated_at DESC)`, table: "cognitive_patterns", columns: ["org_id", "scope", "updated_at"] },
+    { sql: `CREATE INDEX IF NOT EXISTS idx_patterns_domain ON cognitive_patterns(domain)`, table: "cognitive_patterns", columns: ["domain"] },
+    { sql: `CREATE INDEX IF NOT EXISTS idx_patterns_status ON cognitive_patterns(status)`, table: "cognitive_patterns", columns: ["status"] },
+    { sql: `CREATE UNIQUE INDEX IF NOT EXISTS uq_patterns_key ON cognitive_patterns(pattern_key)`, table: "cognitive_patterns", columns: ["pattern_key"] },
+    { sql: `CREATE INDEX IF NOT EXISTS idx_cognitive_org_memberships_org ON cognitive_org_memberships(org_id, role, updated_at DESC)`, table: "cognitive_org_memberships", columns: ["org_id", "role", "updated_at"] },
+    { sql: `CREATE INDEX IF NOT EXISTS idx_trace_pattern_matches_trace ON trace_pattern_matches(trace_id)`, table: "trace_pattern_matches", columns: ["trace_id"] },
+    { sql: `CREATE INDEX IF NOT EXISTS idx_trace_pattern_matches_pattern ON trace_pattern_matches(pattern_id)`, table: "trace_pattern_matches", columns: ["pattern_id"] },
+    { sql: `CREATE UNIQUE INDEX IF NOT EXISTS uq_trace_pattern_matches ON trace_pattern_matches(trace_id, pattern_id)`, table: "trace_pattern_matches", columns: ["trace_id", "pattern_id"] },
+    { sql: `CREATE INDEX IF NOT EXISTS idx_skills_user_scope ON synthesized_skills(user_id, scope)`, table: "synthesized_skills", columns: ["user_id", "scope"] },
+    { sql: `CREATE UNIQUE INDEX IF NOT EXISTS uq_skills_pattern_key ON synthesized_skills(pattern_key)`, table: "synthesized_skills", columns: ["pattern_key"] },
+    { sql: `CREATE INDEX IF NOT EXISTS idx_cognitive_applications_user ON cognitive_applications(user_id, created_at DESC)`, table: "cognitive_applications", columns: ["user_id", "created_at"] },
+    { sql: `CREATE INDEX IF NOT EXISTS idx_cognitive_applications_session ON cognitive_applications(session_id, created_at DESC)`, table: "cognitive_applications", columns: ["session_id", "created_at"] },
+    { sql: `CREATE INDEX IF NOT EXISTS idx_cognitive_applications_baseline ON cognitive_applications(user_id, baseline_group_key, created_at DESC)`, table: "cognitive_applications", columns: ["user_id", "baseline_group_key", "created_at"] },
+    { sql: `CREATE INDEX IF NOT EXISTS idx_pattern_applications_application ON pattern_applications(application_id, rank ASC)`, table: "pattern_applications", columns: ["application_id", "rank"] },
+    { sql: `CREATE INDEX IF NOT EXISTS idx_pattern_applications_entity ON pattern_applications(entity_type, entity_id, updated_at DESC)`, table: "pattern_applications", columns: ["entity_type", "entity_id", "updated_at"] },
+    { sql: `CREATE UNIQUE INDEX IF NOT EXISTS uq_pattern_applications ON pattern_applications(application_id, entity_type, entity_id)`, table: "pattern_applications", columns: ["application_id", "entity_type", "entity_id"] },
+    { sql: `CREATE INDEX IF NOT EXISTS idx_cognitive_benchmark_runs_user ON cognitive_benchmark_runs(user_id, created_at DESC)`, table: "cognitive_benchmark_runs", columns: ["user_id", "created_at"] },
   ];
 
   for (const statement of statements) {
-    await client.execute(statement).catch(() => {});
+    const available = tableColumns[statement.table];
+    if (!statement.columns.every((column) => available.has(column))) {
+      continue;
+    }
+    await client.execute(statement.sql).catch(() => {});
   }
 }
 
@@ -2035,6 +2065,8 @@ async function attachTraceToApplication(params: {
 export async function createTrace(input: CreateTraceInput): Promise<CodingTrace> {
   await ensureInitialized();
   const client = getDb();
+  const codingTraceColumns = await getTableColumns(client, "coding_traces");
+  const hasTraceHashColumn = codingTraceColumns.has("trace_hash");
   const now = new Date().toISOString();
   const normalizedContext = input.context ?? {};
   const automatedSignals = input.automatedSignals ?? {};
@@ -2061,10 +2093,12 @@ export async function createTrace(input: CreateTraceInput): Promise<CodingTrace>
   });
   const sharedSignature = null;
 
-  const existing = await client.execute({
-    sql: `SELECT * FROM coding_traces WHERE user_id = ? AND trace_hash = ? LIMIT 1`,
-    args: [input.userId, traceHash],
-  });
+  const existing = hasTraceHashColumn
+    ? await client.execute({
+        sql: `SELECT * FROM coding_traces WHERE user_id = ? AND trace_hash = ? LIMIT 1`,
+        args: [input.userId, traceHash],
+      })
+    : { rows: [] };
   if (existing.rows[0]) {
     const existingTrace = rowToTrace(existing.rows[0] as Record<string, unknown>);
     const mergedContext = mergeTraceContext(parseObject(existingTrace.contextJson), normalizedContext);
@@ -2155,7 +2189,7 @@ export async function createTrace(input: CreateTraceInput): Promise<CodingTrace>
 
   const id = crypto.randomUUID();
   const embeddingSql = embedding ? "vector(?)" : "NULL";
-  const insertArgs: Array<string | number | null> = [
+  const baseInsertArgs: Array<string | number | null> = [
     id,
     input.userId,
     input.sessionId,
@@ -2177,29 +2211,47 @@ export async function createTrace(input: CreateTraceInput): Promise<CodingTrace>
     now,
   ];
   if (embedding) {
-    insertArgs.push(JSON.stringify(embedding));
+    baseInsertArgs.push(JSON.stringify(embedding));
   }
-  insertArgs.push(
+  const trailingArgs: Array<string | number | null> = [
     embedding ? JSON.stringify(embedding) : null,
-    traceHash,
     resolved.source,
     resolved.confidence,
     JSON.stringify(automatedSignals),
     shareEligible ? 1 : 0,
     sharedSignature,
     input.explicitFeedbackNotes ?? null,
+  ];
+  const insertColumns = [
+    "id", "user_id", "session_id", "timestamp", "type", "problem", "context_json",
+    "reasoning", "approaches_json", "solution", "outcome", "error_message",
+    "tools_used_json", "files_modified_json", "duration_ms", "sanitized",
+    "sanitized_at", "created_at", "updated_at", "embedding", "embedding_json",
+  ];
+  const insertPlaceholders = new Array(19).fill("?").concat([embeddingSql, "?"]);
+
+  if (hasTraceHashColumn) {
+    insertColumns.push("trace_hash");
+    trailingArgs.unshift(traceHash);
+    insertPlaceholders.push("?");
+  }
+
+  insertColumns.push(
+    "outcome_source",
+    "outcome_confidence",
+    "automated_signals_json",
+    "share_eligible",
+    "shared_signature",
+    "explicit_feedback_notes",
   );
+  insertPlaceholders.push("?", "?", "?", "?", "?", "?");
+  const insertArgs = [...baseInsertArgs, ...trailingArgs];
 
   await client.execute({
     sql: `
       INSERT INTO coding_traces (
-        id, user_id, session_id, timestamp, type, problem, context_json,
-        reasoning, approaches_json, solution, outcome, error_message,
-        tools_used_json, files_modified_json, duration_ms, sanitized,
-        sanitized_at, created_at, updated_at, embedding, embedding_json,
-        trace_hash, outcome_source, outcome_confidence, automated_signals_json,
-        share_eligible, shared_signature, explicit_feedback_notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${embeddingSql}, ?, ?, ?, ?, ?, ?, ?, ?)
+        ${insertColumns.join(", ")}
+      ) VALUES (${insertPlaceholders.join(", ")})
     `,
     args: insertArgs,
   });
