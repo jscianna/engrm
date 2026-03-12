@@ -12,6 +12,7 @@
  * Migration: Run migrateFromTurso() once to move existing vectors.
  */
 
+import { createHash } from "node:crypto";
 import { getDefaultQdrantCollectionName, getEmbeddingConfig } from "./embeddings";
 import { getDb } from "./turso";
 
@@ -70,6 +71,17 @@ type VectorSearchResult = {
 
 function isQdrantEnabled(): boolean {
   return Boolean(QDRANT_URL && QDRANT_API_KEY);
+}
+
+function toQdrantPointId(memoryId: string): string {
+  const chars = createHash("sha256").update(memoryId).digest("hex").slice(0, 32).split("");
+  chars[12] = "5";
+  const variant = (Number.parseInt(chars[16] + chars[17], 16) & 0x3f) | 0x80;
+  const variantHex = variant.toString(16).padStart(2, "0");
+  chars[16] = variantHex[0];
+  chars[17] = variantHex[1];
+  const normalized = chars.join("");
+  return `${normalized.slice(0, 8)}-${normalized.slice(8, 12)}-${normalized.slice(12, 16)}-${normalized.slice(16, 20)}-${normalized.slice(20, 32)}`;
 }
 
 async function qdrantFetch(
@@ -226,7 +238,7 @@ export async function upsertMemoryVector(params: {
     body: JSON.stringify({
       points: [
         {
-          id: params.memoryId, // Use memory ID as point ID (UUID)
+          id: toQdrantPointId(params.memoryId),
           vector: {
             [vectorName]: params.vector,
           },
@@ -266,7 +278,9 @@ export async function deleteMemoryVector(memoryId: string): Promise<void> {
   await qdrantFetch(`/collections/${COLLECTION_NAME}/points/delete`, {
     method: "POST",
     body: JSON.stringify({
-      points: [memoryId],
+      filter: {
+        must: [{ key: "memory_id", match: { value: memoryId } }],
+      },
     }),
   });
 
@@ -459,7 +473,7 @@ export async function migrateFromTurso(userId?: string): Promise<{
       const vectorName = getVectorName(dimension);
 
       points.push({
-        id: row.memory_id as string,
+        id: toQdrantPointId(row.memory_id as string),
         vector: { [vectorName]: vector },
         payload: {
           user_id: row.user_id as string,

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createClient } from "@libsql/client";
 import * as dotenv from "dotenv";
 
@@ -19,6 +20,17 @@ function parseDimension(value, fallback) {
 
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function toQdrantPointId(memoryId) {
+  const chars = createHash("sha256").update(memoryId).digest("hex").slice(0, 32).split("");
+  chars[12] = "5";
+  const variant = (Number.parseInt(chars[16] + chars[17], 16) & 0x3f) | 0x80;
+  const variantHex = variant.toString(16).padStart(2, "0");
+  chars[16] = variantHex[0];
+  chars[17] = variantHex[1];
+  const normalized = chars.join("");
+  return `${normalized.slice(0, 8)}-${normalized.slice(8, 12)}-${normalized.slice(12, 16)}-${normalized.slice(16, 20)}-${normalized.slice(20, 32)}`;
 }
 
 function parseArgs(argv) {
@@ -284,7 +296,7 @@ async function main() {
         method: "PUT",
         body: JSON.stringify({
           points: batch.map((row, index) => ({
-            id: row.id,
+            id: toQdrantPointId(row.id),
             vector: {
               [ACTIVE_VECTOR_NAME]: embeddings[index],
             },
