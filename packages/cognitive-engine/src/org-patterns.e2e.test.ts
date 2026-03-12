@@ -33,6 +33,10 @@ describe("org-scoped cognition patterns", () => {
     await cognitiveDb.setCognitiveOrgMembership(authorId, "org-alpha");
     await cognitiveDb.setCognitiveOrgMembership(peerId, "org-alpha");
     await cognitiveDb.setCognitiveOrgMembership(outsiderId, "org-beta");
+    await cognitiveDb.updateCognitiveOrgPolicy({
+      orgId: "org-alpha",
+      orgPatternSharingEnabled: true,
+    });
 
     const promotedSource = await cognitiveDb.createPattern({
       userId: authorId,
@@ -126,6 +130,10 @@ describe("org-scoped cognition patterns", () => {
 
     await cognitiveDb.setCognitiveOrgMembership(authorId, "org-rollback");
     await cognitiveDb.setCognitiveOrgMembership(peerId, "org-rollback");
+    await cognitiveDb.updateCognitiveOrgPolicy({
+      orgId: "org-rollback",
+      orgPatternSharingEnabled: true,
+    });
 
     const localPattern = await cognitiveDb.createPattern({
       userId: authorId,

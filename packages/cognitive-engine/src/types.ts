@@ -83,6 +83,7 @@ export interface Pattern {
   scope?: 'local' | 'global' | 'org';
   orgId?: string | null;
   sourcePatternId?: string | null;
+  provenance?: Record<string, unknown>;
   
   // What triggers this pattern
   domain: string;               // e.g., "turso", "nextjs-auth", "docker"

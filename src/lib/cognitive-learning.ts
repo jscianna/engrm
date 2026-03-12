@@ -51,6 +51,18 @@ export type ExtractedPatternCandidate = {
   sourceTraceCount: number;
 };
 
+export type SharedPatternContent = {
+  trigger: {
+    keywords?: string[];
+    technologies?: string[];
+    errorPatterns?: string[];
+    problemTypes?: string[];
+  };
+  approach: string;
+  steps: string[];
+  pitfalls: string[];
+};
+
 export type SkillDraft = {
   name: string;
   description: string;
@@ -187,6 +199,12 @@ const SHARED_TECH_FAMILIES: Array<{ pattern: RegExp; family: string }> = [
   { pattern: /\bjest|vitest|playwright|cypress\b/, family: "test-framework" },
 ];
 
+const URL_PATTERN = /\bhttps?:\/\/[^\s]+/gi;
+const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+const FILE_PATH_PATTERN = /(?:\/[\w.-]+)+(?:\.\w+)?/g;
+const SECRET_PATTERN = /\b(?:sk|rk|pk|ghp|ghu|github_pat|xoxb|xoxp|AIza)[-_A-Za-z0-9]{8,}\b/g;
+const LONG_IDENTIFIER_PATTERN = /\b[a-f0-9]{24,}\b/gi;
+
 export function normalizeForFingerprint(value: string): string {
   return value
     .toLowerCase()
@@ -302,6 +320,45 @@ export function coarsenSharedErrorFamily(errorMessage: string): string {
     return "operation-failed";
   }
   return normalized.split(" ").slice(0, 2).join(" ");
+}
+
+export function redactSharedText(value: string): string {
+  return value
+    .replace(URL_PATTERN, "[url]")
+    .replace(EMAIL_PATTERN, "[email]")
+    .replace(FILE_PATH_PATTERN, "[path]")
+    .replace(SECRET_PATTERN, "[secret]")
+    .replace(LONG_IDENTIFIER_PATTERN, "[id]")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function redactSharedPatternContent(params: {
+  trigger: SharedPatternContent["trigger"];
+  approach: string;
+  steps?: string[];
+  pitfalls?: string[];
+}): SharedPatternContent {
+  return {
+    trigger: {
+      keywords: (params.trigger.keywords ?? [])
+        .map((keyword) => redactSharedText(keyword))
+        .filter(Boolean)
+        .slice(0, 8),
+      technologies: (params.trigger.technologies ?? [])
+        .map((technology) => redactSharedText(technology))
+        .filter(Boolean)
+        .slice(0, 6),
+      errorPatterns: (params.trigger.errorPatterns ?? [])
+        .map((pattern) => redactSharedText(pattern))
+        .filter(Boolean)
+        .slice(0, 6),
+      problemTypes: (params.trigger.problemTypes ?? []).slice(0, 6),
+    },
+    approach: redactSharedText(params.approach).slice(0, 1000),
+    steps: (params.steps ?? []).map((step) => redactSharedText(step)).filter(Boolean).slice(0, 5),
+    pitfalls: (params.pitfalls ?? []).map((pitfall) => redactSharedText(pitfall)).filter(Boolean).slice(0, 5),
+  };
 }
 
 export function cosineSimilarity(left: number[] | null | undefined, right: number[] | null | undefined): number {
