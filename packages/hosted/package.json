@@ -1,0 +1,34 @@
+{
+  "name": "@fathippo/hosted",
+  "version": "0.1.0",
+  "description": "Hosted sync and retrieval upgrade helpers for FatHippo",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "keywords": [
+    "fathippo",
+    "hosted",
+    "sync",
+    "retrieval"
+  ],
+  "author": "FatHippo",
+  "license": "Apache-2.0",
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.19.17",
+    "typescript": "^5.9.2"
+  }
+}

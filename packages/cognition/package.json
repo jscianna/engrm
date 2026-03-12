@@ -1,0 +1,36 @@
+{
+  "name": "@fathippo/cognition",
+  "version": "0.1.0",
+  "description": "Cognitive substrate APIs and learning helpers for FatHippo",
+  "type": "module",
+  "main": "dist/packages/cognition/src/index.js",
+  "types": "dist/packages/cognition/src/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/packages/cognition/src/index.js",
+      "types": "./dist/packages/cognition/src/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "keywords": [
+    "fathippo",
+    "cognition",
+    "patterns",
+    "skills"
+  ],
+  "author": "FatHippo",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@fathippo/cognitive-engine": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.17",
+    "typescript": "^5.9.2"
+  }
+}

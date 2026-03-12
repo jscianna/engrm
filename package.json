@@ -2,9 +2,13 @@
   "name": "fathippo",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run build:packages && next build",
+    "build:packages": "npm run build --workspaces --if-present --include-workspace-root=false",
     "start": "next start",
     "lint": "eslint",
     "check:cognitive-launch": "./node_modules/.bin/tsc --noEmit && (cd packages/cognitive-engine && ./node_modules/.bin/vitest run src/eval-harness.test.ts src/evidence-weighting.test.ts src/application-attribution.e2e.test.ts src/shared-learning-settings.e2e.test.ts src/api-key-scopes.e2e.test.ts src/operational-hardening.e2e.test.ts src/alert-delivery.test.ts src/operational-alert-dispatch.test.ts src/request-throttle.test.ts src/admin-auth.test.ts src/cognitive-privacy.e2e.test.ts src/heartbeat-thresholds.test.ts src/tool-result-parsing.test.ts)"
