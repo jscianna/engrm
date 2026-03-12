@@ -4,6 +4,7 @@ import { Brain, CheckCircle2, Clock3, Download, GitBranchPlus, ShieldAlert, Spar
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { buildFathippoReceipt } from "@/lib/cognitive-receipts";
 import {
   getAdaptivePolicySummaries,
   getCognitiveJobHealth,
@@ -14,6 +15,7 @@ import {
   getRecentApplications,
   getRecentTraces,
   getSkills,
+  getToolWorkflowSummaries,
 } from "@/lib/cognitive-db";
 import {
   deleteCognitiveDataAction,
@@ -63,7 +65,7 @@ export default async function CognitiveDashboardPage({
   const notice = typeof resolvedSearchParams.notice === "string" ? resolvedSearchParams.notice : null;
   const error = typeof resolvedSearchParams.error === "string" ? resolvedSearchParams.error : null;
 
-  const [metrics, settings, traces, patterns, skills, applications, jobs, benchmarkRuns, policySummaries] = await Promise.all([
+  const [metrics, settings, traces, patterns, skills, applications, jobs, benchmarkRuns, policySummaries, workflowSummaries] = await Promise.all([
     getCognitiveMetrics(userId, 14),
     getCognitiveUserSettings(userId),
     getRecentTraces(userId, 12),
@@ -73,6 +75,7 @@ export default async function CognitiveDashboardPage({
     getCognitiveJobHealth(),
     getRecentBenchmarkRuns(userId, 6),
     getAdaptivePolicySummaries(userId),
+    getToolWorkflowSummaries(userId),
   ]);
 
   const lowConfidenceApps = applications.filter(
@@ -235,6 +238,33 @@ export default async function CognitiveDashboardPage({
                   {policy.avgRetries != null ? ` · avg retries ${policy.avgRetries.toFixed(1)}` : ""}
                   {policy.avgTimeToResolutionMs != null ? ` · avg time ${Math.round(policy.avgTimeToResolutionMs / 60000)}m` : ""}
                 </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card className="border-zinc-800 bg-zinc-900/60">
+          <CardHeader>
+            <CardTitle>Learned Tool Workflows</CardTitle>
+            <CardDescription>Private workflow hints learned from your own tool sequences and verified outcomes.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {workflowSummaries.length === 0 ? (
+              <p className="text-sm text-zinc-500">No workflow recommendations yet. FatHippo will learn after a few captured sessions with tool activity and outcomes.</p>
+            ) : workflowSummaries.map((workflow) => (
+              <div key={workflow.strategyKey} className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-zinc-100">{workflow.strategyKey.replaceAll("_", " ")}</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {workflow.successCount}/{workflow.resolvedCount} successful · {workflow.verifiedSuccessCount} verified
+                    </p>
+                  </div>
+                  <Badge variant={workflow.avgReward < 0 ? "destructive" : workflow.avgReward < 0.1 ? "secondary" : "default"}>
+                    reward {workflow.avgReward.toFixed(2)}
+                  </Badge>
+                </div>
+                <p className="mt-2 text-xs text-zinc-400">{workflow.sampleCount} matched workflow runs</p>
               </div>
             ))}
           </CardContent>
@@ -429,28 +459,41 @@ export default async function CognitiveDashboardPage({
             <CardDescription>Inspect injected patterns and skills, accepted entities, and weak failures.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {applications.map(({ application, matches }) => (
-              <div key={application.id} className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-zinc-100">{application.problem}</p>
-                    <p className="mt-1 text-xs text-zinc-400">
-                      {application.endpoint} · {formatDate(application.createdAt)}
-                    </p>
-                  </div>
-                  <Badge variant={statusVariant(application.finalOutcome ?? "candidate")}>
-                    {application.finalOutcome ?? "pending"}
-                  </Badge>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {matches.map((match) => (
-                    <Badge key={match.id} variant={match.accepted ? "default" : "outline"}>
-                      {match.entityType} #{match.rank} · {match.entityScope} {match.accepted ? "accepted" : ""}
+            {applications.map(({ application, matches }) => {
+              const receipt = buildFathippoReceipt({ application, matches });
+              return (
+                <div key={application.id} className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-zinc-100">{application.problem}</p>
+                      <p className="mt-1 text-xs text-zinc-400">
+                        {application.endpoint} · {formatDate(application.createdAt)}
+                      </p>
+                    </div>
+                    <Badge variant={statusVariant(application.finalOutcome ?? "candidate")}>
+                      {application.finalOutcome ?? "pending"}
                     </Badge>
-                  ))}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {matches.map((match) => (
+                      <Badge key={match.id} variant={match.accepted ? "default" : "outline"}>
+                        {match.entityType} #{match.rank} · {match.entityScope} {match.accepted ? "accepted" : ""}
+                      </Badge>
+                    ))}
+                  </div>
+                  {receipt ? (
+                    <div className="mt-3 rounded-lg border border-cyan-950 bg-cyan-950/20 p-3">
+                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-cyan-300">Fathippo helped</p>
+                      <ul className="mt-2 space-y-1 text-xs text-zinc-300">
+                        {receipt.bullets.map((bullet) => (
+                          <li key={bullet}>• {bullet}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
 

@@ -268,7 +268,7 @@ interface SynthesizedMemory {
 readonly info: ContextEngineInfo = {
   id: "fathippo-context-engine",
   name: "FatHippo Context Engine",
-  version: "0.1.0",
+  version: "0.1.1",
   ownsCompaction: true,  // We handle compaction via Dream Cycle
 };
 ```

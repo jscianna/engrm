@@ -64,6 +64,7 @@ export class CognitiveClient {
         return {
             applicationId: response.applicationId,
             policy: response.policy || null,
+            workflow: response.workflow || null,
             traces: response.traces || [],
             patterns: response.patterns || [],
             skills: response.skills || [],

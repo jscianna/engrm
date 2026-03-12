@@ -169,6 +169,32 @@ export type AdaptivePolicyRecommendation = {
   features: AdaptivePolicyFeatures;
 };
 
+export type ToolWorkflowStrategyKey =
+  | "verify_first"
+  | "search_codebase_first"
+  | "inspect_config_first"
+  | "patch_then_verify";
+
+export type ToolWorkflowRecommendation = {
+  key: ToolWorkflowStrategyKey;
+  contextKey: string;
+  rationale: string;
+  exploration: boolean;
+  score: number;
+  title: string;
+  steps: string[];
+};
+
+export type ToolWorkflowStat = {
+  strategyKey: ToolWorkflowStrategyKey;
+  contextKey: string;
+  sampleCount: number;
+  resolvedCount: number;
+  successCount: number;
+  verifiedSuccessCount: number;
+  avgReward: number;
+};
+
 type TraceEvidenceScore = {
   positive: number;
   negative: number;
@@ -302,6 +328,52 @@ const ADAPTIVE_POLICY_DEFINITIONS: Record<
   },
 };
 
+const TOOL_WORKFLOW_DEFINITIONS: Record<
+  ToolWorkflowStrategyKey,
+  {
+    title: string;
+    steps: string[];
+    priorReward: number;
+  }
+> = {
+  verify_first: {
+    title: "Run verification first",
+    steps: [
+      "Reproduce the issue immediately with the narrowest test, build, or lint command available.",
+      "Inspect the first failing output before changing code.",
+      "Make the smallest targeted fix and rerun the same verification command.",
+    ],
+    priorReward: 0.08,
+  },
+  search_codebase_first: {
+    title: "Search the codebase first",
+    steps: [
+      "Search for the failing symbol, route, or error text before editing files.",
+      "Inspect the existing implementation and similar nearby code paths.",
+      "Apply a minimal change and then run verification.",
+    ],
+    priorReward: 0.05,
+  },
+  inspect_config_first: {
+    title: "Inspect config first",
+    steps: [
+      "Open the relevant config, middleware, or environment wiring before running broad fixes.",
+      "Check matchers, plugin options, env loading, and build/test config first.",
+      "After confirming the config path, make the smallest change and rerun verification.",
+    ],
+    priorReward: 0.06,
+  },
+  patch_then_verify: {
+    title: "Apply the known fix, then verify",
+    steps: [
+      "Use the strongest matching pattern or skill to make the smallest likely fix first.",
+      "Avoid broad exploration unless the first fix fails.",
+      "Immediately rerun verification after the patch.",
+    ],
+    priorReward: 0.04,
+  },
+};
+
 export function normalizeForFingerprint(value: string): string {
   return value
     .toLowerCase()
@@ -327,6 +399,10 @@ export function extractProblemKeywords(problem: string, limit = 8): string[] {
 
 export function getAdaptivePolicyDefinition(key: AdaptivePolicyKey) {
   return ADAPTIVE_POLICY_DEFINITIONS[key];
+}
+
+export function getToolWorkflowDefinition(key: ToolWorkflowStrategyKey) {
+  return TOOL_WORKFLOW_DEFINITIONS[key];
 }
 
 export function buildAdaptivePolicyFeatures(params: {
@@ -363,6 +439,20 @@ export function buildAdaptivePolicyFeatures(params: {
 
 export function buildAdaptivePolicyContextKey(features: AdaptivePolicyFeatures): string {
   return [
+    features.endpoint,
+    features.repoFamily ?? "",
+    features.workspaceType ?? "",
+    features.projectType ?? "",
+    features.problemClasses.join("+"),
+    features.technologies.join("+"),
+  ]
+    .filter(Boolean)
+    .join(":");
+}
+
+export function buildToolWorkflowContextKey(features: AdaptivePolicyFeatures): string {
+  return [
+    "workflow",
     features.endpoint,
     features.repoFamily ?? "",
     features.workspaceType ?? "",
@@ -418,6 +508,101 @@ export function computeAdaptivePolicyReward(observation: AdaptivePolicyObservati
     score += clamp(timeDelta, -1, 1) * 0.1;
   }
   return clamp(score, -1, 1);
+}
+
+function meaningfulToolCategory(signal: Record<string, unknown> | undefined): string | null {
+  if (!signal) {
+    return null;
+  }
+  const category = typeof signal.category === "string" ? signal.category : null;
+  if (category && category !== "unknown") {
+    return category;
+  }
+  return null;
+}
+
+function looksConfigHeavy(params: {
+  problem: string;
+  features: AdaptivePolicyFeatures;
+  automatedSignals?: Record<string, unknown>;
+  context?: Record<string, unknown>;
+}): boolean {
+  if (
+    params.features.problemClasses.includes("config") ||
+    params.features.problemClasses.includes("auth") ||
+    params.features.problemClasses.includes("migration") ||
+    params.features.problemClasses.includes("deploy")
+  ) {
+    return true;
+  }
+
+  const repoSignals =
+    params.context?.repoSignals && typeof params.context.repoSignals === "object" && !Array.isArray(params.context.repoSignals)
+      ? (params.context.repoSignals as Record<string, unknown>)
+      : {};
+  const filesModified = Array.isArray(repoSignals.filesModified)
+    ? repoSignals.filesModified.filter((value): value is string => typeof value === "string")
+    : [];
+  if (filesModified.some((file) => /(next\.config|package\.json|tsconfig|eslint|middleware|auth|docker|compose|turbo|vite|webpack|drizzle|prisma|env)/i.test(file))) {
+    return true;
+  }
+
+  return /\bconfig|middleware|auth|env|eslint|tsconfig|next\.config|package\.json|drizzle|prisma|docker\b/i.test(params.problem);
+}
+
+export function classifyObservedToolWorkflow(params: {
+  problem: string;
+  features: AdaptivePolicyFeatures;
+  automatedSignals?: Record<string, unknown> | null;
+  context?: Record<string, unknown> | null;
+}): ToolWorkflowStrategyKey | null {
+  const signals =
+    params.automatedSignals && typeof params.automatedSignals === "object" && !Array.isArray(params.automatedSignals)
+      ? params.automatedSignals
+      : {};
+  const toolCalls = Array.isArray(signals.toolCalls)
+    ? signals.toolCalls.filter((value): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value))
+    : [];
+  const toolResults = Array.isArray(signals.toolResults)
+    ? signals.toolResults.filter((value): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value))
+    : [];
+
+  const ordered = [...toolCalls, ...toolResults];
+  const firstMeaningful = ordered.map(meaningfulToolCategory).find((category): category is string => Boolean(category));
+  const hasVerification = ordered.some((signal) => {
+    const category = meaningfulToolCategory(signal);
+    return category === "test" || category === "build" || category === "lint";
+  });
+  const hasEdit = ordered.some((signal) => meaningfulToolCategory(signal) === "edit");
+  const configHeavy = looksConfigHeavy({
+    problem: params.problem,
+    features: params.features,
+    automatedSignals: signals,
+    context: params.context ?? {},
+  });
+
+  if (firstMeaningful === "test" || firstMeaningful === "build" || firstMeaningful === "lint" || firstMeaningful === "run") {
+    return "verify_first";
+  }
+  if (firstMeaningful === "search") {
+    return configHeavy ? "inspect_config_first" : "search_codebase_first";
+  }
+  if (firstMeaningful === "edit" && hasVerification) {
+    return "patch_then_verify";
+  }
+  if (configHeavy && (hasEdit || hasVerification)) {
+    return "inspect_config_first";
+  }
+  if (hasVerification) {
+    return "verify_first";
+  }
+  if (hasEdit) {
+    return "patch_then_verify";
+  }
+  if (ordered.length > 0) {
+    return configHeavy ? "inspect_config_first" : "search_codebase_first";
+  }
+  return null;
 }
 
 export function recommendAdaptivePolicy(params: {
@@ -521,6 +706,111 @@ export function recommendAdaptivePolicy(params: {
     exploration: false,
     score: bestScore,
     features: params.features,
+  };
+}
+
+export function recommendToolWorkflow(params: {
+  features: AdaptivePolicyFeatures;
+  contextStats?: ToolWorkflowStat[];
+  globalStats?: ToolWorkflowStat[];
+}): ToolWorkflowRecommendation {
+  const contextKey = buildToolWorkflowContextKey(params.features);
+  const strategies = Object.keys(TOOL_WORKFLOW_DEFINITIONS) as ToolWorkflowStrategyKey[];
+  const byContext = new Map((params.contextStats ?? []).map((stat) => [stat.strategyKey, stat] as const));
+  const byGlobal = new Map((params.globalStats ?? []).map((stat) => [stat.strategyKey, stat] as const));
+
+  const totalObservedSamples = strategies.reduce((total, key) => {
+    const contextStat = byContext.get(key);
+    const globalStat = byGlobal.get(key);
+    return total + (contextStat?.sampleCount ?? 0) + (globalStat?.sampleCount ?? 0);
+  }, 0);
+
+  const unseenStrategies = strategies.filter((key) => {
+    const contextStat = byContext.get(key);
+    const globalStat = byGlobal.get(key);
+    return (contextStat?.sampleCount ?? 0) + (globalStat?.sampleCount ?? 0) === 0;
+  });
+
+  if (totalObservedSamples === 0 && unseenStrategies.length > 0) {
+    const key = unseenStrategies[deterministicPolicyIndex(contextKey, unseenStrategies.length)];
+    const definition = TOOL_WORKFLOW_DEFINITIONS[key];
+    return {
+      key,
+      contextKey,
+      rationale: "exploring_unseen_safe_workflow",
+      exploration: true,
+      score: definition.priorReward,
+      title: definition.title,
+      steps: definition.steps,
+    };
+  }
+
+  let bestKey: ToolWorkflowStrategyKey = "verify_first";
+  let bestScore = Number.NEGATIVE_INFINITY;
+  let bestRationale = "best_verified_workflow";
+
+  for (const key of strategies) {
+    const definition = TOOL_WORKFLOW_DEFINITIONS[key];
+    const contextStat = byContext.get(key);
+    const globalStat = byGlobal.get(key);
+    const contextualWeight = (contextStat?.sampleCount ?? 0) >= 2 ? 0.7 : 0.35;
+    const contextReward = contextStat?.avgReward ?? definition.priorReward;
+    const globalReward = globalStat?.avgReward ?? definition.priorReward;
+    const blendedReward =
+      contextReward * contextualWeight +
+      globalReward * (1 - contextualWeight) +
+      definition.priorReward * 0.1;
+    const effectiveSamples =
+      (contextStat?.sampleCount ?? 0) * contextualWeight +
+      (globalStat?.sampleCount ?? 0) * (1 - contextualWeight);
+    const explorationBonus = Math.sqrt((2 * Math.log(totalObservedSamples + strategies.length + 1)) / (effectiveSamples + 1));
+
+    let score = blendedReward + explorationBonus * 0.14;
+    let rationale = "best_verified_workflow";
+
+    const configHeavy =
+      params.features.problemClasses.includes("config") ||
+      params.features.problemClasses.includes("auth") ||
+      params.features.problemClasses.includes("migration") ||
+      params.features.problemClasses.includes("deploy");
+    const verificationHeavy =
+      params.features.problemClasses.includes("test") ||
+      params.features.problemClasses.includes("build") ||
+      params.features.problemClasses.includes("lint");
+
+    if (verificationHeavy && key === "verify_first") {
+      score += 0.04;
+      rationale = "verification_first_for_reproducible_failures";
+    }
+    if (configHeavy && key === "inspect_config_first") {
+      score += 0.04;
+      rationale = "config_heavy_failures_prefer_config_inspection";
+    }
+    if (!verificationHeavy && !configHeavy && key === "search_codebase_first") {
+      score += 0.02;
+      rationale = "search_first_for_general_debugging";
+    }
+    if ((globalStat?.verifiedSuccessCount ?? 0) >= 2 && key === "patch_then_verify") {
+      score += 0.015;
+      rationale = "known_fix_pattern_supports_patch_then_verify";
+    }
+
+    if (score > bestScore) {
+      bestKey = key;
+      bestScore = score;
+      bestRationale = rationale;
+    }
+  }
+
+  const bestDefinition = TOOL_WORKFLOW_DEFINITIONS[bestKey];
+  return {
+    key: bestKey,
+    contextKey,
+    rationale: bestRationale,
+    exploration: false,
+    score: bestScore,
+    title: bestDefinition.title,
+    steps: bestDefinition.steps,
   };
 }
 

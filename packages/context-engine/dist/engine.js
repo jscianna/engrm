@@ -14,7 +14,7 @@ export class FatHippoContextEngine {
     info = {
         id: "fathippo-context-engine",
         name: "FatHippo Context Engine",
-        version: "0.1.0",
+        version: "0.1.1",
         ownsCompaction: true, // We handle compaction via Dream Cycle
     };
     client;
@@ -23,6 +23,7 @@ export class FatHippoContextEngine {
     // Cognitive engine state
     sessionStartTimes = new Map();
     sessionApplicationIds = new Map();
+    sessionHippoNodState = new Map();
     cognitiveEnabled;
     static TRIVIAL_ACKS = new Set([
         "ok",
@@ -39,6 +40,8 @@ export class FatHippoContextEngine {
     ]);
     static MIN_VECTOR_SIMILARITY = 0.75;
     static MIN_CRITICAL_RELEVANCE = 0.7;
+    static HIPPO_NOD_COOLDOWN_MS = 15 * 60 * 1000;
+    static HIPPO_NOD_MIN_MESSAGE_GAP = 6;
     constructor(config) {
         this.config = config;
         this.client = new FatHippoClient(config);
@@ -203,6 +206,8 @@ export class FatHippoContextEngine {
         // Fetch relevant memories based on last user message
         let memories = [];
         let syntheses = [];
+        let memoryHippoCue = null;
+        let hasRelevantCriticalMatch = false;
         try {
             // Search for relevant memories based on query
             const results = await this.client.search({
@@ -214,7 +219,7 @@ export class FatHippoContextEngine {
             const searchedMemories = qualifyingResults.map((r) => r.memory);
             memories = dedupeMemories(searchedMemories);
             // Inject critical only for non-trivial queries with critical relevance.
-            const hasRelevantCriticalMatch = results.some((r) => r.memory.importanceTier === "critical" &&
+            hasRelevantCriticalMatch = results.some((r) => r.memory.importanceTier === "critical" &&
                 r.score > FatHippoContextEngine.MIN_CRITICAL_RELEVANCE);
             if (this.config.injectCritical !== false && hasRelevantCriticalMatch) {
                 let criticalMemories;
@@ -239,6 +244,12 @@ export class FatHippoContextEngine {
                 }
                 memories = dedupeMemories([...criticalMemories, ...memories]);
                 syntheses = criticalSyntheses;
+            }
+            if (hasRelevantCriticalMatch || syntheses.length > 0) {
+                memoryHippoCue = {
+                    kind: "memory",
+                    reason: "Fathippo recalled relevant memory for this reply.",
+                };
             }
         }
         catch (error) {
@@ -265,17 +276,25 @@ export class FatHippoContextEngine {
         }
         // Fetch cognitive context (traces + patterns) for coding sessions
         let cognitiveContext = "";
+        let cognitiveHippoCue = null;
         if (this.cognitiveEnabled && this.looksLikeCodingQuery(lastUserMessage)) {
             try {
                 const cognitive = await this.fetchCognitiveContext(params.sessionId, lastUserMessage);
-                if (cognitive) {
-                    cognitiveContext = cognitive;
+                if (cognitive.context) {
+                    cognitiveContext = cognitive.context;
+                    cognitiveHippoCue = cognitive.hippoCue;
                 }
             }
             catch (error) {
                 console.error("[FatHippo] Cognitive context error:", error);
             }
         }
+        const hippoNodInstruction = this.buildHippoNodInstruction({
+            sessionId: params.sessionId,
+            messageCount: params.messages.length,
+            lastUserMessage,
+            cue: cognitiveHippoCue ?? memoryHippoCue,
+        });
         const fullContext = typeof params.tokenBudget === "number" && params.tokenBudget > 0
             ? this.fitContextToBudget({
                 sections: [
@@ -283,10 +302,11 @@ export class FatHippoContextEngine {
                     memoryBlock ? `${memoryBlock}\n` : "",
                     indexedContext,
                     cognitiveContext,
+                    hippoNodInstruction,
                 ],
                 contextBudget: Math.max(0, params.tokenBudget - baseMessageTokens),
             })
-            : constraintsContext + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + cognitiveContext;
+            : constraintsContext + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + cognitiveContext + hippoNodInstruction;
         const tokens = estimateTokens(fullContext) + baseMessageTokens;
         return {
             messages: params.messages,
@@ -360,15 +380,21 @@ export class FatHippoContextEngine {
                 adaptivePolicy: this.config.adaptivePolicyEnabled !== false,
             }),
         });
-        if (!response.ok)
-            return null;
+        if (!response.ok) {
+            return { context: null, hippoCue: null };
+        }
         const data = await response.json();
         if (data.applicationId) {
             this.sessionApplicationIds.set(sessionId, data.applicationId);
         }
+        const sections = new Map();
+        if (data.workflow && data.workflow.steps.length > 0) {
+            const stepLines = data.workflow.steps.map((step) => `- ${step}`).join("\n");
+            const explorationNote = data.workflow.exploration ? " exploratory" : "";
+            sections.set("workflow", `## Recommended Workflow\n${stepLines}\n\nStrategy: ${data.workflow.title} (${data.workflow.rationale}${explorationNote})`);
+        }
         const localPatterns = (data.patterns ?? []).filter((pattern) => pattern.scope !== "global");
         const globalPatterns = (data.patterns ?? []).filter((pattern) => pattern.scope === "global");
-        const sections = new Map();
         if (localPatterns.length > 0) {
             const patternLines = localPatterns
                 .map((pattern) => {
@@ -401,15 +427,40 @@ export class FatHippoContextEngine {
                 .join("\n");
             sections.set("skills", `## Synthesized Skills\n${skillLines}`);
         }
-        if (sections.size === 0)
-            return null;
-        const orderedSections = (data.policy?.sectionOrder ?? ["local_patterns", "global_patterns", "traces", "skills"])
-            .map((key) => sections.get(key))
+        let hippoCue = null;
+        if (data.workflow && data.workflow.steps.length > 0) {
+            hippoCue = {
+                kind: "workflow",
+                reason: "Fathippo surfaced a learned workflow for this task.",
+            };
+        }
+        else if ((data.skills?.length ?? 0) > 0) {
+            hippoCue = {
+                kind: "learned_fix",
+                reason: "Fathippo surfaced a synthesized skill for this task.",
+            };
+        }
+        else if ((localPatterns.length + globalPatterns.length + (data.traces?.length ?? 0)) >= 2) {
+            hippoCue = {
+                kind: "learned_fix",
+                reason: "Fathippo surfaced learned fixes and similar past problems for this task.",
+            };
+        }
+        if (sections.size === 0) {
+            return { context: null, hippoCue: null };
+        }
+        const orderedSections = [
+            sections.get("workflow"),
+            ...(data.policy?.sectionOrder ?? ["local_patterns", "global_patterns", "traces", "skills"]).map((key) => sections.get(key)),
+        ]
             .filter((section) => typeof section === "string" && section.length > 0);
         if (orderedSections.length === 0) {
-            return null;
+            return { context: null, hippoCue: null };
         }
-        return '\n' + orderedSections.join('\n\n') + '\n';
+        return {
+            context: '\n' + orderedSections.join('\n\n') + '\n',
+            hippoCue,
+        };
     }
     async captureStructuredTrace(params) {
         if (!shouldCaptureCodingTrace(params.messages)) {
@@ -520,6 +571,57 @@ export class FatHippoContextEngine {
         const baseUrl = this.config.baseUrl || "https://www.fathippo.com/api";
         return baseUrl.replace(/\/v1$/, "");
     }
+    buildHippoNodInstruction(params) {
+        if (this.config.hippoNodsEnabled === false || !params.cue) {
+            return "";
+        }
+        if (this.isHighUrgencyOrFormalMoment(params.lastUserMessage)) {
+            return "";
+        }
+        const prior = this.sessionHippoNodState.get(params.sessionId);
+        if (prior) {
+            const withinCooldown = Date.now() - prior.lastOfferedAt < FatHippoContextEngine.HIPPO_NOD_COOLDOWN_MS;
+            const withinMessageGap = params.messageCount - prior.lastMessageCount < FatHippoContextEngine.HIPPO_NOD_MIN_MESSAGE_GAP;
+            if (withinCooldown || withinMessageGap) {
+                return "";
+            }
+        }
+        this.sessionHippoNodState.set(params.sessionId, {
+            lastOfferedAt: Date.now(),
+            lastMessageCount: params.messageCount,
+        });
+        return [
+            "## Optional Fathippo Cue",
+            params.cue.reason,
+            'If it fits naturally, you may include one very brief acknowledgement such as "🦛 Noted." or end one short sentence with "🦛".',
+            "Rules:",
+            "- This is optional, not required.",
+            "- Use it at most once in this reply.",
+            "- Only use it if the tone is friendly, calm, or neutral.",
+            "- Skip it for urgent, frustrated, highly formal, or sensitive situations.",
+            "- Do not mention internal scoring, retrieval policies, or training.",
+            "- Keep the rest of the reply normal, direct, and useful.",
+            "",
+        ].join("\n");
+    }
+    isHighUrgencyOrFormalMoment(message) {
+        const normalized = message.toLowerCase();
+        return [
+            "urgent",
+            "asap",
+            "immediately",
+            "prod down",
+            "production down",
+            "sev1",
+            "sev 1",
+            "security incident",
+            "breach",
+            "privacy request",
+            "gdpr",
+            "legal",
+            "compliance",
+        ].some((token) => normalized.includes(token));
+    }
     /**
      * Handle compaction via Dream Cycle
      */
@@ -580,6 +682,7 @@ export class FatHippoContextEngine {
      */
     async dispose() {
         this.cachedCritical = null;
+        this.sessionHippoNodState.clear();
     }
     // --- Helper methods ---
     extractContent(message) {

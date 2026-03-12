@@ -12,6 +12,7 @@ import {
   getRelevantTraces,
   logCognitiveApplication,
   recommendAdaptivePolicyForUser,
+  recommendToolWorkflowForUser,
 } from "@/lib/cognitive-db";
 
 export const runtime = "nodejs";
@@ -52,6 +53,15 @@ export async function POST(request: Request) {
           baseTraceLimit: limit,
         })
       : null;
+    const workflow = adaptivePolicyEnabled
+      ? await recommendToolWorkflowForUser({
+          userId: identity.userId,
+          problem,
+          endpoint,
+          technologies,
+          repoProfile,
+        })
+      : null;
 
     // Get relevant traces via vector similarity
     const traces = await getRelevantTraces(identity.userId, problem, policy?.traceLimit ?? limit);
@@ -74,6 +84,7 @@ export async function POST(request: Request) {
       endpoint,
       repoProfile,
       policy,
+      workflow,
       traces: traces.map((trace, index) => ({
         id: trace.id,
         scope: "local",
@@ -104,6 +115,17 @@ export async function POST(request: Request) {
             patternLimit: policy.patternLimit,
             skillLimit: policy.skillLimit,
             sectionOrder: policy.sectionOrder,
+          }
+        : null,
+      workflow: workflow
+        ? {
+            key: workflow.key,
+            contextKey: workflow.contextKey,
+            rationale: workflow.rationale,
+            exploration: workflow.exploration,
+            score: workflow.score,
+            title: workflow.title,
+            steps: workflow.steps,
           }
         : null,
       traces: traces.map(t => ({

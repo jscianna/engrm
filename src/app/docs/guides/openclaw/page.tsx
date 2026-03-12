@@ -54,7 +54,8 @@ openclaw gateway restart`}</CodeBlock>
           "injectCritical": true,
           "injectLimit": 20,
           "captureUserOnly": true,
-          "dreamCycleOnCompact": true
+          "dreamCycleOnCompact": true,
+          "hippoNodsEnabled": true
         }
       }
     }
@@ -62,12 +63,12 @@ openclaw gateway restart`}</CodeBlock>
 }`}</CodeBlock>
 
       <Note type="tip">
-        With the plugin installed, your agent automatically remembers and recalls — no manual API calls needed.
+        With the plugin installed, your agent automatically remembers and recalls. When FatHippo materially helps, OpenClaw can occasionally use a subtle 🦛 acknowledgement without interrupting the flow.
       </Note>
 
       <H2 id="setup">Manual Setup (Alternative)</H2>
       <P>
-        If you prefer manual control, add your FatHippo API key to your agent's <InlineCode>TOOLS.md</InlineCode>:
+        If you prefer manual control, add your FatHippo API key to your agent&apos;s <InlineCode>TOOLS.md</InlineCode>:
       </P>
 
       <CodeBlock language="markdown">{`## FatHippo — Agent Memory
@@ -199,7 +200,7 @@ Before reaching out to your human about something:
 
       <H2 id="workflow">Typical Workflow</H2>
       <P>
-        Here's how an OpenClaw agent should use FatHippo:
+        Here&apos;s how an OpenClaw agent should use FatHippo:
       </P>
 
       <H3>1. Session Start</H3>
@@ -287,8 +288,8 @@ curl -X POST "https://www.fathippo.ai/api/v1/sessions/$SESSION/end" \\
           topic that might have prior history
         </li>
         <li>
-          <strong>Store decisions, not facts:</strong> "User chose X because Y" is 
-          more valuable than "X is good"
+          <strong>Store decisions, not facts:</strong> &quot;User chose X because Y&quot; is 
+          more valuable than &quot;X is good&quot;
         </li>
         <li>
           <strong>Keep MEMORY.md slim:</strong> Use it for core identity, store 

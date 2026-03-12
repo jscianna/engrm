@@ -198,6 +198,22 @@ export interface AdaptivePolicyRecommendation {
   score: number;
 }
 
+export type ToolWorkflowStrategyKey =
+  | 'verify_first'
+  | 'search_codebase_first'
+  | 'inspect_config_first'
+  | 'patch_then_verify';
+
+export interface ToolWorkflowRecommendation {
+  key: ToolWorkflowStrategyKey;
+  contextKey: string;
+  rationale: string;
+  exploration: boolean;
+  score: number;
+  title: string;
+  steps: string[];
+}
+
 // ============================================================================
 // API TYPES
 // ============================================================================
@@ -299,6 +315,7 @@ export interface GetRelevantTracesRequest {
 export interface GetRelevantTracesResponse {
   applicationId?: string;
   policy?: AdaptivePolicyRecommendation | null;
+  workflow?: ToolWorkflowRecommendation | null;
   traces: CodingTrace[];
   patterns: Pattern[];
   skills: SynthesizedSkill[];
@@ -326,6 +343,8 @@ export interface RetrievalEvalPrediction {
   sessionId?: string;
   policyKey?: AdaptivePolicyKey;
   policyContextKey?: string;
+  workflowStrategyKey?: ToolWorkflowStrategyKey;
+  workflowContextKey?: string;
   traces: Array<{ id: string }>;
   patterns: Array<{ id: string }>;
   skills: Array<{ id: string }>;

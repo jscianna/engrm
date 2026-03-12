@@ -95,6 +95,7 @@ export class CognitiveClient {
     const response = await this.request<{
       applicationId?: string;
       policy?: GetRelevantTracesResponse["policy"];
+      workflow?: GetRelevantTracesResponse["workflow"];
       traces: CodingTrace[];
       patterns: Pattern[];
       skills: SynthesizedSkill[];
@@ -106,6 +107,7 @@ export class CognitiveClient {
     return {
       applicationId: response.applicationId,
       policy: response.policy || null,
+      workflow: response.workflow || null,
       traces: response.traces || [],
       patterns: response.patterns || [],
       skills: response.skills || [],

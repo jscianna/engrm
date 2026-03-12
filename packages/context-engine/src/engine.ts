@@ -72,10 +72,29 @@ interface CognitiveContextResponse {
     skillLimit: number;
     sectionOrder: Array<"local_patterns" | "global_patterns" | "traces" | "skills">;
   } | null;
+  workflow?: {
+    key: string;
+    contextKey: string;
+    rationale: string;
+    exploration: boolean;
+    score: number;
+    title: string;
+    steps: string[];
+  } | null;
   traces: CognitiveTrace[];
   patterns: CognitivePattern[];
   skills?: CognitiveSkill[];
 }
+
+type HippoHelpCue =
+  | { kind: "workflow"; reason: string }
+  | { kind: "learned_fix"; reason: string }
+  | { kind: "memory"; reason: string };
+
+type CognitiveContextBundle = {
+  context: string | null;
+  hippoCue: HippoHelpCue | null;
+};
 
 /**
  * FatHippo Context Engine implementation
@@ -84,7 +103,7 @@ export class FatHippoContextEngine implements ContextEngine {
   readonly info: ContextEngineInfo = {
     id: "fathippo-context-engine",
     name: "FatHippo Context Engine",
-    version: "0.1.0",
+    version: "0.1.1",
     ownsCompaction: true, // We handle compaction via Dream Cycle
   };
 
@@ -99,6 +118,7 @@ export class FatHippoContextEngine implements ContextEngine {
   // Cognitive engine state
   private sessionStartTimes: Map<string, number> = new Map();
   private sessionApplicationIds: Map<string, string> = new Map();
+  private sessionHippoNodState: Map<string, { lastOfferedAt: number; lastMessageCount: number }> = new Map();
   private cognitiveEnabled: boolean;
   
   private static readonly TRIVIAL_ACKS = new Set([
@@ -116,6 +136,8 @@ export class FatHippoContextEngine implements ContextEngine {
   ]);
   private static readonly MIN_VECTOR_SIMILARITY = 0.75;
   private static readonly MIN_CRITICAL_RELEVANCE = 0.7;
+  private static readonly HIPPO_NOD_COOLDOWN_MS = 15 * 60 * 1000;
+  private static readonly HIPPO_NOD_MIN_MESSAGE_GAP = 6;
 
   constructor(config: FatHippoConfig) {
     this.config = config;
@@ -327,6 +349,8 @@ export class FatHippoContextEngine implements ContextEngine {
     // Fetch relevant memories based on last user message
     let memories: Memory[] = [];
     let syntheses: SynthesizedMemory[] = [];
+    let memoryHippoCue: HippoHelpCue | null = null;
+    let hasRelevantCriticalMatch = false;
 
     try {
       // Search for relevant memories based on query
@@ -343,7 +367,7 @@ export class FatHippoContextEngine implements ContextEngine {
       memories = dedupeMemories(searchedMemories);
 
       // Inject critical only for non-trivial queries with critical relevance.
-      const hasRelevantCriticalMatch = results.some(
+      hasRelevantCriticalMatch = results.some(
         (r) =>
           r.memory.importanceTier === "critical" &&
           r.score > FatHippoContextEngine.MIN_CRITICAL_RELEVANCE
@@ -375,6 +399,13 @@ export class FatHippoContextEngine implements ContextEngine {
         memories = dedupeMemories([...criticalMemories, ...memories]);
         syntheses = criticalSyntheses;
       }
+
+      if (hasRelevantCriticalMatch || syntheses.length > 0) {
+        memoryHippoCue = {
+          kind: "memory",
+          reason: "Fathippo recalled relevant memory for this reply.",
+        };
+      }
     } catch (error) {
       console.error("[FatHippo] Assemble error:", error);
     }
@@ -402,16 +433,25 @@ export class FatHippoContextEngine implements ContextEngine {
     
     // Fetch cognitive context (traces + patterns) for coding sessions
     let cognitiveContext = "";
+    let cognitiveHippoCue: HippoHelpCue | null = null;
     if (this.cognitiveEnabled && this.looksLikeCodingQuery(lastUserMessage)) {
       try {
         const cognitive = await this.fetchCognitiveContext(params.sessionId, lastUserMessage);
-        if (cognitive) {
-          cognitiveContext = cognitive;
+        if (cognitive.context) {
+          cognitiveContext = cognitive.context;
+          cognitiveHippoCue = cognitive.hippoCue;
         }
       } catch (error) {
         console.error("[FatHippo] Cognitive context error:", error);
       }
     }
+
+    const hippoNodInstruction = this.buildHippoNodInstruction({
+      sessionId: params.sessionId,
+      messageCount: params.messages.length,
+      lastUserMessage,
+      cue: cognitiveHippoCue ?? memoryHippoCue,
+    });
     
     const fullContext = typeof params.tokenBudget === "number" && params.tokenBudget > 0
       ? this.fitContextToBudget({
@@ -420,10 +460,11 @@ export class FatHippoContextEngine implements ContextEngine {
             memoryBlock ? `${memoryBlock}\n` : "",
             indexedContext,
             cognitiveContext,
+            hippoNodInstruction,
           ],
           contextBudget: Math.max(0, params.tokenBudget - baseMessageTokens),
         })
-      : constraintsContext + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + cognitiveContext;
+      : constraintsContext + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + cognitiveContext + hippoNodInstruction;
     const tokens = estimateTokens(fullContext) + baseMessageTokens;
 
     return {
@@ -488,7 +529,7 @@ export class FatHippoContextEngine implements ContextEngine {
   /**
    * Fetch relevant traces and patterns from cognitive API
    */
-  private async fetchCognitiveContext(sessionId: string, problem: string): Promise<string | null> {
+  private async fetchCognitiveContext(sessionId: string, problem: string): Promise<CognitiveContextBundle> {
     const baseUrl = this.getApiBaseUrl();
     
     const response = await fetch(`${baseUrl}/v1/cognitive/traces/relevant`, {
@@ -506,16 +547,27 @@ export class FatHippoContextEngine implements ContextEngine {
       }),
     });
     
-    if (!response.ok) return null;
+    if (!response.ok) {
+      return { context: null, hippoCue: null };
+    }
     
     const data = await response.json() as CognitiveContextResponse;
     if (data.applicationId) {
       this.sessionApplicationIds.set(sessionId, data.applicationId);
     }
-    
+
+    const sections = new Map<string, string>();
+    if (data.workflow && data.workflow.steps.length > 0) {
+      const stepLines = data.workflow.steps.map((step) => `- ${step}`).join("\n");
+      const explorationNote = data.workflow.exploration ? " exploratory" : "";
+      sections.set(
+        "workflow",
+        `## Recommended Workflow\n${stepLines}\n\nStrategy: ${data.workflow.title} (${data.workflow.rationale}${explorationNote})`,
+      );
+    }
+
     const localPatterns = (data.patterns ?? []).filter((pattern) => pattern.scope !== "global");
     const globalPatterns = (data.patterns ?? []).filter((pattern) => pattern.scope === "global");
-    const sections = new Map<string, string>();
 
     if (localPatterns.length > 0) {
       const patternLines = localPatterns
@@ -553,17 +605,42 @@ export class FatHippoContextEngine implements ContextEngine {
       sections.set("skills", `## Synthesized Skills\n${skillLines}`);
     }
     
-    if (sections.size === 0) return null;
+    let hippoCue: HippoHelpCue | null = null;
+    if (data.workflow && data.workflow.steps.length > 0) {
+      hippoCue = {
+        kind: "workflow",
+        reason: "Fathippo surfaced a learned workflow for this task.",
+      };
+    } else if ((data.skills?.length ?? 0) > 0) {
+      hippoCue = {
+        kind: "learned_fix",
+        reason: "Fathippo surfaced a synthesized skill for this task.",
+      };
+    } else if ((localPatterns.length + globalPatterns.length + (data.traces?.length ?? 0)) >= 2) {
+      hippoCue = {
+        kind: "learned_fix",
+        reason: "Fathippo surfaced learned fixes and similar past problems for this task.",
+      };
+    }
 
-    const orderedSections = (data.policy?.sectionOrder ?? ["local_patterns", "global_patterns", "traces", "skills"])
-      .map((key) => sections.get(key))
+    if (sections.size === 0) {
+      return { context: null, hippoCue: null };
+    }
+
+    const orderedSections = [
+      sections.get("workflow"),
+      ...(data.policy?.sectionOrder ?? ["local_patterns", "global_patterns", "traces", "skills"]).map((key) => sections.get(key)),
+    ]
       .filter((section): section is string => typeof section === "string" && section.length > 0);
 
     if (orderedSections.length === 0) {
-      return null;
+      return { context: null, hippoCue: null };
     }
 
-    return '\n' + orderedSections.join('\n\n') + '\n';
+    return {
+      context: '\n' + orderedSections.join('\n\n') + '\n',
+      hippoCue,
+    };
   }
 
   private async captureStructuredTrace(params: {
@@ -689,6 +766,68 @@ export class FatHippoContextEngine implements ContextEngine {
     return baseUrl.replace(/\/v1$/, "");
   }
 
+  private buildHippoNodInstruction(params: {
+    sessionId: string;
+    messageCount: number;
+    lastUserMessage: string;
+    cue: HippoHelpCue | null;
+  }): string {
+    if (this.config.hippoNodsEnabled === false || !params.cue) {
+      return "";
+    }
+
+    if (this.isHighUrgencyOrFormalMoment(params.lastUserMessage)) {
+      return "";
+    }
+
+    const prior = this.sessionHippoNodState.get(params.sessionId);
+    if (prior) {
+      const withinCooldown = Date.now() - prior.lastOfferedAt < FatHippoContextEngine.HIPPO_NOD_COOLDOWN_MS;
+      const withinMessageGap = params.messageCount - prior.lastMessageCount < FatHippoContextEngine.HIPPO_NOD_MIN_MESSAGE_GAP;
+      if (withinCooldown || withinMessageGap) {
+        return "";
+      }
+    }
+
+    this.sessionHippoNodState.set(params.sessionId, {
+      lastOfferedAt: Date.now(),
+      lastMessageCount: params.messageCount,
+    });
+
+    return [
+      "## Optional Fathippo Cue",
+      params.cue.reason,
+      'If it fits naturally, you may include one very brief acknowledgement such as "🦛 Noted." or end one short sentence with "🦛".',
+      "Rules:",
+      "- This is optional, not required.",
+      "- Use it at most once in this reply.",
+      "- Only use it if the tone is friendly, calm, or neutral.",
+      "- Skip it for urgent, frustrated, highly formal, or sensitive situations.",
+      "- Do not mention internal scoring, retrieval policies, or training.",
+      "- Keep the rest of the reply normal, direct, and useful.",
+      "",
+    ].join("\n");
+  }
+
+  private isHighUrgencyOrFormalMoment(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return [
+      "urgent",
+      "asap",
+      "immediately",
+      "prod down",
+      "production down",
+      "sev1",
+      "sev 1",
+      "security incident",
+      "breach",
+      "privacy request",
+      "gdpr",
+      "legal",
+      "compliance",
+    ].some((token) => normalized.includes(token));
+  }
+
   /**
    * Handle compaction via Dream Cycle
    */
@@ -770,6 +909,7 @@ export class FatHippoContextEngine implements ContextEngine {
    */
   async dispose(): Promise<void> {
     this.cachedCritical = null;
+    this.sessionHippoNodState.clear();
   }
 
   // --- Helper methods ---

@@ -16,10 +16,13 @@ export declare class FatHippoContextEngine implements ContextEngine {
     private cachedCritical;
     private sessionStartTimes;
     private sessionApplicationIds;
+    private sessionHippoNodState;
     private cognitiveEnabled;
     private static readonly TRIVIAL_ACKS;
     private static readonly MIN_VECTOR_SIMILARITY;
     private static readonly MIN_CRITICAL_RELEVANCE;
+    private static readonly HIPPO_NOD_COOLDOWN_MS;
+    private static readonly HIPPO_NOD_MIN_MESSAGE_GAP;
     constructor(config: FatHippoConfig);
     /**
      * Initialize engine state for a session
@@ -87,6 +90,8 @@ export declare class FatHippoContextEngine implements ContextEngine {
     private detectFilesModified;
     private detectWorkspaceRoot;
     private getApiBaseUrl;
+    private buildHippoNodInstruction;
+    private isHighUrgencyOrFormalMoment;
     /**
      * Handle compaction via Dream Cycle
      */

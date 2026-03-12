@@ -17,6 +17,8 @@ export interface FatHippoConfig {
     shareEligibleByDefault?: boolean;
     /** Enable local adaptive strategy selection for cognitive retrieval. Default: true */
     adaptivePolicyEnabled?: boolean;
+    /** Allow occasional user-visible hippo acknowledgements when FatHippo materially helps. Default: true */
+    hippoNodsEnabled?: boolean;
 }
 export interface Memory {
     id: string;

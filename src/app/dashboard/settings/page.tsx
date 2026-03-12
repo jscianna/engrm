@@ -1,14 +1,20 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiKeysCard } from "@/components/api-keys-card";
+import { OpenClawConnectCard } from "@/components/openclaw-connect-card";
 import { UsageCard } from "@/components/usage-card";
 import { hasClerkAdminAccess } from "@/lib/admin-auth";
+import { isOpenClawAgentName } from "@/lib/cognitive-receipts";
+import { listApiKeys } from "@/lib/db";
 
 export default async function SettingsPage() {
   const [{ userId }, user] = await Promise.all([auth(), currentUser()]);
   if (!userId) {
     return null;
   }
+
+  const apiKeys = await listApiKeys(userId);
+  const openClawKey = apiKeys.find((key) => isOpenClawAgentName(key.agentName));
 
   const primaryEmail = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress ?? null;
   const isAdmin = hasClerkAdminAccess({
@@ -22,6 +28,12 @@ export default async function SettingsPage() {
     <div className="mx-auto w-full max-w-3xl space-y-4">
       {/* Usage Stats */}
       <UsageCard />
+
+      <OpenClawConnectCard
+        hasExistingOpenClawKey={Boolean(openClawKey)}
+        isActive={openClawKey?.isActive ?? false}
+        lastUsed={openClawKey?.lastUsed ?? null}
+      />
 
       {/* Profile */}
       <Card className="border-zinc-800 bg-zinc-900/60">
