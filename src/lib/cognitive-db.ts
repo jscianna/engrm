@@ -440,7 +440,6 @@ async function ensureInitialized(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_traces_user ON coding_traces(user_id);
     CREATE INDEX IF NOT EXISTS idx_traces_user_type ON coding_traces(user_id, type);
     CREATE INDEX IF NOT EXISTS idx_traces_timestamp ON coding_traces(timestamp DESC);
-    CREATE INDEX IF NOT EXISTS idx_traces_shared_signature ON coding_traces(shared_signature);
     CREATE UNIQUE INDEX IF NOT EXISTS uq_traces_user_hash ON coding_traces(user_id, trace_hash);
 
     CREATE TABLE IF NOT EXISTS cognitive_patterns (
@@ -647,6 +646,7 @@ async function ensureInitialized(): Promise<void> {
   await client.execute(`ALTER TABLE coding_traces ADD COLUMN share_eligible INTEGER DEFAULT 0`).catch(() => {});
   await client.execute(`ALTER TABLE coding_traces ADD COLUMN shared_signature TEXT`).catch(() => {});
   await client.execute(`ALTER TABLE coding_traces ADD COLUMN explicit_feedback_notes TEXT`).catch(() => {});
+  await client.execute(`CREATE INDEX IF NOT EXISTS idx_traces_shared_signature ON coding_traces(shared_signature)`).catch(() => {});
 
   await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN scope TEXT DEFAULT 'local'`).catch(() => {});
   await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN org_id TEXT`).catch(() => {});
