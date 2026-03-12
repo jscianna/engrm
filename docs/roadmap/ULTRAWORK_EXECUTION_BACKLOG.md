@@ -56,3 +56,32 @@
 - **Files likely touched:** `docs/*`, `examples/*`.
 - **Acceptance criteria:** New user can install a single package and run in <10 min.
 - **Effort:** S
+---
+
+## Completed
+
+### P0#3: Hosted rerank/HyDE as optional upgrade (2026-03-12)
+
+**Implementation:**
+- Added `src/lib/retrieval-config.ts` with:
+  - `RetrievalConfig` interface for feature flags
+  - `computeRetrievalConfidence()` for gating decisions
+  - `HostedServiceMetrics` for tracking
+- Updated `/api/v1/simple/context`:
+  - Uses `embedWithHyDEIfNeeded` and `rerankIfNeeded` for confidence gating
+  - Supports `hostedHyde`, `hostedRerank`, `confidenceThreshold` request params
+  - Maintains backward compat with legacy `hyde`, `rerank` flags
+
+**Env vars:**
+- `FATHIPPO_HOSTED_HYDE` - Enable confidence-gated HyDE
+- `FATHIPPO_HOSTED_RERANK` - Enable confidence-gated reranking
+- `FATHIPPO_CONFIDENCE_THRESHOLD` - Gate threshold (default 0.72)
+- `FATHIPPO_CONFIDENCE_MIN_SIMILARITY` - Min score for confidence (default 0.6)
+- `FATHIPPO_CONFIDENCE_REQUIRED_COUNT` - High-quality results needed (default 3)
+
+**Response headers:**
+- `X-FatHippo-Hosted-Enabled` - Whether hosted services are configured
+- `X-FatHippo-Retrieval-Confidence` - Computed confidence (0-1)
+- `X-FatHippo-Hyde-Used/Gated` - HyDE usage status
+- `X-FatHippo-Rerank-Used/Gated` - Reranking usage status
+- `X-FatHippo-Hyde-Latency-Ms`, `X-FatHippo-Rerank-Latency-Ms` - Latency metrics
