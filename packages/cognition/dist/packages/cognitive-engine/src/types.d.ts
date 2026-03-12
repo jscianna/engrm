@@ -55,6 +55,10 @@ export interface TraceContext {
 export interface Pattern {
     id: string;
     userId?: string;
+    scope?: 'local' | 'global' | 'org';
+    orgId?: string | null;
+    sourcePatternId?: string | null;
+    provenance?: Record<string, unknown>;
     domain: string;
     trigger: PatternTrigger;
     approach: string;
@@ -76,7 +80,7 @@ export interface PatternTrigger {
     technologies?: string[];
     problemTypes?: TraceType[];
 }
-export type PatternStatus = 'candidate' | 'active_local' | 'active_global' | 'synthesized_local' | 'synthesized_global' | 'deprecated';
+export type PatternStatus = 'candidate' | 'active_local' | 'active_org' | 'active_global' | 'synthesized_local' | 'synthesized_org' | 'synthesized_global' | 'deprecated';
 export interface SynthesizedSkill {
     id: string;
     name: string;
@@ -107,6 +111,19 @@ export interface SkillContent {
     references?: string[];
 }
 export type SkillStatus = 'draft' | 'active' | 'stale' | 'deprecated';
+export type AdaptivePolicyKey = 'balanced_default' | 'trace_first' | 'pattern_first' | 'skill_first';
+export type AdaptivePolicySection = 'local_patterns' | 'global_patterns' | 'traces' | 'skills';
+export interface AdaptivePolicyRecommendation {
+    key: AdaptivePolicyKey;
+    contextKey: string;
+    traceLimit: number;
+    patternLimit: number;
+    skillLimit: number;
+    sectionOrder: AdaptivePolicySection[];
+    rationale: string;
+    exploration: boolean;
+    score: number;
+}
 export type ResolutionKind = 'tests_passed' | 'build_passed' | 'lint_passed' | 'manual_only' | 'failed';
 export interface RepoProfile {
     workspaceRoot?: string;
@@ -184,9 +201,11 @@ export interface GetRelevantTracesRequest {
     problem: string;
     context?: Partial<TraceContext>;
     limit?: number;
+    adaptivePolicy?: boolean;
 }
 export interface GetRelevantTracesResponse {
     applicationId?: string;
+    policy?: AdaptivePolicyRecommendation | null;
     traces: CodingTrace[];
     patterns: Pattern[];
     skills: SynthesizedSkill[];
@@ -210,6 +229,8 @@ export interface RetrievalEvalFixture {
 export interface RetrievalEvalPrediction {
     applicationId?: string;
     sessionId?: string;
+    policyKey?: AdaptivePolicyKey;
+    policyContextKey?: string;
     traces: Array<{
         id: string;
     }>;
@@ -297,6 +318,7 @@ export interface CognitiveEngineConfig {
     autoPublishToClawHub: boolean;
     injectRelevantTraces: boolean;
     injectPatterns: boolean;
+    adaptivePolicyEnabled?: boolean;
     maxInjectedTraces: number;
     maxInjectedPatterns: number;
 }

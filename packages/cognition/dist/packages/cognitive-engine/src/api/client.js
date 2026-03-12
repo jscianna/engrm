@@ -63,6 +63,7 @@ export class CognitiveClient {
         });
         return {
             applicationId: response.applicationId,
+            policy: response.policy || null,
             traces: response.traces || [],
             patterns: response.patterns || [],
             skills: response.skills || [],

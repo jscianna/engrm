@@ -6,7 +6,13 @@
 
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
-import { getMatchingPatterns, getRelevantSkills, getRelevantTraces, logCognitiveApplication } from "@/lib/cognitive-db";
+import {
+  getMatchingPatterns,
+  getRelevantSkills,
+  getRelevantTraces,
+  logCognitiveApplication,
+  recommendAdaptivePolicyForUser,
+} from "@/lib/cognitive-db";
 
 export const runtime = "nodejs";
 
@@ -23,6 +29,7 @@ export async function POST(request: Request) {
     const limit = Math.min(Number(body.limit) || 5, 20);
     const sessionId = typeof body.sessionId === "string" ? body.sessionId : `session_${Date.now()}`;
     const endpoint = typeof body.endpoint === "string" ? body.endpoint : "context-engine";
+    const adaptivePolicyEnabled = body.adaptivePolicy !== false;
     const repoProfile =
       body.context?.repoProfile && typeof body.context.repoProfile === "object" && !Array.isArray(body.context.repoProfile)
         ? body.context.repoProfile
@@ -32,23 +39,33 @@ export async function POST(request: Request) {
       throw new MemryError("VALIDATION_ERROR", { field: "problem", reason: "required" });
     }
     
-    // Get relevant traces via vector similarity
-    const traces = await getRelevantTraces(identity.userId, problem, limit);
-    
     const technologies = Array.isArray(body.context?.technologies)
       ? body.context.technologies.filter((value: unknown): value is string => typeof value === "string")
       : [];
+    const policy = adaptivePolicyEnabled
+      ? await recommendAdaptivePolicyForUser({
+          userId: identity.userId,
+          problem,
+          endpoint,
+          technologies,
+          repoProfile,
+          baseTraceLimit: limit,
+        })
+      : null;
+
+    // Get relevant traces via vector similarity
+    const traces = await getRelevantTraces(identity.userId, problem, policy?.traceLimit ?? limit);
     const matchedPatterns = await getMatchingPatterns({
       userId: identity.userId,
       problem,
       technologies,
-      limit: 5,
+      limit: policy?.patternLimit ?? 5,
     });
     const skills = await getRelevantSkills({
       userId: identity.userId,
       problem,
       technologies,
-      limit: 3,
+      limit: policy?.skillLimit ?? 3,
     });
     const application = await logCognitiveApplication({
       userId: identity.userId,
@@ -56,6 +73,7 @@ export async function POST(request: Request) {
       problem,
       endpoint,
       repoProfile,
+      policy,
       traces: traces.map((trace, index) => ({
         id: trace.id,
         scope: "local",
@@ -75,6 +93,19 @@ export async function POST(request: Request) {
     
     return Response.json({
       applicationId: application.application.id,
+      policy: policy
+        ? {
+            key: policy.key,
+            contextKey: policy.contextKey,
+            rationale: policy.rationale,
+            exploration: policy.exploration,
+            score: policy.score,
+            traceLimit: policy.traceLimit,
+            patternLimit: policy.patternLimit,
+            skillLimit: policy.skillLimit,
+            sectionOrder: policy.sectionOrder,
+          }
+        : null,
       traces: traces.map(t => ({
         id: t.id,
         type: t.type,

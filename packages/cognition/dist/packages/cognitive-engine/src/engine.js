@@ -39,6 +39,7 @@ export class CognitiveEngine {
                     problem,
                     context: technologies ? { technologies } : undefined,
                     limit: this.config.maxInjectedTraces || 5,
+                    adaptivePolicy: this.config.adaptivePolicyEnabled !== false,
                 });
                 traces.push(...response.traces);
                 patterns.push(...response.patterns);

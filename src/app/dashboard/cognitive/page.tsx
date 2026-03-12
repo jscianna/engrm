@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  getAdaptivePolicySummaries,
   getCognitiveJobHealth,
   getCognitiveMetrics,
   getCognitiveUserSettings,
@@ -62,7 +63,7 @@ export default async function CognitiveDashboardPage({
   const notice = typeof resolvedSearchParams.notice === "string" ? resolvedSearchParams.notice : null;
   const error = typeof resolvedSearchParams.error === "string" ? resolvedSearchParams.error : null;
 
-  const [metrics, settings, traces, patterns, skills, applications, jobs, benchmarkRuns] = await Promise.all([
+  const [metrics, settings, traces, patterns, skills, applications, jobs, benchmarkRuns, policySummaries] = await Promise.all([
     getCognitiveMetrics(userId, 14),
     getCognitiveUserSettings(userId),
     getRecentTraces(userId, 12),
@@ -71,6 +72,7 @@ export default async function CognitiveDashboardPage({
     getRecentApplications(userId, 12),
     getCognitiveJobHealth(),
     getRecentBenchmarkRuns(userId, 6),
+    getAdaptivePolicySummaries(userId),
   ]);
 
   const lowConfidenceApps = applications.filter(
@@ -207,6 +209,37 @@ export default async function CognitiveDashboardPage({
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+        <Card className="border-zinc-800 bg-zinc-900/60">
+          <CardHeader>
+            <CardTitle>Adaptive Retrieval Policies</CardTitle>
+            <CardDescription>Private per-user strategy learning for traces, patterns, and synthesized skills.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {policySummaries.length === 0 ? (
+              <p className="text-sm text-zinc-500">No adaptive policy data yet. FatHippo will start learning once retrievals are used and outcomes are recorded.</p>
+            ) : policySummaries.map((policy) => (
+              <div key={policy.policyKey} className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-zinc-100">{policy.policyKey.replaceAll("_", " ")}</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {policy.successCount}/{policy.resolvedCount} successful · {policy.verifiedSuccessCount} verified · {policy.acceptedCount} accepted
+                    </p>
+                  </div>
+                  <Badge variant={policy.avgReward < 0 ? "destructive" : policy.avgReward < 0.1 ? "secondary" : "default"}>
+                    reward {policy.avgReward.toFixed(2)}
+                  </Badge>
+                </div>
+                <p className="mt-2 text-xs text-zinc-400">
+                  {policy.sampleCount} total applications
+                  {policy.avgRetries != null ? ` · avg retries ${policy.avgRetries.toFixed(1)}` : ""}
+                  {policy.avgTimeToResolutionMs != null ? ` · avg time ${Math.round(policy.avgTimeToResolutionMs / 60000)}m` : ""}
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
         <Card className="border-zinc-800 bg-zinc-900/60">
           <CardHeader>
             <CardTitle>Recent Traces</CardTitle>

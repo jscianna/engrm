@@ -10,12 +10,10 @@ import type {
   Pattern,
   SynthesizedSkill,
   CognitiveEngineConfig,
-  TraceContext,
 } from './types.js';
 import { TraceCapture } from './hooks/trace-capture.js';
 import { PatternExtractor } from './extraction/pattern-extractor.js';
 import { CognitiveClient } from './api/client.js';
-import { sanitizeTrace } from './utils/sanitize.js';
 
 // OpenClaw message type
 interface AgentMessage {
@@ -78,6 +76,7 @@ export class CognitiveEngine {
           problem,
           context: technologies ? { technologies } : undefined,
           limit: this.config.maxInjectedTraces || 5,
+          adaptivePolicy: this.config.adaptivePolicyEnabled !== false,
         });
         
         traces.push(...response.traces);

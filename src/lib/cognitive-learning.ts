@@ -117,6 +117,58 @@ export type PatternLifecycleStatus =
 
 export type SkillLifecycleStatus = "draft" | "active" | "stale" | "deprecated";
 
+export type AdaptivePolicyKey =
+  | "balanced_default"
+  | "trace_first"
+  | "pattern_first"
+  | "skill_first";
+
+export type AdaptivePolicySection =
+  | "local_patterns"
+  | "global_patterns"
+  | "traces"
+  | "skills";
+
+export type AdaptivePolicyFeatures = {
+  endpoint: string;
+  repoFamily: string | null;
+  workspaceType: string | null;
+  projectType: string | null;
+  technologies: string[];
+  problemClasses: string[];
+};
+
+export type AdaptivePolicyObservation = ImpactObservation & {
+  acceptedEntity?: boolean;
+  materializedEntity?: boolean;
+};
+
+export type AdaptivePolicyStat = {
+  policyKey: AdaptivePolicyKey;
+  contextKey: string;
+  sampleCount: number;
+  resolvedCount: number;
+  successCount: number;
+  verifiedSuccessCount: number;
+  acceptedCount: number;
+  avgReward: number;
+  avgRetries: number | null;
+  avgTimeToResolutionMs: number | null;
+};
+
+export type AdaptivePolicyRecommendation = {
+  key: AdaptivePolicyKey;
+  contextKey: string;
+  traceLimit: number;
+  patternLimit: number;
+  skillLimit: number;
+  sectionOrder: AdaptivePolicySection[];
+  rationale: string;
+  exploration: boolean;
+  score: number;
+  features: AdaptivePolicyFeatures;
+};
+
 type TraceEvidenceScore = {
   positive: number;
   negative: number;
@@ -205,6 +257,51 @@ const FILE_PATH_PATTERN = /(?:\/[\w.-]+)+(?:\.\w+)?/g;
 const SECRET_PATTERN = /\b(?:sk|rk|pk|ghp|ghu|github_pat|xoxb|xoxp|AIza)[-_A-Za-z0-9]{8,}\b/g;
 const LONG_IDENTIFIER_PATTERN = /\b[a-f0-9]{24,}\b/gi;
 
+const ADAPTIVE_POLICY_DEFINITIONS: Record<
+  AdaptivePolicyKey,
+  {
+    label: string;
+    traceLimitDelta: number;
+    patternLimit: number;
+    skillLimit: number;
+    sectionOrder: AdaptivePolicySection[];
+    priorReward: number;
+  }
+> = {
+  balanced_default: {
+    label: "Balanced",
+    traceLimitDelta: 0,
+    patternLimit: 5,
+    skillLimit: 3,
+    sectionOrder: ["local_patterns", "global_patterns", "traces", "skills"],
+    priorReward: 0.08,
+  },
+  trace_first: {
+    label: "Trace First",
+    traceLimitDelta: 2,
+    patternLimit: 4,
+    skillLimit: 2,
+    sectionOrder: ["traces", "local_patterns", "global_patterns", "skills"],
+    priorReward: 0.04,
+  },
+  pattern_first: {
+    label: "Pattern First",
+    traceLimitDelta: -1,
+    patternLimit: 6,
+    skillLimit: 2,
+    sectionOrder: ["local_patterns", "global_patterns", "traces", "skills"],
+    priorReward: 0.05,
+  },
+  skill_first: {
+    label: "Skill First",
+    traceLimitDelta: -1,
+    patternLimit: 4,
+    skillLimit: 4,
+    sectionOrder: ["skills", "local_patterns", "global_patterns", "traces"],
+    priorReward: 0.03,
+  },
+};
+
 export function normalizeForFingerprint(value: string): string {
   return value
     .toLowerCase()
@@ -226,6 +323,205 @@ export function extractProblemKeywords(problem: string, limit = 8): string[] {
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
     .slice(0, limit)
     .map(([token]) => token);
+}
+
+export function getAdaptivePolicyDefinition(key: AdaptivePolicyKey) {
+  return ADAPTIVE_POLICY_DEFINITIONS[key];
+}
+
+export function buildAdaptivePolicyFeatures(params: {
+  problem: string;
+  endpoint?: string;
+  technologies?: string[];
+  repoProfile?: Record<string, unknown> | null;
+}): AdaptivePolicyFeatures {
+  const repoProfile = params.repoProfile ?? {};
+  const repoFamily =
+    typeof repoProfile.repoFamily === "string" && repoProfile.repoFamily.trim()
+      ? normalizeForFingerprint(repoProfile.repoFamily)
+      : typeof repoProfile.workspaceRoot === "string" && repoProfile.workspaceRoot.trim()
+        ? normalizeForFingerprint(repoProfile.workspaceRoot.split(/[\\/]/).filter(Boolean).slice(-2).join("/"))
+        : null;
+  const workspaceType =
+    typeof repoProfile.workspaceType === "string" && repoProfile.workspaceType.trim()
+      ? normalizeForFingerprint(repoProfile.workspaceType)
+      : null;
+  const projectType =
+    typeof repoProfile.projectType === "string" && repoProfile.projectType.trim()
+      ? normalizeForFingerprint(repoProfile.projectType)
+      : null;
+
+  return {
+    endpoint: normalizeForFingerprint(params.endpoint ?? "context-engine"),
+    repoFamily,
+    workspaceType,
+    projectType,
+    technologies: coarsenSharedTechnologies(params.technologies).slice(0, 4),
+    problemClasses: extractSharedProblemClasses(params.problem, 4),
+  };
+}
+
+export function buildAdaptivePolicyContextKey(features: AdaptivePolicyFeatures): string {
+  return [
+    features.endpoint,
+    features.repoFamily ?? "",
+    features.workspaceType ?? "",
+    features.projectType ?? "",
+    features.problemClasses.join("+"),
+    features.technologies.join("+"),
+  ]
+    .filter(Boolean)
+    .join(":");
+}
+
+function deterministicPolicyIndex(seed: string, mod: number): number {
+  if (mod <= 1) {
+    return 0;
+  }
+  const digest = crypto.createHash("sha256").update(seed).digest();
+  return digest.readUInt32BE(0) % mod;
+}
+
+export function computeAdaptivePolicyReward(observation: AdaptivePolicyObservation): number | null {
+  if (!observation.finalOutcome) {
+    return null;
+  }
+
+  let score = 0;
+  if (observation.acceptedEntity) {
+    score += 0.12;
+  }
+  if (observation.materializedEntity) {
+    score += 0.08;
+  }
+  if (observation.finalOutcome === "success") {
+    score += 0.45;
+  } else if (observation.finalOutcome === "failed" || observation.finalOutcome === "abandoned") {
+    score -= 0.45;
+  }
+  if (observation.verificationPassed === true) {
+    score += 0.2;
+  } else if (observation.verificationPassed === false) {
+    score -= 0.2;
+  }
+  if (observation.explicitNegative) {
+    score -= 0.25;
+  }
+  if (observation.baseline?.medianRetries != null && observation.retryCount != null) {
+    const retryDelta = (observation.baseline.medianRetries - observation.retryCount) / Math.max(1, observation.baseline.medianRetries);
+    score += clamp(retryDelta, -1, 1) * 0.1;
+  }
+  if (observation.baseline?.medianTimeToResolutionMs != null && observation.timeToResolutionMs != null) {
+    const timeDelta =
+      (observation.baseline.medianTimeToResolutionMs - observation.timeToResolutionMs) /
+      Math.max(1, observation.baseline.medianTimeToResolutionMs);
+    score += clamp(timeDelta, -1, 1) * 0.1;
+  }
+  return clamp(score, -1, 1);
+}
+
+export function recommendAdaptivePolicy(params: {
+  features: AdaptivePolicyFeatures;
+  baseTraceLimit?: number;
+  contextStats?: AdaptivePolicyStat[];
+  globalStats?: AdaptivePolicyStat[];
+}): AdaptivePolicyRecommendation {
+  const contextKey = buildAdaptivePolicyContextKey(params.features);
+  const baseTraceLimit = clamp(Math.round(params.baseTraceLimit ?? 3), 2, 8);
+  const policies = Object.keys(ADAPTIVE_POLICY_DEFINITIONS) as AdaptivePolicyKey[];
+  const byContext = new Map((params.contextStats ?? []).map((stat) => [stat.policyKey, stat] as const));
+  const byGlobal = new Map((params.globalStats ?? []).map((stat) => [stat.policyKey, stat] as const));
+
+  const totalObservedSamples = policies.reduce((total, key) => {
+    const contextStat = byContext.get(key);
+    const globalStat = byGlobal.get(key);
+    return total + (contextStat?.sampleCount ?? 0) + (globalStat?.sampleCount ?? 0);
+  }, 0);
+  const unseenPolicies = policies.filter((key) => {
+    const contextStat = byContext.get(key);
+    const globalStat = byGlobal.get(key);
+    return (contextStat?.sampleCount ?? 0) + (globalStat?.sampleCount ?? 0) === 0;
+  });
+
+  if (totalObservedSamples === 0 && unseenPolicies.length > 0) {
+    const key = unseenPolicies[deterministicPolicyIndex(contextKey, unseenPolicies.length)];
+    const definition = ADAPTIVE_POLICY_DEFINITIONS[key];
+    return {
+      key,
+      contextKey,
+      traceLimit: clamp(baseTraceLimit + definition.traceLimitDelta, 2, 8),
+      patternLimit: definition.patternLimit,
+      skillLimit: definition.skillLimit,
+      sectionOrder: definition.sectionOrder,
+      rationale: "exploring_unseen_safe_policy",
+      exploration: true,
+      score: definition.priorReward,
+      features: params.features,
+    };
+  }
+
+  const totalSamples = totalObservedSamples;
+
+  let bestKey: AdaptivePolicyKey = "balanced_default";
+  let bestScore = Number.NEGATIVE_INFINITY;
+  let bestRationale = "fallback_balanced";
+
+  for (const key of policies) {
+    const definition = ADAPTIVE_POLICY_DEFINITIONS[key];
+    const contextStat = byContext.get(key);
+    const globalStat = byGlobal.get(key);
+    const contextualWeight = (contextStat?.sampleCount ?? 0) >= 2 ? 0.7 : 0.35;
+    const contextReward = contextStat?.avgReward ?? definition.priorReward;
+    const globalReward = globalStat?.avgReward ?? definition.priorReward;
+    const blendedReward =
+      contextReward * contextualWeight +
+      globalReward * (1 - contextualWeight) +
+      definition.priorReward * 0.1;
+    const effectiveSamples =
+      (contextStat?.sampleCount ?? 0) * contextualWeight +
+      (globalStat?.sampleCount ?? 0) * (1 - contextualWeight);
+    const explorationBonus = Math.sqrt((2 * Math.log(totalSamples + policies.length + 1)) / (effectiveSamples + 1));
+
+    let score = blendedReward + explorationBonus * 0.18;
+    let rationale = "best_verified_recent_reward";
+
+    if (params.features.problemClasses.includes("test") || params.features.problemClasses.includes("build") || params.features.problemClasses.includes("lint")) {
+      if (key === "trace_first") {
+        score += 0.03;
+        rationale = "verification_heavy_problem_prefers_more_traces";
+      }
+    }
+    if (params.features.problemClasses.includes("auth") || params.features.problemClasses.includes("config") || params.features.problemClasses.includes("migration")) {
+      if (key === "pattern_first") {
+        score += 0.025;
+        rationale = "repeatable_bug_family_prefers_patterns";
+      }
+    }
+    if (params.features.workspaceType === "web-app" && key === "skill_first" && (globalStat?.verifiedSuccessCount ?? 0) > 0) {
+      score += 0.02;
+      rationale = "verified_skill_usage_in_similar_workspace";
+    }
+
+    if (score > bestScore) {
+      bestKey = key;
+      bestScore = score;
+      bestRationale = rationale;
+    }
+  }
+
+  const bestDefinition = ADAPTIVE_POLICY_DEFINITIONS[bestKey];
+  return {
+    key: bestKey,
+    contextKey,
+    traceLimit: clamp(baseTraceLimit + bestDefinition.traceLimitDelta, 2, 8),
+    patternLimit: bestDefinition.patternLimit,
+    skillLimit: bestDefinition.skillLimit,
+    sectionOrder: bestDefinition.sectionOrder,
+    rationale: bestRationale,
+    exploration: false,
+    score: bestScore,
+    features: params.features,
+  };
 }
 
 export function extractSharedProblemClasses(problem: string, limit = 4): string[] {

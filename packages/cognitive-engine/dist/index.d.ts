@@ -14,6 +14,6 @@ export { CognitiveEngine } from './engine.js';
 export { TraceCapture } from './hooks/trace-capture.js';
 export { PatternExtractor } from './extraction/pattern-extractor.js';
 export { CognitiveClient } from './api/client.js';
-export { evaluateRetrievalFixtures } from './eval/harness.js';
+export { evaluateBenchmarkGate, evaluateRetrievalFixtures } from './eval/harness.js';
 export { sanitizeTrace, sanitizeString, sanitizeStringArray, containsSecrets, detectSecretTypes, } from './utils/sanitize.js';
 //# sourceMappingURL=index.d.ts.map

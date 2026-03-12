@@ -352,7 +352,13 @@ export class FatHippoContextEngine {
                 'Authorization': `Bearer ${this.config.apiKey}`,
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ sessionId, endpoint: "context-engine.assemble", problem, limit: 3 }),
+            body: JSON.stringify({
+                sessionId,
+                endpoint: "context-engine.assemble",
+                problem,
+                limit: 3,
+                adaptivePolicy: this.config.adaptivePolicyEnabled !== false,
+            }),
         });
         if (!response.ok)
             return null;
@@ -360,9 +366,9 @@ export class FatHippoContextEngine {
         if (data.applicationId) {
             this.sessionApplicationIds.set(sessionId, data.applicationId);
         }
-        const sections = [];
         const localPatterns = (data.patterns ?? []).filter((pattern) => pattern.scope !== "global");
         const globalPatterns = (data.patterns ?? []).filter((pattern) => pattern.scope === "global");
+        const sections = new Map();
         if (localPatterns.length > 0) {
             const patternLines = localPatterns
                 .map((pattern) => {
@@ -370,7 +376,7 @@ export class FatHippoContextEngine {
                 return `- [${pattern.domain}] ${pattern.approach.slice(0, 200)} (${Math.round(pattern.confidence * 100)}% confidence${score})`;
             })
                 .join("\n");
-            sections.push(`## Learned Coding Patterns\n${patternLines}`);
+            sections.set("local_patterns", `## Learned Coding Patterns\n${patternLines}`);
         }
         if (globalPatterns.length > 0) {
             const patternLines = globalPatterns
@@ -379,7 +385,7 @@ export class FatHippoContextEngine {
                 return `- [${pattern.domain}] ${pattern.approach.slice(0, 200)} (${Math.round(pattern.confidence * 100)}% confidence${score})`;
             })
                 .join("\n");
-            sections.push(`## Shared Global Patterns\n${patternLines}`);
+            sections.set("global_patterns", `## Shared Global Patterns\n${patternLines}`);
         }
         if (data.traces && data.traces.length > 0) {
             const traceLines = data.traces.map(t => {
@@ -387,17 +393,23 @@ export class FatHippoContextEngine {
                 const solution = t.solution ? ` → ${t.solution.slice(0, 80)}...` : '';
                 return `- ${icon} ${t.problem.slice(0, 80)}${solution}`;
             }).join('\n');
-            sections.push(`## Past Similar Problems\n${traceLines}`);
+            sections.set("traces", `## Past Similar Problems\n${traceLines}`);
         }
         if (data.skills && data.skills.length > 0) {
             const skillLines = data.skills
                 .map((skill) => `- [${skill.scope}] ${skill.name}: ${skill.description} (${Math.round(skill.successRate * 100)}% success)`)
                 .join("\n");
-            sections.push(`## Synthesized Skills\n${skillLines}`);
+            sections.set("skills", `## Synthesized Skills\n${skillLines}`);
         }
-        if (sections.length === 0)
+        if (sections.size === 0)
             return null;
-        return '\n' + sections.join('\n\n') + '\n';
+        const orderedSections = (data.policy?.sectionOrder ?? ["local_patterns", "global_patterns", "traces", "skills"])
+            .map((key) => sections.get(key))
+            .filter((section) => typeof section === "string" && section.length > 0);
+        if (orderedSections.length === 0) {
+            return null;
+        }
+        return '\n' + orderedSections.join('\n\n') + '\n';
     }
     async captureStructuredTrace(params) {
         if (!shouldCaptureCodingTrace(params.messages)) {

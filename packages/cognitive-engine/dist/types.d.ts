@@ -55,6 +55,10 @@ export interface TraceContext {
 export interface Pattern {
     id: string;
     userId?: string;
+    scope?: 'local' | 'global' | 'org';
+    orgId?: string | null;
+    sourcePatternId?: string | null;
+    provenance?: Record<string, unknown>;
     domain: string;
     trigger: PatternTrigger;
     approach: string;
@@ -76,7 +80,7 @@ export interface PatternTrigger {
     technologies?: string[];
     problemTypes?: TraceType[];
 }
-export type PatternStatus = 'candidate' | 'active_local' | 'active_global' | 'synthesized_local' | 'synthesized_global' | 'deprecated';
+export type PatternStatus = 'candidate' | 'active_local' | 'active_org' | 'active_global' | 'synthesized_local' | 'synthesized_org' | 'synthesized_global' | 'deprecated';
 export interface SynthesizedSkill {
     id: string;
     name: string;
@@ -107,6 +111,74 @@ export interface SkillContent {
     references?: string[];
 }
 export type SkillStatus = 'draft' | 'active' | 'stale' | 'deprecated';
+export type AdaptivePolicyKey = 'balanced_default' | 'trace_first' | 'pattern_first' | 'skill_first';
+export type AdaptivePolicySection = 'local_patterns' | 'global_patterns' | 'traces' | 'skills';
+export interface AdaptivePolicyRecommendation {
+    key: AdaptivePolicyKey;
+    contextKey: string;
+    traceLimit: number;
+    patternLimit: number;
+    skillLimit: number;
+    sectionOrder: AdaptivePolicySection[];
+    rationale: string;
+    exploration: boolean;
+    score: number;
+}
+export type ResolutionKind = 'tests_passed' | 'build_passed' | 'lint_passed' | 'manual_only' | 'failed';
+export interface RepoProfile {
+    workspaceRoot?: string;
+    workspaceType?: string;
+    projectType?: string;
+    languages?: string[];
+    repoFamily?: string;
+    sharedSignature?: string;
+}
+export interface BaselineSnapshot {
+    successRate: number;
+    medianTimeToResolutionMs: number | null;
+    medianRetries: number | null;
+    verificationPassRate: number;
+    sampleSize: number;
+}
+export interface VerificationResults {
+    verified: boolean;
+    resolutionKind?: ResolutionKind;
+    passedChecks?: string[];
+    failedChecks?: string[];
+}
+export interface CognitiveUserSettings {
+    userId: string;
+    sharedLearningEnabled: boolean;
+    benchmarkInclusionEnabled: boolean;
+    traceRetentionDays: number;
+    updatedAt: string;
+}
+export interface CognitivePrivacyExport {
+    exportedAt: string;
+    settings: CognitiveUserSettings;
+    traces: CodingTrace[];
+    applications: Array<{
+        application: Record<string, unknown>;
+        matches: Array<Record<string, unknown>>;
+    }>;
+    patterns: Pattern[];
+    skills: SynthesizedSkill[];
+    benchmarkRuns: Array<Record<string, unknown>>;
+}
+export interface CognitiveDataDeletionResult {
+    deletedAt: string;
+    tracesDeleted: number;
+    applicationsDeleted: number;
+    patternMatchesDeleted: number;
+    applicationMatchesDeleted: number;
+    localPatternsDeleted: number;
+    localSkillsDeleted: number;
+    benchmarkRunsDeleted: number;
+    settingsDeleted: number;
+    sharedLearningRevoked: boolean;
+    globalPatternsRefreshed: number;
+    globalSkillsRefreshed: number;
+}
 export interface StoreTraceRequest {
     sessionId: string;
     type: TraceType;
@@ -129,9 +201,11 @@ export interface GetRelevantTracesRequest {
     problem: string;
     context?: Partial<TraceContext>;
     limit?: number;
+    adaptivePolicy?: boolean;
 }
 export interface GetRelevantTracesResponse {
     applicationId?: string;
+    policy?: AdaptivePolicyRecommendation | null;
     traces: CodingTrace[];
     patterns: Pattern[];
     skills: SynthesizedSkill[];
@@ -142,14 +216,21 @@ export interface RetrievalEvalFixture {
     endpoint?: string;
     problem: string;
     technologies?: string[];
+    repoProfile?: RepoProfile;
     expectedTraceIds: string[];
     expectedPatternIds: string[];
     expectedSkillIds: string[];
     acceptedId?: string;
+    expectedOutcome?: TraceOutcome;
+    maxRetries?: number;
+    targetResolutionKind?: ResolutionKind;
+    baseline?: BaselineSnapshot;
 }
 export interface RetrievalEvalPrediction {
     applicationId?: string;
     sessionId?: string;
+    policyKey?: AdaptivePolicyKey;
+    policyContextKey?: string;
     traces: Array<{
         id: string;
     }>;
@@ -163,6 +244,9 @@ export interface RetrievalEvalPrediction {
     acceptedTraceId?: string;
     acceptedPatternId?: string;
     acceptedSkillId?: string;
+    retryCount?: number;
+    timeToResolutionMs?: number;
+    verificationResults?: VerificationResults;
 }
 export interface RetrievalEvalDatasetRecord {
     applicationId: string;
@@ -182,7 +266,31 @@ export interface RetrievalEvalResult {
     patternRecallAtK: number;
     skillHitRate: number;
     weakOutcomeLift: number;
+    successRate: number;
+    retryDelta: number;
+    timeToResolutionDelta: number;
+    verificationCompletionRate: number;
     cases: number;
+}
+export interface BenchmarkGateThresholds {
+    minTraceMrr?: number;
+    minPatternRecallAtK?: number;
+    minSkillHitRate?: number;
+    minWeakOutcomeLift?: number;
+    minSuccessRate?: number;
+    minVerificationCompletionRate?: number;
+    maxTraceMrrRegression?: number;
+    maxPatternRecallAtKRegression?: number;
+    maxSkillHitRateRegression?: number;
+    maxWeakOutcomeLiftRegression?: number;
+    maxSuccessRateRegression?: number;
+    maxVerificationCompletionRateRegression?: number;
+    maxRetryDeltaRegression?: number;
+    maxTimeToResolutionDeltaRegressionMs?: number;
+}
+export interface BenchmarkGateResult {
+    passed: boolean;
+    reasons: string[];
 }
 export interface PatternFeedbackRequest {
     patternId: string;
@@ -210,6 +318,7 @@ export interface CognitiveEngineConfig {
     autoPublishToClawHub: boolean;
     injectRelevantTraces: boolean;
     injectPatterns: boolean;
+    adaptivePolicyEnabled?: boolean;
     maxInjectedTraces: number;
     maxInjectedPatterns: number;
 }

@@ -43,7 +43,7 @@ interface CognitiveTrace {
 
 interface CognitivePattern {
   id: string;
-  scope: "local" | "global";
+  scope: "local" | "global" | "org";
   domain: string;
   approach: string;
   confidence: number;
@@ -61,6 +61,17 @@ interface CognitiveSkill {
 
 interface CognitiveContextResponse {
   applicationId?: string;
+  policy?: {
+    key: string;
+    contextKey: string;
+    rationale: string;
+    exploration: boolean;
+    score: number;
+    traceLimit: number;
+    patternLimit: number;
+    skillLimit: number;
+    sectionOrder: Array<"local_patterns" | "global_patterns" | "traces" | "skills">;
+  } | null;
   traces: CognitiveTrace[];
   patterns: CognitivePattern[];
   skills?: CognitiveSkill[];
@@ -486,7 +497,13 @@ export class FatHippoContextEngine implements ContextEngine {
         'Authorization': `Bearer ${this.config.apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ sessionId, endpoint: "context-engine.assemble", problem, limit: 3 }),
+      body: JSON.stringify({
+        sessionId,
+        endpoint: "context-engine.assemble",
+        problem,
+        limit: 3,
+        adaptivePolicy: this.config.adaptivePolicyEnabled !== false,
+      }),
     });
     
     if (!response.ok) return null;
@@ -496,10 +513,9 @@ export class FatHippoContextEngine implements ContextEngine {
       this.sessionApplicationIds.set(sessionId, data.applicationId);
     }
     
-    const sections: string[] = [];
-
     const localPatterns = (data.patterns ?? []).filter((pattern) => pattern.scope !== "global");
     const globalPatterns = (data.patterns ?? []).filter((pattern) => pattern.scope === "global");
+    const sections = new Map<string, string>();
 
     if (localPatterns.length > 0) {
       const patternLines = localPatterns
@@ -508,7 +524,7 @@ export class FatHippoContextEngine implements ContextEngine {
           return `- [${pattern.domain}] ${pattern.approach.slice(0, 200)} (${Math.round(pattern.confidence * 100)}% confidence${score})`;
         })
         .join("\n");
-      sections.push(`## Learned Coding Patterns\n${patternLines}`);
+      sections.set("local_patterns", `## Learned Coding Patterns\n${patternLines}`);
     }
 
     if (globalPatterns.length > 0) {
@@ -518,7 +534,7 @@ export class FatHippoContextEngine implements ContextEngine {
           return `- [${pattern.domain}] ${pattern.approach.slice(0, 200)} (${Math.round(pattern.confidence * 100)}% confidence${score})`;
         })
         .join("\n");
-      sections.push(`## Shared Global Patterns\n${patternLines}`);
+      sections.set("global_patterns", `## Shared Global Patterns\n${patternLines}`);
     }
     
     if (data.traces && data.traces.length > 0) {
@@ -527,19 +543,27 @@ export class FatHippoContextEngine implements ContextEngine {
         const solution = t.solution ? ` → ${t.solution.slice(0, 80)}...` : '';
         return `- ${icon} ${t.problem.slice(0, 80)}${solution}`;
       }).join('\n');
-      sections.push(`## Past Similar Problems\n${traceLines}`);
+      sections.set("traces", `## Past Similar Problems\n${traceLines}`);
     }
 
     if (data.skills && data.skills.length > 0) {
       const skillLines = data.skills
         .map((skill) => `- [${skill.scope}] ${skill.name}: ${skill.description} (${Math.round(skill.successRate * 100)}% success)`)
         .join("\n");
-      sections.push(`## Synthesized Skills\n${skillLines}`);
+      sections.set("skills", `## Synthesized Skills\n${skillLines}`);
     }
     
-    if (sections.length === 0) return null;
-    
-    return '\n' + sections.join('\n\n') + '\n';
+    if (sections.size === 0) return null;
+
+    const orderedSections = (data.policy?.sectionOrder ?? ["local_patterns", "global_patterns", "traces", "skills"])
+      .map((key) => sections.get(key))
+      .filter((section): section is string => typeof section === "string" && section.length > 0);
+
+    if (orderedSections.length === 0) {
+      return null;
+    }
+
+    return '\n' + orderedSections.join('\n\n') + '\n';
   }
 
   private async captureStructuredTrace(params: {

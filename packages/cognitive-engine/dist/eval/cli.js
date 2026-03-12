@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { evaluateRetrievalFixtures } from "./harness.js";
+import { evaluateBenchmarkGate, evaluateRetrievalFixtures } from "./harness.js";
 function main() {
     const filePath = process.argv[2];
     if (!filePath) {
@@ -10,7 +10,14 @@ function main() {
         fixtures: input.fixtures ?? [],
         predictions: input.predictions ?? [],
     });
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    const gate = input.baselineResult || input.thresholds
+        ? evaluateBenchmarkGate({
+            current: result,
+            baseline: input.baselineResult,
+            thresholds: input.thresholds,
+        })
+        : undefined;
+    process.stdout.write(`${JSON.stringify({ result, gate }, null, 2)}\n`);
 }
 main();
 //# sourceMappingURL=cli.js.map

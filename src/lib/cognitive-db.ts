@@ -2,9 +2,13 @@ import crypto from "node:crypto";
 import { getDb } from "@/lib/turso";
 import { embedText } from "@/lib/embeddings";
 import {
+  buildAdaptivePolicyContextKey,
+  buildAdaptivePolicyFeatures,
   buildSharedSignature,
+  computeAdaptivePolicyReward,
   buildSkillDraft,
   classifyPatternLifecycle,
+  recommendAdaptivePolicy,
   deriveSkillLifecycle,
   clusterLearningTraces,
   redactSharedPatternContent,
@@ -19,6 +23,8 @@ import {
   synthesizedPatternStatus,
   summarizeEntityImpact,
   summarizePatternEvidence,
+  type AdaptivePolicyKey,
+  type AdaptivePolicyRecommendation,
   type BaselineSnapshot,
   type ImpactObservation,
   type LearningTrace,
@@ -64,6 +70,10 @@ export interface CognitiveApplication {
   repoProfileJson: string | null;
   materializedPatternId: string | null;
   materializedSkillId: string | null;
+  policyKey: AdaptivePolicyKey | null;
+  policyContextKey: string | null;
+  policySnapshotJson: string | null;
+  policyReward: number | null;
   retryCount: number | null;
   baselineGroupKey: string | null;
   baselineSnapshotJson: string | null;
@@ -75,6 +85,19 @@ export interface CognitiveApplication {
   verificationSummaryJson: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AdaptivePolicySummary {
+  policyKey: AdaptivePolicyKey;
+  contextKey: string;
+  sampleCount: number;
+  resolvedCount: number;
+  successCount: number;
+  verifiedSuccessCount: number;
+  acceptedCount: number;
+  avgReward: number;
+  avgRetries: number | null;
+  avgTimeToResolutionMs: number | null;
 }
 
 export interface ApplicationMatch {
@@ -269,6 +292,8 @@ export interface RetrievalEvalDatasetRecord {
   prediction: {
     applicationId: string;
     sessionId: string;
+    policyKey?: AdaptivePolicyKey;
+    policyContextKey?: string;
     traces: Array<{ id: string }>;
     patterns: Array<{ id: string }>;
     skills: Array<{ id: string }>;
@@ -524,6 +549,10 @@ async function ensureInitialized(): Promise<void> {
       repo_profile_json TEXT,
       materialized_pattern_id TEXT,
       materialized_skill_id TEXT,
+      policy_key TEXT,
+      policy_context_key TEXT,
+      policy_snapshot_json TEXT,
+      policy_reward REAL,
       retry_count INTEGER,
       baseline_group_key TEXT,
       baseline_snapshot_json TEXT,
@@ -622,6 +651,10 @@ async function ensureInitialized(): Promise<void> {
   await client.execute(`ALTER TABLE cognitive_applications ADD COLUMN repo_profile_json TEXT`).catch(() => {});
   await client.execute(`ALTER TABLE cognitive_applications ADD COLUMN materialized_pattern_id TEXT`).catch(() => {});
   await client.execute(`ALTER TABLE cognitive_applications ADD COLUMN materialized_skill_id TEXT`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_applications ADD COLUMN policy_key TEXT`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_applications ADD COLUMN policy_context_key TEXT`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_applications ADD COLUMN policy_snapshot_json TEXT`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_applications ADD COLUMN policy_reward REAL`).catch(() => {});
   await client.execute(`ALTER TABLE cognitive_applications ADD COLUMN retry_count INTEGER`).catch(() => {});
   await client.execute(`ALTER TABLE cognitive_applications ADD COLUMN baseline_group_key TEXT`).catch(() => {});
   await client.execute(`ALTER TABLE cognitive_applications ADD COLUMN baseline_snapshot_json TEXT`).catch(() => {});
@@ -852,6 +885,10 @@ function rowToApplication(row: Record<string, unknown>): CognitiveApplication {
     repoProfileJson: (row.repo_profile_json as string | null) ?? null,
     materializedPatternId: (row.materialized_pattern_id as string | null) ?? null,
     materializedSkillId: (row.materialized_skill_id as string | null) ?? null,
+    policyKey: (row.policy_key as AdaptivePolicyKey | null) ?? null,
+    policyContextKey: (row.policy_context_key as string | null) ?? null,
+    policySnapshotJson: (row.policy_snapshot_json as string | null) ?? null,
+    policyReward: row.policy_reward == null ? null : Number(row.policy_reward),
     retryCount: row.retry_count == null ? null : Number(row.retry_count),
     baselineGroupKey: (row.baseline_group_key as string | null) ?? null,
     baselineSnapshotJson: (row.baseline_snapshot_json as string | null) ?? null,
@@ -1801,6 +1838,7 @@ export async function logCognitiveApplication(params: {
   problem: string;
   endpoint: string;
   repoProfile?: Record<string, unknown> | null;
+  policy?: Pick<AdaptivePolicyRecommendation, "key" | "contextKey" | "rationale" | "exploration" | "score" | "traceLimit" | "patternLimit" | "skillLimit" | "sectionOrder" | "features"> | null;
   traces: ApplicationEntityInput[];
   patterns: ApplicationEntityInput[];
   skills: ApplicationEntityInput[];
@@ -1814,10 +1852,11 @@ export async function logCognitiveApplication(params: {
     sql: `
       INSERT INTO cognitive_applications (
         id, user_id, session_id, trace_id, problem, endpoint,
-        repo_profile_json, materialized_pattern_id, materialized_skill_id, retry_count, baseline_group_key, baseline_snapshot_json,
+        repo_profile_json, materialized_pattern_id, materialized_skill_id, policy_key, policy_context_key, policy_snapshot_json, policy_reward,
+        retry_count, baseline_group_key, baseline_snapshot_json,
         accepted_trace_id, accepted_pattern_id, accepted_skill_id, final_outcome, time_to_resolution_ms,
         verification_summary_json, created_at, updated_at
-      ) VALUES (?, ?, ?, NULL, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?)
+      ) VALUES (?, ?, ?, NULL, ?, ?, ?, NULL, NULL, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?)
     `,
     args: [
       applicationId,
@@ -1826,6 +1865,9 @@ export async function logCognitiveApplication(params: {
       params.problem,
       params.endpoint,
       params.repoProfile ? JSON.stringify(params.repoProfile) : null,
+      params.policy?.key ?? null,
+      params.policy?.contextKey ?? null,
+      params.policy ? JSON.stringify(params.policy) : null,
       now,
       now,
     ],
@@ -1888,6 +1930,10 @@ export async function logCognitiveApplication(params: {
       repoProfileJson: params.repoProfile ? JSON.stringify(params.repoProfile) : null,
       materializedPatternId: null,
       materializedSkillId: null,
+      policyKey: params.policy?.key ?? null,
+      policyContextKey: params.policy?.contextKey ?? null,
+      policySnapshotJson: params.policy ? JSON.stringify(params.policy) : null,
+      policyReward: null,
       retryCount: null,
       baselineGroupKey: null,
       baselineSnapshotJson: null,
@@ -3228,6 +3274,107 @@ function deriveBaselineGroupKey(params: {
     .join(":");
 }
 
+function summarizeAdaptivePolicyRows(
+  rows: CognitiveApplication[],
+  contextKey: string,
+): AdaptivePolicySummary[] {
+  const grouped = new Map<AdaptivePolicyKey, CognitiveApplication[]>();
+  for (const row of rows) {
+    if (!row.policyKey) {
+      continue;
+    }
+    const existing = grouped.get(row.policyKey) ?? [];
+    existing.push(row);
+    grouped.set(row.policyKey, existing);
+  }
+
+  return [...grouped.entries()].map(([policyKey, applications]) => {
+    const resolved = applications.filter((application) => application.finalOutcome != null);
+    const rewards = resolved
+      .map((application) => application.policyReward)
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    const retryValues = resolved
+      .map((application) => application.retryCount)
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    const timeValues = resolved
+      .map((application) => application.timeToResolutionMs)
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+
+    return {
+      policyKey,
+      contextKey,
+      sampleCount: applications.length,
+      resolvedCount: resolved.length,
+      successCount: resolved.filter((application) => application.finalOutcome === "success").length,
+      verifiedSuccessCount: resolved.filter((application) => application.finalOutcome === "success" && verificationPassed(parseObject(application.verificationSummaryJson)) === true).length,
+      acceptedCount: resolved.filter((application) => Boolean(application.acceptedTraceId || application.acceptedPatternId || application.acceptedSkillId)).length,
+      avgReward:
+        rewards.length === 0
+          ? 0
+          : rewards.reduce((total, reward) => total + reward, 0) / rewards.length,
+      avgRetries:
+        retryValues.length === 0
+          ? null
+          : retryValues.reduce((total, value) => total + value, 0) / retryValues.length,
+      avgTimeToResolutionMs:
+        timeValues.length === 0
+          ? null
+          : timeValues.reduce((total, value) => total + value, 0) / timeValues.length,
+    };
+  });
+}
+
+async function listAdaptivePolicyApplications(userId: string, contextKey?: string): Promise<CognitiveApplication[]> {
+  await ensureInitialized();
+  const client = getDb();
+  const result = await client.execute({
+    sql: `
+      SELECT *
+      FROM cognitive_applications
+      WHERE user_id = ?
+        AND policy_key IS NOT NULL
+        AND (? IS NULL OR policy_context_key = ?)
+      ORDER BY created_at DESC
+      LIMIT 250
+    `,
+    args: [userId, contextKey ?? null, contextKey ?? null],
+  });
+  return result.rows.map((row) => rowToApplication(row as Record<string, unknown>));
+}
+
+export async function recommendAdaptivePolicyForUser(params: {
+  userId: string;
+  problem: string;
+  endpoint: string;
+  technologies?: string[];
+  repoProfile?: Record<string, unknown> | null;
+  baseTraceLimit?: number;
+}): Promise<AdaptivePolicyRecommendation> {
+  const features = buildAdaptivePolicyFeatures({
+    problem: params.problem,
+    endpoint: params.endpoint,
+    technologies: params.technologies,
+    repoProfile: params.repoProfile,
+  });
+  const contextKey = buildAdaptivePolicyContextKey(features);
+  const [contextApplications, globalApplications] = await Promise.all([
+    listAdaptivePolicyApplications(params.userId, contextKey),
+    listAdaptivePolicyApplications(params.userId),
+  ]);
+  return recommendAdaptivePolicy({
+    features,
+    baseTraceLimit: params.baseTraceLimit,
+    contextStats: summarizeAdaptivePolicyRows(contextApplications, contextKey),
+    globalStats: summarizeAdaptivePolicyRows(globalApplications, "*"),
+  });
+}
+
+export async function getAdaptivePolicySummaries(userId: string): Promise<AdaptivePolicySummary[]> {
+  const applications = await listAdaptivePolicyApplications(userId);
+  return summarizeAdaptivePolicyRows(applications, "*")
+    .sort((left, right) => right.avgReward - left.avgReward || right.sampleCount - left.sampleCount);
+}
+
 async function computeBaselineSnapshot(params: {
   userId: string;
   baselineGroupKey: string;
@@ -3674,7 +3821,33 @@ export async function updateApplicationOutcome(params: {
     sql: `SELECT * FROM cognitive_applications WHERE id = ? LIMIT 1`,
     args: [params.applicationId],
   });
-  return refreshed.rows[0] ? rowToApplication(refreshed.rows[0] as Record<string, unknown>) : null;
+  const nextApplication = refreshed.rows[0] ? rowToApplication(refreshed.rows[0] as Record<string, unknown>) : null;
+  if (!nextApplication) {
+    return null;
+  }
+
+  if (nextApplication.policyKey) {
+    const acceptedEntity = Boolean(
+      nextApplication.acceptedTraceId || nextApplication.acceptedPatternId || nextApplication.acceptedSkillId,
+    );
+    const policyReward = computeAdaptivePolicyReward({
+      accepted: acceptedEntity,
+      acceptedEntity,
+      materializedEntity: Boolean(nextApplication.materializedPatternId || nextApplication.materializedSkillId),
+      finalOutcome: nextApplication.finalOutcome,
+      timeToResolutionMs: nextApplication.timeToResolutionMs,
+      retryCount: nextApplication.retryCount,
+      verificationPassed: verificationPassed(parseObject(nextApplication.verificationSummaryJson)) ?? undefined,
+      baseline: nextApplication.baselineSnapshotJson ? (parseObject(nextApplication.baselineSnapshotJson) as BaselineSnapshot) : null,
+    });
+    await client.execute({
+      sql: `UPDATE cognitive_applications SET policy_reward = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+      args: [policyReward, new Date().toISOString(), params.applicationId, params.userId],
+    });
+    nextApplication.policyReward = policyReward;
+  }
+
+  return nextApplication;
 }
 
 export async function publishSkill(params: {
@@ -4238,6 +4411,8 @@ export async function generateRetrievalEvalDataset(params: {
     const prediction: RetrievalEvalDatasetRecord["prediction"] = {
       applicationId: application.id,
       sessionId: application.sessionId,
+      policyKey: application.policyKey ?? undefined,
+      policyContextKey: application.policyContextKey ?? undefined,
       traces: traceMatches.map((match) => ({ id: match.entityId })),
       patterns: patternMatches.map((match) => ({ id: match.entityId })),
       skills: skillMatches.map((match) => ({ id: match.entityId })),

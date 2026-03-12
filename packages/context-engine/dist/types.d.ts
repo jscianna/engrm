@@ -15,6 +15,8 @@ export interface FatHippoConfig {
     cognitiveHeartbeatEnabled?: boolean;
     /** Shared learning opt-in for sanitized traces. Default: true */
     shareEligibleByDefault?: boolean;
+    /** Enable local adaptive strategy selection for cognitive retrieval. Default: true */
+    adaptivePolicyEnabled?: boolean;
 }
 export interface Memory {
     id: string;

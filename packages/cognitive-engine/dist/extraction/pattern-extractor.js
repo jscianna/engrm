@@ -27,7 +27,7 @@ export class PatternExtractor {
         }
         // Convert to TraceCluster objects
         const result = [];
-        for (const [key, clusterTraces] of clusters) {
+        for (const [, clusterTraces] of clusters) {
             // Only include clusters with minimum traces
             if (clusterTraces.length < (this.config.minTracesForPattern || 3)) {
                 continue;

@@ -174,6 +174,30 @@ export interface SkillContent {
 
 export type SkillStatus = 'draft' | 'active' | 'stale' | 'deprecated';
 
+export type AdaptivePolicyKey =
+  | 'balanced_default'
+  | 'trace_first'
+  | 'pattern_first'
+  | 'skill_first';
+
+export type AdaptivePolicySection =
+  | 'local_patterns'
+  | 'global_patterns'
+  | 'traces'
+  | 'skills';
+
+export interface AdaptivePolicyRecommendation {
+  key: AdaptivePolicyKey;
+  contextKey: string;
+  traceLimit: number;
+  patternLimit: number;
+  skillLimit: number;
+  sectionOrder: AdaptivePolicySection[];
+  rationale: string;
+  exploration: boolean;
+  score: number;
+}
+
 // ============================================================================
 // API TYPES
 // ============================================================================
@@ -269,10 +293,12 @@ export interface GetRelevantTracesRequest {
   problem: string;
   context?: Partial<TraceContext>;
   limit?: number;
+  adaptivePolicy?: boolean;
 }
 
 export interface GetRelevantTracesResponse {
   applicationId?: string;
+  policy?: AdaptivePolicyRecommendation | null;
   traces: CodingTrace[];
   patterns: Pattern[];
   skills: SynthesizedSkill[];
@@ -298,6 +324,8 @@ export interface RetrievalEvalFixture {
 export interface RetrievalEvalPrediction {
   applicationId?: string;
   sessionId?: string;
+  policyKey?: AdaptivePolicyKey;
+  policyContextKey?: string;
   traces: Array<{ id: string }>;
   patterns: Array<{ id: string }>;
   skills: Array<{ id: string }>;
@@ -399,6 +427,7 @@ export interface CognitiveEngineConfig {
   // Context injection
   injectRelevantTraces: boolean;
   injectPatterns: boolean;
+  adaptivePolicyEnabled?: boolean;
   maxInjectedTraces: number;    // Default: 5
   maxInjectedPatterns: number;  // Default: 3
 }

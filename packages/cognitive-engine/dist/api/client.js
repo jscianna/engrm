@@ -63,6 +63,7 @@ export class CognitiveClient {
         });
         return {
             applicationId: response.applicationId,
+            policy: response.policy || null,
             traces: response.traces || [],
             patterns: response.patterns || [],
             skills: response.skills || [],
@@ -75,12 +76,42 @@ export class CognitiveClient {
         const response = await this.request(`/cognitive/traces?limit=${limit}`);
         return response.traces || [];
     }
-    async exportEvalFixtures(limit = 100, acceptedOnly = false) {
+    async exportEvalFixtures(limit = 100, acceptedOnly = false, dataset = "generated") {
         const params = new URLSearchParams({
             limit: String(limit),
             acceptedOnly: acceptedOnly ? "1" : "0",
+            dataset,
         });
         return this.request(`/cognitive/eval/fixtures?${params.toString()}`);
+    }
+    async runBenchmark(dataset, predictions, thresholds) {
+        return this.request("/cognitive/eval/benchmarks", {
+            method: "POST",
+            body: JSON.stringify({ dataset, predictions, thresholds }),
+        });
+    }
+    async getBenchmarkRuns(limit = 10) {
+        return this.request(`/cognitive/eval/benchmarks?limit=${limit}`);
+    }
+    async getPrivacySettings() {
+        const response = await this.request("/cognitive/settings");
+        return response.settings;
+    }
+    async updatePrivacySettings(input) {
+        const response = await this.request("/cognitive/settings", {
+            method: "POST",
+            body: JSON.stringify(input),
+        });
+        return response.settings;
+    }
+    async exportCognitiveData() {
+        return this.request("/cognitive/privacy/export");
+    }
+    async deleteCognitiveData() {
+        const response = await this.request("/cognitive/privacy", {
+            method: "DELETE",
+        });
+        return response.result;
     }
     /**
      * Get trace by ID

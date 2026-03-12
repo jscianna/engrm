@@ -3,7 +3,7 @@
  *
  * Handles communication with the FatHippo API for trace storage and retrieval.
  */
-import type { CodingTrace, Pattern, RetrievalEvalDataset, SynthesizedSkill, StoreTraceResponse, GetRelevantTracesRequest, GetRelevantTracesResponse, PatternFeedbackRequest, CognitiveEngineConfig } from '../types.js';
+import type { CognitiveDataDeletionResult, CognitivePrivacyExport, CognitiveUserSettings, CodingTrace, Pattern, RetrievalEvalDataset, SynthesizedSkill, StoreTraceResponse, GetRelevantTracesRequest, GetRelevantTracesResponse, PatternFeedbackRequest, CognitiveEngineConfig } from '../types.js';
 export declare class CognitiveClient {
     private apiKey;
     private baseUrl;
@@ -21,7 +21,15 @@ export declare class CognitiveClient {
      * Get recent traces
      */
     getRecentTraces(limit?: number): Promise<CodingTrace[]>;
-    exportEvalFixtures(limit?: number, acceptedOnly?: boolean): Promise<RetrievalEvalDataset>;
+    exportEvalFixtures(limit?: number, acceptedOnly?: boolean, dataset?: "generated" | "curated"): Promise<RetrievalEvalDataset>;
+    runBenchmark(dataset: "generated" | "curated", predictions: unknown[], thresholds?: Record<string, unknown>): Promise<Record<string, unknown>>;
+    getBenchmarkRuns(limit?: number): Promise<{
+        runs: Record<string, unknown>[];
+    }>;
+    getPrivacySettings(): Promise<CognitiveUserSettings>;
+    updatePrivacySettings(input: Partial<Pick<CognitiveUserSettings, "sharedLearningEnabled" | "benchmarkInclusionEnabled" | "traceRetentionDays">>): Promise<CognitiveUserSettings>;
+    exportCognitiveData(): Promise<CognitivePrivacyExport>;
+    deleteCognitiveData(): Promise<CognitiveDataDeletionResult>;
     /**
      * Get trace by ID
      */
