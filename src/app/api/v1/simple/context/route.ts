@@ -23,9 +23,15 @@ import { isObject } from "@/lib/api-v1";
 import { detectSecretQueryIntent, VAULT_HINT_MESSAGE } from "@/lib/secrets";
 import { expandQuery, detectQueryIntent, mergeExpandedResults } from "@/lib/query-expansion";
 import { calculateTypeBoost, type MemoryType } from "@/lib/memory-classifier";
-import { embedWithHyDE } from "@/lib/hyde";
+import { embedWithHyDE, embedWithHyDEIfNeeded } from "@/lib/hyde";
 import { parseTemporalQuery, applyTemporalBoost } from "@/lib/temporal";
-import { rerankMemories } from "@/lib/reranker";
+import { rerankMemories, rerankIfNeeded } from "@/lib/reranker";
+import {
+  getRetrievalConfig,
+  computeRetrievalConfidence,
+  createHostedMetrics,
+  type HostedServiceMetrics,
+} from "@/lib/retrieval-config";
 import { localRetrieve, localStoreResult, recordShadowSample } from "@/lib/local-retrieval";
 import { isInEdgeRollout } from "@/lib/edge-rollout";
 import {
@@ -148,8 +154,20 @@ export async function POST(request: Request) {
       ? Math.max(1.0, Math.min(2.0, body.typeBoostFactor))
       : 1.3; // Default: 30% boost for type match
 
+    // Legacy flags (still honored for backward compatibility)
     const enableHyDE = body.hyde === true;
     const enableRerank = body.rerank === true;
+    
+    // New confidence-gated hosted services (from config or request override)
+    const retrievalConfig = getRetrievalConfig();
+    const hostedHydeEnabled = body.hostedHyde === true || retrievalConfig.hostedHydeEnabled;
+    const hostedRerankEnabled = body.hostedRerank === true || retrievalConfig.hostedRerankEnabled;
+    const confidenceThreshold = typeof body.confidenceThreshold === "number"
+      ? Math.max(0.5, Math.min(0.95, body.confidenceThreshold))
+      : retrievalConfig.confidenceThreshold;
+    
+    // Initialize metrics for hosted service tracking
+    const hostedMetrics: HostedServiceMetrics = createHostedMetrics();
     const enableTemporal = body.temporal !== false;
     const enableEdgeFirst = body.edgeFirst === true;
     const enableEdgeShadow = enableEdgeFirst && body.edgeShadowMode === true;
@@ -241,6 +259,7 @@ export async function POST(request: Request) {
     let criticalMemories: typeof allCritical = [];
     let hydeDocument: string | undefined;
     if (allCritical.length > 0 && maxCritical > 0) {
+      // First pass: get initial embedding (may use legacy HyDE flag)
       const criticalVector = enableHyDE
         ? (await embedWithHyDE(message, true)).embedding
         : await embedText(message);
@@ -252,22 +271,50 @@ export async function POST(request: Request) {
         topK: maxCritical * 4,
       });
 
+      // Compute retrieval confidence from critical hits
+      const criticalScores = criticalHits.map((h) => h.score);
+      const criticalConfidence = computeRetrievalConfidence(criticalScores, retrievalConfig);
+      hostedMetrics.retrievalConfidence = Math.max(hostedMetrics.retrievalConfidence, criticalConfidence);
+
       let candidateMemories = criticalHits
         .filter((h) => h.score > minCriticalRelevance)
         .map((h) => criticalById.get(h.item.id) ?? null)
         .filter((memory): memory is NonNullable<typeof memory> => Boolean(memory));
 
-      if (enableRerank && candidateMemories.length > maxCritical) {
-        const rerankResult = await rerankMemories(message, candidateMemories, {
-          topK: maxCritical * 4,
-          returnK: maxCritical,
-          minScore: 60,
-        });
+      // Confidence-gated reranking for critical memories
+      if ((enableRerank || hostedRerankEnabled) && candidateMemories.length > maxCritical) {
+        if (hostedRerankEnabled) {
+          // Use confidence-gated reranker
+          const rerankStart = performance.now();
+          const rerankResult = await rerankIfNeeded(
+            message,
+            candidateMemories,
+            criticalConfidence,
+            confidenceThreshold,
+            { topK: maxCritical * 4, returnK: maxCritical, minScore: 60 }
+          );
+          hostedMetrics.rerankLatencyMs = Math.round(performance.now() - rerankStart);
+          hostedMetrics.rerankGated = rerankResult.gated;
+          hostedMetrics.usedHostedRerank = !rerankResult.gated && rerankResult.success;
 
-        if (rerankResult.success) {
-          candidateMemories = rerankResult.memories;
+          if (rerankResult.success) {
+            candidateMemories = rerankResult.memories;
+          } else {
+            candidateMemories = candidateMemories.slice(0, maxCritical);
+          }
         } else {
-          candidateMemories = candidateMemories.slice(0, maxCritical);
+          // Legacy: always rerank when flag is set
+          const rerankResult = await rerankMemories(message, candidateMemories, {
+            topK: maxCritical * 4,
+            returnK: maxCritical,
+            minScore: 60,
+          });
+
+          if (rerankResult.success) {
+            candidateMemories = rerankResult.memories;
+          } else {
+            candidateMemories = candidateMemories.slice(0, maxCritical);
+          }
         }
       } else {
         candidateMemories = candidateMemories.slice(0, maxCritical);
@@ -297,11 +344,18 @@ export async function POST(request: Request) {
               // Use HyDE for the first (primary) query when enabled
               // HyDE generates a hypothetical answer and embeds that instead of raw query
               let vector: number[];
-              if (queryIndex === 0 && enableHyDE) {
-                const hydeResult = await embedWithHyDE(queryText, true);
-                vector = hydeResult.embedding;
-                if (hydeResult.usedHyDE) {
-                  hydeDocument = hydeResult.hypotheticalDocument;
+              if (queryIndex === 0 && (enableHyDE || hostedHydeEnabled)) {
+                if (hostedHydeEnabled && !enableHyDE) {
+                  // Confidence-gated HyDE: will be applied after first-pass retrieval
+                  // For now, just embed normally
+                  vector = await embedText(queryText);
+                } else {
+                  // Legacy: always use HyDE when flag is set
+                  const hydeResult = await embedWithHyDE(queryText, true);
+                  vector = hydeResult.embedding;
+                  if (hydeResult.usedHyDE) {
+                    hydeDocument = hydeResult.hypotheticalDocument;
+                  }
                 }
               } else {
                 vector = await embedText(queryText);
@@ -430,16 +484,78 @@ export async function POST(request: Request) {
           relevantMemories = boosted.map((s) => s.memory);
         }
 
-        // LLM Reranking: use LLM to judge relevance and return top 5
-        if (enableRerank && relevantMemories.length > 5) {
-          const rerankResult = await rerankMemories(message, relevantMemories, {
-            topK: 20,
-            returnK: 5,
-            minScore: 60,
-          });
+        // Compute retrieval confidence from vector results for gating decisions
+        const relevantScores = vectorResults.map((r) => r.score);
+        const relevantConfidence = computeRetrievalConfidence(relevantScores, retrievalConfig);
+        hostedMetrics.retrievalConfidence = Math.max(hostedMetrics.retrievalConfidence, relevantConfidence);
 
-          if (rerankResult.success) {
-            relevantMemories = rerankResult.memories;
+        // Confidence-gated HyDE: re-embed with HyDE if confidence is low
+        if (hostedHydeEnabled && !enableHyDE && relevantConfidence < confidenceThreshold && relevantMemories.length < 3) {
+          const hydeStart = performance.now();
+          const hydeResult = await embedWithHyDEIfNeeded(message, relevantConfidence, confidenceThreshold);
+          hostedMetrics.hydeLatencyMs = Math.round(performance.now() - hydeStart);
+          hostedMetrics.hydeGated = hydeResult.gated;
+          hostedMetrics.usedHostedHyde = !hydeResult.gated;
+          
+          if (!hydeResult.gated && hydeResult.hypotheticalDocument) {
+            hydeDocument = hydeResult.hypotheticalDocument;
+            // Re-search with HyDE embedding for better recall
+            const hydeHits = await semanticSearchVectors({
+              userId: identity.userId,
+              query: message,
+              vector: hydeResult.embedding,
+              topK: vectorTopK,
+            });
+            const hydeIds = hydeHits
+              .filter((h) => h.score >= minVectorSimilarity)
+              .map((h) => h.item.id);
+            
+            // Merge HyDE results with existing (HyDE results first)
+            const existingIds = new Set(relevantMemories.map((m) => m.id));
+            const newIds = hydeIds.filter((id) => !existingIds.has(id));
+            if (newIds.length > 0) {
+              const newMemories = filterSensitiveMemories(await getAgentMemoriesByIds({
+                userId: identity.userId,
+                ids: newIds,
+                excludeAbsorbed: true,
+              }));
+              relevantMemories = [...relevantMemories, ...newMemories.filter(
+                (m) => m.importanceTier === "high" || m.importanceTier === "normal"
+              )];
+            }
+          }
+        }
+
+        // LLM Reranking: use LLM to judge relevance and return top 5
+        if ((enableRerank || hostedRerankEnabled) && relevantMemories.length > 5) {
+          if (hostedRerankEnabled && !enableRerank) {
+            // Confidence-gated reranking
+            const rerankStart = performance.now();
+            const rerankResult = await rerankIfNeeded(
+              message,
+              relevantMemories,
+              relevantConfidence,
+              confidenceThreshold,
+              { topK: 20, returnK: 5, minScore: 60 }
+            );
+            hostedMetrics.rerankLatencyMs = Math.max(hostedMetrics.rerankLatencyMs, Math.round(performance.now() - rerankStart));
+            hostedMetrics.rerankGated = hostedMetrics.rerankGated || rerankResult.gated;
+            hostedMetrics.usedHostedRerank = hostedMetrics.usedHostedRerank || (!rerankResult.gated && rerankResult.success);
+
+            if (rerankResult.success) {
+              relevantMemories = rerankResult.memories;
+            }
+          } else {
+            // Legacy: always rerank when flag is set
+            const rerankResult = await rerankMemories(message, relevantMemories, {
+              topK: 20,
+              returnK: 5,
+              minScore: 60,
+            });
+
+            if (rerankResult.success) {
+              relevantMemories = rerankResult.memories;
+            }
           }
         }
 
@@ -578,6 +694,29 @@ export async function POST(request: Request) {
     headers["X-FatHippo-Compaction-Risk"] = compactionRiskScore.toFixed(4);
     headers["X-FatHippo-Flush-Quality"] = flushQuality.toFixed(4);
     headers["X-FatHippo-Constraint-Diff-Missing"] = String(missingConstraints);
+
+    // Hosted service metrics (P0#3: confidence-gated HyDE/rerank)
+    if (hostedHydeEnabled || hostedRerankEnabled) {
+      headers["X-FatHippo-Hosted-Enabled"] = "on";
+      headers["X-FatHippo-Retrieval-Confidence"] = hostedMetrics.retrievalConfidence.toFixed(4);
+      headers["X-FatHippo-Confidence-Threshold"] = confidenceThreshold.toFixed(2);
+      
+      if (hostedHydeEnabled) {
+        headers["X-FatHippo-Hyde-Used"] = hostedMetrics.usedHostedHyde ? "true" : "false";
+        headers["X-FatHippo-Hyde-Gated"] = hostedMetrics.hydeGated ? "true" : "false";
+        if (hostedMetrics.hydeLatencyMs > 0) {
+          headers["X-FatHippo-Hyde-Latency-Ms"] = String(hostedMetrics.hydeLatencyMs);
+        }
+      }
+      
+      if (hostedRerankEnabled) {
+        headers["X-FatHippo-Rerank-Used"] = hostedMetrics.usedHostedRerank ? "true" : "false";
+        headers["X-FatHippo-Rerank-Gated"] = hostedMetrics.rerankGated ? "true" : "false";
+        if (hostedMetrics.rerankLatencyMs > 0) {
+          headers["X-FatHippo-Rerank-Latency-Ms"] = String(hostedMetrics.rerankLatencyMs);
+        }
+      }
+    }
 
     return new Response(context, {
       status: 200,
