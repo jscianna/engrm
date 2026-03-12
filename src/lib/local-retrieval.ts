@@ -8,6 +8,7 @@ type CacheEntry = {
   memoryIds: string[];
   confidence: number;
   updatedAt: number;
+  lastAccessedAt: number;
 };
 
 export type LocalRetrievalMetrics = {
@@ -18,6 +19,7 @@ export type LocalRetrievalMetrics = {
   fuzzyHits: number;
   stores: number;
   evictions: number;
+  invalidations: number;
   hitRate: number;
   users: number;
   entries: number;
@@ -29,7 +31,11 @@ export type LocalRetrievalMetrics = {
 const MAX_ENTRIES_PER_USER = 200;
 const TTL_MS = 15 * 60 * 1000;
 
+// userId -> normalizedQuery -> cache entry
 const cache = new Map<string, Map<string, CacheEntry>>();
+// userId -> memoryId -> set(normalizedQuery)
+const memoryToQueryIndex = new Map<string, Map<string, Set<string>>>();
+
 const metrics = {
   lookups: 0,
   hits: 0,
@@ -38,6 +44,7 @@ const metrics = {
   fuzzyHits: 0,
   stores: 0,
   evictions: 0,
+  invalidations: 0,
   shadowSamples: 0,
   shadowOverlapSum: 0,
 };
@@ -71,10 +78,75 @@ function getUserCache(userId: string): Map<string, CacheEntry> {
   return created;
 }
 
+function getUserIndex(userId: string): Map<string, Set<string>> {
+  const existing = memoryToQueryIndex.get(userId);
+  if (existing) return existing;
+  const created = new Map<string, Set<string>>();
+  memoryToQueryIndex.set(userId, created);
+  return created;
+}
+
+function addIndexLinks(userId: string, key: string, memoryIds: string[]): void {
+  const idx = getUserIndex(userId);
+  for (const id of memoryIds) {
+    let keys = idx.get(id);
+    if (!keys) {
+      keys = new Set<string>();
+      idx.set(id, keys);
+    }
+    keys.add(key);
+  }
+}
+
+function removeIndexLinks(userId: string, key: string, memoryIds: string[]): void {
+  const idx = memoryToQueryIndex.get(userId);
+  if (!idx) return;
+
+  for (const id of memoryIds) {
+    const keys = idx.get(id);
+    if (!keys) continue;
+    keys.delete(key);
+    if (keys.size === 0) idx.delete(id);
+  }
+
+  if (idx.size === 0) memoryToQueryIndex.delete(userId);
+}
+
 function calibrateConfidence(similarity: number, ageMs: number, base = 0.85): number {
   const agePenalty = Math.min(0.2, ageMs / TTL_MS / 5);
   const score = base * 0.5 + similarity * 0.5 - agePenalty;
   return Math.max(0.6, Math.min(0.98, score));
+}
+
+function touchEntry(entry: CacheEntry): void {
+  entry.lastAccessedAt = Date.now();
+}
+
+function evictExpiredAndOverflow(userId: string): void {
+  const userCache = cache.get(userId);
+  if (!userCache) return;
+  const now = Date.now();
+
+  for (const [key, entry] of userCache.entries()) {
+    if (now - entry.updatedAt > TTL_MS) {
+      userCache.delete(key);
+      removeIndexLinks(userId, key, entry.memoryIds);
+      metrics.evictions += 1;
+    }
+  }
+
+  while (userCache.size > MAX_ENTRIES_PER_USER) {
+    // LRU eviction by lastAccessedAt, fallback to updatedAt
+    const oldest = [...userCache.entries()].sort(
+      (a, b) => (a[1].lastAccessedAt || a[1].updatedAt) - (b[1].lastAccessedAt || b[1].updatedAt),
+    )[0];
+
+    if (!oldest) break;
+    const [key, entry] = oldest;
+    userCache.delete(key);
+    removeIndexLinks(userId, key, entry.memoryIds);
+    metrics.evictions += 1;
+  }
 }
 
 export async function localRetrieve(query: string, userId: string): Promise<LocalRetrievalResult> {
@@ -86,6 +158,7 @@ export async function localRetrieve(query: string, userId: string): Promise<Loca
 
   const direct = userCache.get(key);
   if (direct && now - direct.updatedAt <= TTL_MS) {
+    touchEntry(direct);
     metrics.hits += 1;
     metrics.directHits += 1;
     return {
@@ -101,6 +174,7 @@ export async function localRetrieve(query: string, userId: string): Promise<Loca
   for (const [k, entry] of userCache.entries()) {
     if (now - entry.updatedAt > TTL_MS) {
       userCache.delete(k);
+      removeIndexLinks(userId, k, entry.memoryIds);
       metrics.evictions += 1;
       continue;
     }
@@ -113,6 +187,7 @@ export async function localRetrieve(query: string, userId: string): Promise<Loca
 
   if (bestKey && bestScore >= 0.72) {
     const best = userCache.get(bestKey)!;
+    touchEntry(best);
     metrics.hits += 1;
     metrics.fuzzyHits += 1;
     return {
@@ -131,20 +206,58 @@ export function localStoreResult(userId: string, query: string, memoryIds: strin
 
   const userCache = getUserCache(userId);
   const key = normalizeQuery(query);
+  const normalizedIds = Array.from(new Set(memoryIds)).slice(0, 20);
+
+  const existing = userCache.get(key);
+  if (existing) {
+    removeIndexLinks(userId, key, existing.memoryIds);
+  }
+
+  const now = Date.now();
   userCache.set(key, {
-    memoryIds: Array.from(new Set(memoryIds)).slice(0, 20),
+    memoryIds: normalizedIds,
     confidence: Math.max(0, Math.min(1, confidence)),
-    updatedAt: Date.now(),
+    updatedAt: now,
+    lastAccessedAt: now,
   });
 
-  if (userCache.size > MAX_ENTRIES_PER_USER) {
-    const entries = [...userCache.entries()].sort((a, b) => a[1].updatedAt - b[1].updatedAt);
-    const removeCount = userCache.size - MAX_ENTRIES_PER_USER;
-    for (let i = 0; i < removeCount; i += 1) {
-      userCache.delete(entries[i][0]);
-      metrics.evictions += 1;
-    }
+  addIndexLinks(userId, key, normalizedIds);
+  evictExpiredAndOverflow(userId);
+}
+
+// Invalidate local cache entries that reference any of these memory IDs
+export function invalidateLocalResultsByMemoryIds(userId: string, memoryIds: string[]): number {
+  const idx = memoryToQueryIndex.get(userId);
+  const userCache = cache.get(userId);
+  if (!idx || !userCache || memoryIds.length === 0) return 0;
+
+  const keysToDelete = new Set<string>();
+  for (const memoryId of memoryIds) {
+    const keys = idx.get(memoryId);
+    if (!keys) continue;
+    for (const key of keys) keysToDelete.add(key);
   }
+
+  let removed = 0;
+  for (const key of keysToDelete) {
+    const entry = userCache.get(key);
+    if (!entry) continue;
+    userCache.delete(key);
+    removeIndexLinks(userId, key, entry.memoryIds);
+    removed += 1;
+  }
+
+  if (removed > 0) metrics.invalidations += removed;
+  return removed;
+}
+
+export function invalidateAllLocalResultsForUser(userId: string): void {
+  const userCache = cache.get(userId);
+  if (userCache) {
+    metrics.invalidations += userCache.size;
+  }
+  cache.delete(userId);
+  memoryToQueryIndex.delete(userId);
 }
 
 export function recordShadowSample(overlapAtK: number): void {
@@ -161,8 +274,8 @@ export function getLocalRetrievalMetrics(): LocalRetrievalMetrics {
     hitRate: metrics.lookups > 0 ? Number((metrics.hits / metrics.lookups).toFixed(4)) : 0,
     users: cache.size,
     entries: totalEntries,
-    shadowAvgOverlap: metrics.shadowSamples > 0 
-      ? Number((metrics.shadowOverlapSum / metrics.shadowSamples).toFixed(4)) 
+    shadowAvgOverlap: metrics.shadowSamples > 0
+      ? Number((metrics.shadowOverlapSum / metrics.shadowSamples).toFixed(4))
       : 0,
   };
 }

@@ -19,6 +19,7 @@ import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 import { detectSecretCategories, VAULT_HINT_MESSAGE } from "@/lib/secrets";
+import { invalidateAllLocalResultsForUser, invalidateLocalResultsByMemoryIds } from "@/lib/local-retrieval";
 import type { MemoryImportanceTier, MemoryKind } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -167,6 +168,9 @@ export async function POST(request: Request) {
 
             await updateAgentMemory(identity.userId, existing.id, { text: newText });
 
+            // Invalidate cache entries referencing this updated memory.
+            invalidateLocalResultsByMemoryIds(identity.userId, [existing.id]);
+
             // Update vector
             const newEmbedding = await embedText(newText);
             await upsertMemoryVector({
@@ -219,6 +223,9 @@ export async function POST(request: Request) {
         // Best effort
       }
     }
+
+    // New memory can change top-K retrieval relevance; invalidate user hot-cache.
+    invalidateAllLocalResultsForUser(identity.userId);
 
     return Response.json({
       id: memory.id,

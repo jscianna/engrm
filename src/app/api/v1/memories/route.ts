@@ -11,6 +11,7 @@ import {
   listAgentMemories 
 } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
+import { invalidateAllLocalResultsForUser } from "@/lib/local-retrieval";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject, normalizeIsoTimestamp, normalizeLimit, resolveNamespaceIdOrError } from "@/lib/api-v1";
 import type { MemoryKind } from "@/lib/types";
@@ -106,6 +107,9 @@ export async function POST(request: Request) {
         sessionId,
         isEncrypted: true,
       });
+
+      // Invalidate hot-cache because retrieval ranking may change with new memory.
+      invalidateAllLocalResultsForUser(identity.userId);
 
       return Response.json({ memory }, { status: 201 });
     }
@@ -256,6 +260,9 @@ export async function POST(request: Request) {
         // Entity linking is best-effort, don't fail the request
       }
     }
+
+    // Invalidate hot-cache because retrieval ranking may change with new memory.
+    invalidateAllLocalResultsForUser(identity.userId);
 
     return Response.json({ memory }, { status: 201 });
   } catch (error) {

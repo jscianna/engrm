@@ -2,6 +2,7 @@ import { deleteAgentMemoryById, getAgentMemoryById, updateAgentMemory } from "@/
 import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { recordMemoryDeleted } from "@/lib/rate-limiter";
+import { invalidateLocalResultsByMemoryIds } from "@/lib/local-retrieval";
 import { assertPreActionRecall } from "@/lib/pre-action-recall";
 
 export const runtime = "nodejs";
@@ -52,6 +53,9 @@ export async function PATCH(
       throw new MemryError("MEMORY_NOT_FOUND");
     }
 
+    // Invalidate any local retrieval cache entries referencing this memory.
+    invalidateLocalResultsByMemoryIds(identity.userId, [id]);
+
     const memory = await getAgentMemoryById(identity.userId, id, { excludeSensitive: true });
     return Response.json({ memory });
   } catch (error) {
@@ -78,6 +82,9 @@ export async function DELETE(
     if (!deleted) {
       throw new MemryError("MEMORY_NOT_FOUND");
     }
+
+    // Invalidate any local retrieval cache entries referencing this memory.
+    invalidateLocalResultsByMemoryIds(identity.userId, [id]);
 
     // Track storage reduction
     const sizeBytes = Buffer.byteLength(memory.text, "utf8");

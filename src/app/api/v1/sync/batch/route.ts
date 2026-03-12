@@ -9,6 +9,7 @@ import { validateApiKey } from "@/lib/api-auth";
 import { MemryError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 import { updateAgentMemory, deleteAgentMemoryById, insertAgentMemory } from "@/lib/db";
+import { invalidateAllLocalResultsForUser, invalidateLocalResultsByMemoryIds } from "@/lib/local-retrieval";
 import type { MemoryImportanceTier } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -179,6 +180,9 @@ async function processCreate(op: SyncOperation): Promise<void> {
     sessionId: typeof payload.sessionId === "string" ? payload.sessionId : null,
     metadata: isObject(payload.metadata) ? payload.metadata as Record<string, unknown> : null,
   });
+
+  // New memory can change retrieval top-K ordering.
+  invalidateAllLocalResultsForUser(op.userId);
 }
 
 async function processUpdate(op: SyncOperation): Promise<void> {
@@ -203,6 +207,9 @@ async function processUpdate(op: SyncOperation): Promise<void> {
   }
 
   await updateAgentMemory(op.userId, memoryId, updates);
+
+  // Updated memory text/title can stale local retrieval cache.
+  invalidateLocalResultsByMemoryIds(op.userId, [memoryId]);
 }
 
 async function processDelete(op: SyncOperation): Promise<void> {
@@ -214,4 +221,7 @@ async function processDelete(op: SyncOperation): Promise<void> {
   }
 
   await deleteAgentMemoryById(op.userId, memoryId);
+
+  // Remove stale cache entries that referenced deleted memory.
+  invalidateLocalResultsByMemoryIds(op.userId, [memoryId]);
 }
