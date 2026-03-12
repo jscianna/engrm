@@ -5,14 +5,14 @@
 <h1 align="center">FatHippo</h1>
 
 <p align="center">
-  <strong>OpenClaw's pluggable memory layer.</strong><br/>
-  Persistent, encrypted memory infrastructure for AI agents.
+  <strong>Private cognitive substrate for OpenClaw and AI coding agents.</strong><br/>
+  Connect it once, then let your agent get better by the day.
 </p>
 
 <p align="center">
   <a href="https://fathippo.ai">Website</a> •
   <a href="https://fathippo.ai/docs">Documentation</a> •
-  <a href="https://www.npmjs.com/package/@fathippo/context-engine">Context Engine</a>
+  <a href="https://www.npmjs.com/package/@fathippo/context-engine">OpenClaw Context Engine</a>
 </p>
 
 <p align="center">
@@ -24,271 +24,230 @@
 
 ---
 
-## What is FatHippo?
+## What FatHippo Is
 
-Every AI agent wakes up with amnesia. FatHippo fixes that.
+FatHippo started as memory infrastructure. It is now a cognitive substrate for coding agents.
 
-- **Persistent** — Memories survive sessions, restarts, and model switches
-- **Encrypted** — AES-256-GCM encryption at rest with per-user keys
-- **Automatic** — Auto-recall at conversation start, auto-capture of insights
-- **Cross-platform** — Works across Telegram, Discord, Slack, web, CLI
-- **Model-agnostic** — Claude, GPT, Gemini, local models — same memories everywhere
+When connected to an existing OpenClaw install, FatHippo can:
+
+- remember relevant project context across sessions
+- capture coding traces from real work
+- extract repeated fix patterns
+- synthesize reusable skills
+- learn better retrieval mixes over time
+- learn better debugging workflows over time
+- show lightweight proof that it helped, without interrupting the session
+
+The goal is simple: install it once, then let your agent become more useful every week.
 
 ---
 
-## Quick Start (OpenClaw)
+## Quick Start: Connect Your Existing OpenClaw
 
-The fastest way to add memory to your AI agent:
+If you already use OpenClaw, this is the main setup path.
 
 ```bash
-# Install the context engine
+# 1. Install the plugin
 openclaw plugins install @fathippo/context-engine
 
-# Configure as context engine
+# 2. Set it as the active context engine
 openclaw config set plugins.slots.contextEngine=fathippo-context-engine
+
+# 3. Add your FatHippo API key
 openclaw config set plugins.entries.fathippo-context-engine.config.apiKey=mem_xxx
 
-# Done. Memory is now automatic.
+# 4. Restart the gateway
+openclaw gateway restart
 ```
 
-Your agent now:
-- ✅ Injects relevant memories every turn (not just session start)
-- ✅ Auto-captures insights, preferences, decisions
-- ✅ Runs Dream Cycle on compaction (synthesis, not lossy summarization)
-- ✅ Inherits context to spawned subagents
-- ✅ Works across all chat surfaces
+After that, FatHippo starts working automatically:
+
+- relevant memory is injected each turn
+- coding traces are captured after meaningful work
+- patterns and skills are promoted from verified outcomes
+- retrieval and workflow strategy adapt privately over time
+- users see small “Fathippo helped” receipts when it materially contributed
+
+OpenClaw guide: [docs/api/openclaw-integration.md](/Users/johnscianna/Desktop/FatHippo/docs/api/openclaw-integration.md)
 
 ---
 
-## REST API
+## Better By The Day
 
-For custom integrations:
+FatHippo does not require end users to run RL hardware jobs.
 
-### Store a Memory
+Instead, it improves the agent with a safe private learning loop:
 
-```bash
-curl -X POST https://fathippo.ai/api/v1/simple/remember \
-  -H "Authorization: Bearer mem_xxx" \
-  -H "Content-Type: application/json" \
-  -d '{"text": "User prefers dark mode"}'
-```
+1. A real coding session happens.
+2. FatHippo captures the problem, tools used, reasoning, verification, and outcome.
+3. Repeated successful traces become patterns.
+4. Strong patterns become reusable skills.
+5. Future sessions get better retrieval, better workflow suggestions, and better context.
 
-### Get Context
+Today that learning loop includes:
 
-```bash
-curl -X POST https://fathippo.ai/api/v1/simple/context \
-  -H "Authorization: Bearer mem_xxx" \
-  -H "Content-Type: application/json" \
-  -d '{"message": "What are my preferences?"}'
-```
-
-### Search Memories
-
-```bash
-curl -X POST https://fathippo.ai/api/v1/search \
-  -H "Authorization: Bearer mem_xxx" \
-  -H "Content-Type: application/json" \
-  -d '{"query": "user preferences", "topK": 5}'
-```
-
-### Full API Reference
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/v1/simple/remember` | Store a memory |
-| `POST` | `/api/v1/simple/context` | Get relevant context for a message |
-| `POST` | `/api/v1/simple/recall` | Search memories |
-| `POST` | `/api/v1/search` | Advanced semantic search |
-| `GET` | `/api/v1/memories` | List all memories |
-| `DELETE` | `/api/v1/memories/:id` | Delete a memory |
+- structured trace capture
+- adaptive retrieval policy learning
+- adaptive tool-workflow learning
+- pattern promotion and decay
+- skill synthesis
+- benchmark and attribution plumbing
+- lightweight in-product receipts so users notice the value
 
 ---
 
-## Architecture
+## Product Shape
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Clients                                 │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │   OpenClaw   │  │   REST API   │  │   Python     │          │
-│  │   Plugin     │  │   Direct     │  │   SDK        │          │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘          │
-│         └──────────────────┼──────────────────┘                 │
-└────────────────────────────┼────────────────────────────────────┘
-                             │ HTTPS
-┌────────────────────────────▼────────────────────────────────────┐
-│                        FatHippo API                                │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Server-Side Encryption Layer                │   │
-│  │         AES-256-GCM with per-user derived keys           │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                            │                                    │
-│  ┌─────────────┐  ┌────────▼───────┐  ┌─────────────────────┐   │
-│  │   Turso     │  │    Qdrant      │  │   Redis (Upstash)   │   │
-│  │  (SQLite)   │  │    Cloud       │  │                     │   │
-│  │             │  │                │  │ • Embedding cache   │   │
-│  │ • Metadata  │  │ • Vectors      │  │ • Rate limiting     │   │
-│  │ • Users     │  │ • Similarity   │  │                     │   │
-│  │ • Encrypted │  │   Search       │  │                     │   │
-│  │   content   │  │                │  │                     │   │
-│  └─────────────┘  └────────────────┘  └─────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-```
+FatHippo is designed to be:
+
+- `silent by default` in the session itself
+- `visible in hindsight` through receipts and dashboards
+- `private by default` for raw traces and learning data
+- `OpenClaw-first` for the easiest install path
+
+The ideal experience is:
+
+1. User already has OpenClaw
+2. User connects FatHippo once
+3. FatHippo quietly starts helping
+4. The agent gets better on repeated bug classes and workflows
+5. The user can see proof without having to manage training
 
 ---
 
-## Security
+## Packages
 
-### Encryption
+This repo is now split into installable package boundaries:
 
-| Layer | Implementation |
-|-------|----------------|
-| **At Rest** | AES-256-GCM with per-user keys derived from master key + userId |
-| **In Transit** | TLS 1.3 |
-| **Embeddings** | Stored in Qdrant with encryption |
+| Package | Purpose |
+| --- | --- |
+| `@fathippo/context-engine` | OpenClaw plugin and easiest way to connect FatHippo |
+| `@fathippo/local` | Local-first retrieval, cache, and edge helpers |
+| `@fathippo/hosted` | Hosted sync and retrieval-upgrade helpers |
+| `@fathippo/cognition` | Cognitive substrate APIs and learning helpers |
 
-### Privacy Model
+There are also internal/supporting packages in this monorepo, including the web app, dashboards, examples, and test harnesses.
 
-- ✅ Database breach = encrypted blobs only
-- ✅ Per-user key derivation (no shared keys)
-- ✅ FatHippo employees cannot read your data
-- ⚠️ LLM-based features (entity extraction) use external providers*
+Example quickstarts live in [examples/README.md](/Users/johnscianna/Desktop/FatHippo/examples/README.md):
 
-*Confidential compute roadmap in progress for fully private inference.
-
-### Compliance
-
-- **GDPR Ready** — Delete endpoint for data removal
-- **Audit Logging** — All access logged
-- **SOC2 Hosting** — Deployed on Vercel
+- [examples/local-only.ts](/Users/johnscianna/Desktop/FatHippo/examples/local-only.ts)
+- [examples/hosted-hybrid.ts](/Users/johnscianna/Desktop/FatHippo/examples/hosted-hybrid.ts)
+- [examples/cognition-enabled.ts](/Users/johnscianna/Desktop/FatHippo/examples/cognition-enabled.ts)
 
 ---
 
-## Memory Tiers
+## Hosted Capabilities
 
-FatHippo uses intelligent memory tiering:
+The hosted FatHippo stack in this repo includes:
 
-| Tier | Behavior |
-|------|----------|
-| **Critical** | Always loaded at session start |
-| **High** | Loaded if semantically relevant |
-| **Normal** | On-demand search only |
+- encrypted memory storage
+- hybrid retrieval
+- edge-first retrieval rollout
+- sync queue, retry, and dead-letter handling
+- cognition APIs for traces, patterns, skills, and constraints
+- benchmark and evaluation plumbing
+- admin and cognitive dashboards
+- privacy controls for export, deletion, retention, and sharing
 
-Memories auto-promote based on access patterns (5+ accesses → high, 15+ → critical).
+The primary hosted surface for OpenClaw users is still the context engine plugin.
 
 ---
 
-## Self-Hosting
+## Privacy Model
+
+FatHippo is privacy-first, but it is not a zero-knowledge system.
+
+Current principles:
+
+- raw traces remain user-scoped
+- shared learning is opt-in
+- shared/global learning uses redacted, coarsened, aggregated artifacts
+- stable user/session-linked shared signatures are avoided
+- cognitive data can be exported and deleted
+- retention controls exist for raw traces
+- API keys and admin paths are scoped and audited
+
+Important nuance:
+
+- shared learning is more privacy-safe and less linkable than before
+- it should not be described as fully anonymous without additional legal and technical review
+
+---
+
+## What Users See
+
+Users do not need to babysit FatHippo.
+
+They should mainly notice:
+
+- OpenClaw already knows what to try on repeated issues
+- the suggested workflow is better than before
+- fewer retries are needed on familiar bug classes
+- the dashboard shows short “Fathippo helped” receipts
+
+That means the product stays low-friction while still making the value legible.
+
+---
+
+## Development
 
 ### Prerequisites
 
 - Node.js 20+
-- Turso account (database)
-- Qdrant Cloud (vector search)
-- OpenAI API key (embeddings)
+- npm 10+
+- the environment variables needed for your chosen app mode
 
-### Setup
+### Install
 
 ```bash
-# Clone the repository
 git clone https://github.com/jscianna/fathippo.git
 cd fathippo
-
-# Install dependencies
 npm install
-
-# Copy environment template
-cp .env.example .env.local
-
-# Configure your environment variables (see below)
-
-# Start development server
-npm run dev
 ```
 
-### Environment Variables
+### Useful Commands
 
 ```bash
-# Authentication (Clerk)
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_...
-CLERK_SECRET_KEY=sk_...
-
-# Database (Turso)
-TURSO_DATABASE_URL=libsql://your-db.turso.io
-TURSO_AUTH_TOKEN=your-token
-
-# Embeddings (OpenAI)
-OPENAI_API_KEY=sk-...
-
-# Vector Search (Qdrant Cloud)
-QDRANT_URL=https://xxx.cloud.qdrant.io:6333
-QDRANT_API_KEY=your-key
-
-# Encryption (required)
-ENCRYPTION_KEY=your-32-byte-hex-key
-
-# Optional: Embedding Cache (Upstash Redis)
-UPSTASH_REDIS_REST_URL=https://...
-UPSTASH_REDIS_REST_TOKEN=...
+npm run dev
+npm run build
+npm run build:packages
+./node_modules/.bin/tsc --noEmit
+npm run check:cognitive-launch
+npm run check:examples
 ```
+
+### Workspace Layout
+
+```text
+src/                    Next.js app and hosted APIs
+packages/context-engine OpenClaw plugin
+packages/local          Local retrieval/cache helpers
+packages/hosted         Hosted sync and retrieval helpers
+packages/cognition      Cognitive substrate package surface
+packages/cognitive-engine
+                        Eval harness, tests, and cognition support code
+examples/               Package quickstarts
+docs/                   Product, API, operations, and rollout docs
+```
+
+---
+
+## Documentation
+
+- OpenClaw integration: [docs/api/openclaw-integration.md](/Users/johnscianna/Desktop/FatHippo/docs/api/openclaw-integration.md)
+- OpenClaw guide page: [src/app/docs/guides/openclaw/page.tsx](/Users/johnscianna/Desktop/FatHippo/src/app/docs/guides/openclaw/page.tsx)
+- Package examples: [examples/README.md](/Users/johnscianna/Desktop/FatHippo/examples/README.md)
+- Production launch runbook: [docs/PRODUCTION-LAUNCH-RUNBOOK.md](/Users/johnscianna/Desktop/FatHippo/docs/PRODUCTION-LAUNCH-RUNBOOK.md)
+- Cognitive strategy: [docs/COGNITIVE-SUBSTRATE-STRATEGY.md](/Users/johnscianna/Desktop/FatHippo/docs/COGNITIVE-SUBSTRATE-STRATEGY.md)
 
 ---
 
 ## Contributing
 
-We welcome contributions! 
-
-### Getting Started
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing`)
-3. Make your changes
-4. Run tests and linting (`npm test && npm run lint`)
-5. Commit with clear messages (`git commit -m 'Add amazing feature'`)
-6. Push to your branch (`git push origin feature/amazing`)
-7. Open a Pull Request
-
-### Development
-
 ```bash
-npm install      # Install dependencies
-npm run dev      # Start dev server
-npm test         # Run tests
-npm run lint     # Lint code
-npm run build    # Production build
+npm install
+npm run build:packages
+npm run check:cognitive-launch
 ```
 
-### Code Style
-
-- TypeScript strict mode
-- Prettier for formatting
-- ESLint for linting
-- Conventional commits preferred
-
-### Areas We'd Love Help
-
-- 🔌 SDK/client libraries (Python, Go, Rust)
-- 📝 Documentation improvements
-- 🧪 Test coverage
-- 🌍 Internationalization
-- 🐛 Bug fixes and performance improvements
-
----
-
-## License
-
-Apache 2.0 — see [LICENSE](LICENSE) for details.
-
----
-
-## Links
-
-- **Website:** [fathippo.ai](https://fathippo.ai)
-- **npm:** [@fathippo/context-engine](https://www.npmjs.com/package/@fathippo/context-engine)
-- **Twitter:** [@scianna](https://x.com/scianna)
-
----
-
-<p align="center">
-  <strong>Memory that just works.</strong>
-</p>
+Keep changes scoped, prefer primary source docs, and avoid changing unrelated product behavior.
