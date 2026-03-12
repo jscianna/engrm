@@ -7,7 +7,7 @@
   ],
   "scripts": {
     "dev": "next dev",
-    "build": "npm run build:packages && next build",
+    "build": "npm run build:packages && next build --webpack",
     "build:packages": "npm run build --workspaces --if-present --include-workspace-root=false",
     "start": "next start",
     "lint": "eslint",
