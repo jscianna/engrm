@@ -17,7 +17,7 @@ import { getRetrievalConfig, initSyncQueue, queueWrite, startSyncWorker } from "
 
 initSyncQueue(process.env.FATHIPPO_SYNC_KEY ?? "dev-only-key");
 queueWrite("user_123", "create", { memoryId: "mem_1" });
-startSyncWorker("https://api.fathippo.com", process.env.FATHIPPO_API_KEY ?? "");
+startSyncWorker("https://fathippo.ai", process.env.FATHIPPO_API_KEY ?? "");
 console.log(getRetrievalConfig().hostedRerankEnabled);
 ```
 
@@ -28,7 +28,7 @@ import { CognitiveClient, evaluateBenchmarkGate } from "@fathippo/cognition";
 
 const client = new CognitiveClient({
   apiKey: process.env.FATHIPPO_API_KEY ?? "",
-  baseUrl: "https://api.fathippo.com",
+  baseUrl: "https://fathippo.ai/api/v1",
 });
 
 console.log(typeof client.captureTrace);

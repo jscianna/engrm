@@ -9,7 +9,7 @@
  *
  * Environment:
  *   FATHIPPO_API_KEY - Your FatHippo API key (required)
- *   FATHIPPO_BASE_URL - API base URL (optional, defaults to https://fathippo.com/api)
+ *   FATHIPPO_BASE_URL - API base URL (optional, defaults to https://fathippo.ai/api)
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -21,11 +21,11 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 const API_KEY = process.env.FATHIPPO_API_KEY;
-const BASE_URL = process.env.FATHIPPO_BASE_URL || "https://fathippo.com/api";
+const BASE_URL = process.env.FATHIPPO_BASE_URL || "https://fathippo.ai/api";
 
 if (!API_KEY) {
   console.error("Error: FATHIPPO_API_KEY environment variable is required");
-  console.error("Get your API key at https://fathippo.com");
+  console.error("Get your API key at https://fathippo.ai");
   process.exit(1);
 }
 

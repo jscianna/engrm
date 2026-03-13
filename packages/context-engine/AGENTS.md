@@ -297,7 +297,7 @@ readonly info: ContextEngineInfo = {
 - `getIndexedSummaries()` — Get compact indexed summaries
 - `runDreamCycle()` — Trigger maintenance/synthesis
 
-**Base URL:** `https://www.fathippo.com/api` (configurable)
+**Base URL:** `https://fathippo.ai/api` (configurable)
 
 ---
 

@@ -29,7 +29,7 @@ export function hostedHybridQuickstart() {
   });
 
   startSyncWorker(
-    process.env.FATHIPPO_API_ENDPOINT ?? "https://api.fathippo.com",
+    process.env.FATHIPPO_API_ENDPOINT ?? "https://fathippo.ai",
     process.env.FATHIPPO_API_KEY ?? "demo-api-key",
     workerOptions,
   );

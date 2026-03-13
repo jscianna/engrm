@@ -10,7 +10,7 @@ import {
 
 const cognitionConfig: CognitiveEngineConfig = {
   apiKey: process.env.FATHIPPO_API_KEY ?? "demo-api-key",
-  baseUrl: process.env.FATHIPPO_API_BASE_URL ?? "https://api.fathippo.com/api/v1",
+  baseUrl: process.env.FATHIPPO_API_BASE_URL ?? "https://fathippo.ai/api/v1",
   captureEnabled: true,
   sanitizeSecrets: true,
   minTraceDurationMs: 60_000,
