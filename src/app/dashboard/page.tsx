@@ -127,7 +127,7 @@ async function MemoriesSection({ memoriesPromise }: { memoriesPromise: ReturnTyp
   );
 }
 
-async function FathippoHelpSection({ userId }: { userId: string }) {
+async function FatHippoHelpSection({ userId }: { userId: string }) {
   const [applications, apiKeys] = await Promise.all([
     getRecentApplications(userId, 8),
     listApiKeys(userId),
@@ -148,12 +148,12 @@ async function FathippoHelpSection({ userId }: { userId: string }) {
       ? "OpenClaw is connected"
       : "Finish connecting OpenClaw";
   const connectionDescription = !openClawKey
-    ? "Create one key, paste four commands into your terminal, and Fathippo will start learning from future sessions."
+    ? "Create one key, paste four commands into your terminal, and FatHippo will start learning from future sessions."
     : openClawKey.lastUsed
       ? pluginStatus.lastSeenVersion
-        ? `Fathippo has been helping OpenClaw recently. Last seen v${pluginStatus.lastSeenVersion} in ${pluginStatus.lastSeenMode ?? "hosted"} mode on ${formatUsageDate(pluginStatus.lastSeenAt ?? openClawKey.lastUsed)}.`
-        : `Fathippo has been helping OpenClaw recently. Last seen ${formatUsageDate(openClawKey.lastUsed)}.`
-      : "You already have an OpenClaw key. Finish the terminal setup and Fathippo will start showing receipts here.";
+        ? `FatHippo has been helping OpenClaw recently. Last seen v${pluginStatus.lastSeenVersion} in ${pluginStatus.lastSeenMode ?? "hosted"} mode on ${formatUsageDate(pluginStatus.lastSeenAt ?? openClawKey.lastUsed)}.`
+        : `FatHippo has been helping OpenClaw recently. Last seen ${formatUsageDate(openClawKey.lastUsed)}.`
+      : "You already have an OpenClaw key. Finish the terminal setup and FatHippo will start showing receipts here.";
 
   return (
     <section className="grid gap-4 xl:grid-cols-[1.15fr_1fr]">
@@ -161,7 +161,7 @@ async function FathippoHelpSection({ userId }: { userId: string }) {
         <CardContent className="p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-[0.22em] text-zinc-500">Fathippo Helped</p>
+              <p className="text-xs uppercase tracking-[0.22em] text-zinc-500">FatHippo Helped</p>
               <h2 className="mt-2 text-lg font-semibold text-zinc-100">Recent wins</h2>
               <p className="mt-1 text-sm text-zinc-400">
                 Lightweight receipts so users can feel the value without interrupting the session.
@@ -172,7 +172,7 @@ async function FathippoHelpSection({ userId }: { userId: string }) {
 
           {receipts.length === 0 ? (
             <div className="mt-4 rounded-xl border border-dashed border-zinc-700 bg-zinc-950/40 p-4 text-sm text-zinc-400">
-              Once OpenClaw uses Fathippo on a few real tasks, you’ll see short receipts here showing reused patterns,
+              Once OpenClaw uses FatHippo on a few real tasks, you’ll see short receipts here showing reused patterns,
               suggested workflows, and likely retries saved.
             </div>
           ) : (
@@ -272,7 +272,7 @@ export default async function DashboardPage() {
       </div>
 
       <Suspense fallback={<div className="h-64 animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900/40" />}>
-        <FathippoHelpSection userId={userId} />
+        <FatHippoHelpSection userId={userId} />
       </Suspense>
 
       <Suspense fallback={<div className="h-48 animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900/40" />}>

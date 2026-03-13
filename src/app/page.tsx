@@ -166,7 +166,7 @@ function OpenClawCodePreview() {
     command: "text-[#B392F0]",       // purple - main command
     subcommand: "text-[#79B8FF]",    // blue - plugins, config
     action: "text-[#85E89D]",        // green - install, set
-    package: "text-[#FFAB70]",       // orange - @fathippo/memory
+    package: "text-[#FFAB70]",       // orange - package names
     key: "text-[#79B8FF]",           // blue - config keys
     value: "text-[#9ECBFF]",         // light blue - values
     equals: "text-[#E1E4E8]",        // white - operators
@@ -223,7 +223,7 @@ function OpenClawCodePreview() {
             <span className={colors.subcommand}>config</span>{" "}
             <span className={colors.action}>set</span>{" "}
             <span className={colors.key}>plugins.slots.contextEngine</span>
-            <span className={colors.equals}>=</span>
+            <span className={colors.equals}> </span>
             <span className={colors.value}>fathippo-context-engine</span>
           </motion.div>
           
@@ -233,7 +233,7 @@ function OpenClawCodePreview() {
             <span className={colors.subcommand}>config</span>{" "}
             <span className={colors.action}>set</span>{" "}
             <span className={colors.key}>plugins.entries.fathippo-context-engine.config.apiKey</span>
-            <span className={colors.equals}>=</span>
+            <span className={colors.equals}> </span>
             <span className={colors.value}>mem_xxx</span>
           </motion.div>
           
@@ -360,7 +360,7 @@ export default function Home() {
       >
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
           <Link href="/" className="text-lg font-semibold tracking-tight text-[#111827]">
-            fathippo
+            FatHippo
           </Link>
           <nav className="hidden md:flex items-center gap-6">
             <Link
@@ -368,12 +368,6 @@ export default function Home() {
               className="text-sm text-[#6B7280] hover:text-[#111827] transition-colors font-medium"
             >
               Docs
-            </Link>
-            <Link
-              href="/brain"
-              className="text-sm text-[#6B7280] hover:text-[#111827] transition-colors font-medium"
-            >
-              Brain
             </Link>
             <a
               href="https://github.com/jscianna/fathippo"
@@ -434,7 +428,7 @@ export default function Home() {
             href="/"
             className="text-xl font-semibold tracking-tight text-[#111827]"
           >
-            fathippo
+            FatHippo
           </Link>
           
           {/* Desktop nav */}
@@ -444,12 +438,6 @@ export default function Home() {
               className="text-sm text-[#6B7280] hover:text-[#111827] transition-colors font-medium"
             >
               Docs
-            </Link>
-            <Link
-              href="/brain"
-              className="text-sm text-[#6B7280] hover:text-[#111827] transition-colors font-medium"
-            >
-              Brain
             </Link>
             <a
               href="https://github.com/jscianna/fathippo"
@@ -513,13 +501,6 @@ export default function Home() {
                 onClick={() => setMobileMenuOpen(false)}
               >
                 Docs
-              </Link>
-              <Link
-                href="/brain"
-                className="text-base text-[#6B7280] hover:text-[#111827] transition-colors font-medium py-2"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Brain
               </Link>
               <a
                 href="https://github.com/jscianna/fathippo"
@@ -845,7 +826,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 md:flex-row">
           {/* Logo - centered on mobile */}
           <Link href="/" className="text-lg font-semibold text-[#111827]">
-            fathippo
+            FatHippo
           </Link>
           
           {/* Nav links - wrap on mobile */}
@@ -856,12 +837,6 @@ export default function Home() {
             >
               Docs
             </Link>
-            <Link
-              href="/brain"
-              className="text-sm text-[#6B7280] hover:text-[#111827] font-medium"
-            >
-              Brain
-            </Link>
             <a
               href="https://github.com/jscianna/fathippo"
               className="text-sm text-[#6B7280] hover:text-[#111827] font-medium"
@@ -870,17 +845,7 @@ export default function Home() {
             </a>
           </div>
           
-          <p className="text-sm text-[#9CA3AF]">
-            Built by{" "}
-            <a
-              href="https://x.com/scianna"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[#6B7280] hover:text-[#111827] transition-colors"
-            >
-              John Scianna
-            </a>
-          </p>
+          <p className="text-sm text-[#9CA3AF]">Built by Hippocampus Labs, Inc.</p>
         </div>
       </footer>
     </div>

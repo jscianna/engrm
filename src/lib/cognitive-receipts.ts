@@ -138,7 +138,7 @@ export function buildFathippoReceipt(bundle: {
 
   const shownMatches = matches.length;
   if (shownMatches > 0 && bullets.length === 0 && application.finalOutcome === "success") {
-    bullets.push(`Used ${shownMatches} Fathippo suggestion${shownMatches === 1 ? "" : "s"} in this session`);
+    bullets.push(`Used ${shownMatches} FatHippo suggestion${shownMatches === 1 ? "" : "s"} in this session`);
     score += 1;
   }
 

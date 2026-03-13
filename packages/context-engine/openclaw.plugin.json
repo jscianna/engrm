@@ -3,7 +3,7 @@
   "name": "FatHippo Context Engine",
   "version": "0.1.1",
   "kind": "context-engine",
-  "description": "Persistent agent memory with hosted cognition or private local mode",
+  "description": "Persistent agent memory with full hosted features or private local mode",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

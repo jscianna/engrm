@@ -192,7 +192,7 @@ export default async function MemoryAnalyticsPage({
                   </div>
                 ))}
                 <Link
-                  href="/dashboard/browser?sort=accessCount"
+                  href="/dashboard/search"
                   className="mt-3 block text-center text-sm text-cyan-400 hover:text-cyan-300"
                 >
                   View all memories →

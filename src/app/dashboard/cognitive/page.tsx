@@ -85,8 +85,8 @@ export default async function CognitiveDashboardPage({
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
-        <p className="text-xs uppercase tracking-[0.22em] text-zinc-500">Cognitive Ops</p>
-        <h1 className="mt-2 text-2xl font-semibold text-zinc-100">Learning Loop Control Room</h1>
+        <p className="text-xs uppercase tracking-[0.22em] text-zinc-500">Cognition</p>
+        <h1 className="mt-2 text-2xl font-semibold text-zinc-100">Cognition Control Room</h1>
         <p className="mt-2 max-w-3xl text-sm text-zinc-400">
           Monitor trace capture, pattern promotion, skill freshness, application feedback, and heartbeat health from one place.
         </p>
@@ -130,7 +130,7 @@ export default async function CognitiveDashboardPage({
       <section className="grid gap-4 xl:grid-cols-[1.1fr_1fr]">
         <Card className="border-zinc-800 bg-zinc-900/60">
           <CardHeader>
-            <CardTitle>Privacy Controls</CardTitle>
+            <CardTitle className="text-zinc-100">Privacy Controls</CardTitle>
             <CardDescription>Control sharing, benchmark inclusion, and retention for your cognitive data.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -183,7 +183,7 @@ export default async function CognitiveDashboardPage({
 
         <Card className="border-zinc-800 bg-zinc-900/60">
           <CardHeader>
-            <CardTitle>Export or Delete Data</CardTitle>
+            <CardTitle className="text-zinc-100">Export or Delete Data</CardTitle>
             <CardDescription>Use these controls for access and deletion requests on your cognitive data.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -214,7 +214,7 @@ export default async function CognitiveDashboardPage({
       <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
         <Card className="border-zinc-800 bg-zinc-900/60">
           <CardHeader>
-            <CardTitle>Adaptive Retrieval Policies</CardTitle>
+            <CardTitle className="text-zinc-100">Adaptive Retrieval Policies</CardTitle>
             <CardDescription>Private per-user strategy learning for traces, patterns, and synthesized skills.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -245,7 +245,7 @@ export default async function CognitiveDashboardPage({
 
         <Card className="border-zinc-800 bg-zinc-900/60">
           <CardHeader>
-            <CardTitle>Learned Tool Workflows</CardTitle>
+            <CardTitle className="text-zinc-100">Learned Tool Workflows</CardTitle>
             <CardDescription>Private workflow hints learned from your own tool sequences and verified outcomes.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -272,7 +272,7 @@ export default async function CognitiveDashboardPage({
 
         <Card className="border-zinc-800 bg-zinc-900/60">
           <CardHeader>
-            <CardTitle>Recent Traces</CardTitle>
+            <CardTitle className="text-zinc-100">Recent Traces</CardTitle>
             <CardDescription>Outcome source, duration, and automated signal context.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -302,7 +302,7 @@ export default async function CognitiveDashboardPage({
 
         <Card className="border-zinc-800 bg-zinc-900/60">
           <CardHeader>
-            <CardTitle>Heartbeat Jobs</CardTitle>
+            <CardTitle className="text-zinc-100">Heartbeat Jobs</CardTitle>
             <CardDescription>Current lease and checkpoint state.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -325,7 +325,7 @@ export default async function CognitiveDashboardPage({
       <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
         <Card className="border-zinc-800 bg-zinc-900/60">
           <CardHeader>
-            <CardTitle>Benchmark Gates</CardTitle>
+            <CardTitle className="text-zinc-100">Benchmark Gates</CardTitle>
             <CardDescription>Recent curated/generated benchmark runs and release gate status.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -354,7 +354,7 @@ export default async function CognitiveDashboardPage({
 
         <Card className="border-zinc-800 bg-zinc-900/60">
           <CardHeader>
-            <CardTitle>Impact Leaders</CardTitle>
+            <CardTitle className="text-zinc-100">Impact Leaders</CardTitle>
             <CardDescription>Patterns and skills with the strongest verified impact.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -378,7 +378,7 @@ export default async function CognitiveDashboardPage({
       <section className="grid gap-4 xl:grid-cols-2">
         <Card className="border-zinc-800 bg-zinc-900/60">
           <CardHeader>
-            <CardTitle>Patterns</CardTitle>
+            <CardTitle className="text-zinc-100">Patterns</CardTitle>
             <CardDescription>Promoted, candidate, and deprecated pattern state.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -409,7 +409,7 @@ export default async function CognitiveDashboardPage({
 
         <Card className="border-zinc-800 bg-zinc-900/60">
           <CardHeader>
-            <CardTitle>Skills</CardTitle>
+            <CardTitle className="text-zinc-100">Skills</CardTitle>
             <CardDescription>Freshness, publication state, and operator controls.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -455,7 +455,7 @@ export default async function CognitiveDashboardPage({
       <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
         <Card className="border-zinc-800 bg-zinc-900/60">
           <CardHeader>
-            <CardTitle>Application Feedback</CardTitle>
+            <CardTitle className="text-zinc-100">Application Feedback</CardTitle>
             <CardDescription>Inspect injected patterns and skills, accepted entities, and weak failures.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -483,7 +483,7 @@ export default async function CognitiveDashboardPage({
                   </div>
                   {receipt ? (
                     <div className="mt-3 rounded-lg border border-cyan-950 bg-cyan-950/20 p-3">
-                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-cyan-300">Fathippo helped</p>
+                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-cyan-300">FatHippo helped</p>
                       <ul className="mt-2 space-y-1 text-xs text-zinc-300">
                         {receipt.bullets.map((bullet) => (
                           <li key={bullet}>• {bullet}</li>
@@ -499,7 +499,7 @@ export default async function CognitiveDashboardPage({
 
         <Card className="border-zinc-800 bg-zinc-900/60">
           <CardHeader>
-            <CardTitle>Needs Attention</CardTitle>
+            <CardTitle className="text-zinc-100">Needs Attention</CardTitle>
             <CardDescription>Failed or unresolved applications with no accepted entity.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">

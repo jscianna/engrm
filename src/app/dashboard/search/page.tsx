@@ -5,7 +5,7 @@ import { Calendar, ChevronDown, Filter, Loader2, Search, Tag, X } from "lucide-r
 import { toast } from "sonner";
 import { MemoryCard } from "@/components/memory-card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { MemoryListItem, MemorySearchResult } from "@/lib/types";
 
@@ -111,7 +111,8 @@ export default function SearchPage() {
     <div className="space-y-6">
       <Card className="border-zinc-800 bg-zinc-900/60">
         <CardHeader>
-          <CardTitle className="text-zinc-100">Semantic Search</CardTitle>
+          <CardTitle className="text-zinc-100">Memories</CardTitle>
+          <CardDescription>Search by meaning and browse your most recent memories in one place.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <form onSubmit={onSearch} className="flex flex-col gap-3 sm:flex-row">
@@ -220,26 +221,13 @@ export default function SearchPage() {
         </CardContent>
       </Card>
 
-      {results.length > 0 ? (
-        <section className="memory-grid grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {results.map((result) => (
-            <div key={result.memory.id} className="space-y-2">
-              <p className="text-xs text-cyan-300">Similarity: {(result.score * 100).toFixed(2)}%</p>
-              <MemoryCard memory={result.memory} />
-            </div>
-          ))}
-        </section>
-      ) : hasSearched ? (
-        <div className="rounded-2xl border border-dashed border-zinc-700 bg-zinc-900/40 p-10 text-center text-sm text-zinc-400">
-          {loading ? "Searching your memories..." : "No matching memories found. Try a different query."}
-        </div>
-      ) : initialLoading ? (
+      {initialLoading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
         </div>
       ) : recentMemories.length > 0 ? (
         <div className="space-y-4">
-          <p className="text-sm text-zinc-400">Recent memories — search above to find by meaning</p>
+          <p className="text-sm text-zinc-400">Recent memories</p>
           <section className="memory-grid grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {recentMemories.map((memory) => (
               <MemoryCard key={memory.id} memory={memory} />
@@ -251,6 +239,24 @@ export default function SearchPage() {
           No memories yet. Add some to get started!
         </div>
       )}
+
+      {results.length > 0 ? (
+        <div className="space-y-4">
+          <p className="text-sm text-zinc-400">Semantic matches</p>
+          <section className="memory-grid grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {results.map((result) => (
+              <div key={result.memory.id} className="space-y-2">
+                <p className="text-xs text-cyan-300">Similarity: {(result.score * 100).toFixed(2)}%</p>
+                <MemoryCard memory={result.memory} />
+              </div>
+            ))}
+          </section>
+        </div>
+      ) : hasSearched ? (
+        <div className="rounded-2xl border border-dashed border-zinc-700 bg-zinc-900/40 p-10 text-center text-sm text-zinc-400">
+          {loading ? "Searching your memories..." : "No matching memories found. Try a different query."}
+        </div>
+      ) : null}
     </div>
   );
 }

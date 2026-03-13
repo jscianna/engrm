@@ -133,7 +133,7 @@ export default async function AdminDashboardPage({
               <Button type="submit" size="sm" variant="outline">Backfill Legacy API Keys</Button>
             </form>
             <Button asChild type="button" size="sm" variant="secondary">
-              <Link href="/dashboard/cognitive">Open Cognitive Ops</Link>
+              <Link href="/dashboard/cognitive">Open Cognition</Link>
             </Button>
           </CardContent>
         </Card>

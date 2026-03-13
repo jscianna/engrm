@@ -11,19 +11,19 @@ OpenClaw users only install `@fathippo/fathippo-context-engine`. The `@fathippo/
 openclaw plugins install @fathippo/fathippo-context-engine
 
 # 2. Set as the active context engine
-openclaw config set plugins.slots.contextEngine=fathippo-context-engine
+openclaw config set plugins.slots.contextEngine fathippo-context-engine
 
 # 3. Configure hosted mode
-openclaw config set plugins.entries.fathippo-context-engine.config.mode=hosted
-openclaw config set plugins.entries.fathippo-context-engine.config.apiKey=mem_xxx
-openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl=https://fathippo.ai/api
-openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical=true
+openclaw config set plugins.entries.fathippo-context-engine.config.mode hosted
+openclaw config set plugins.entries.fathippo-context-engine.config.apiKey mem_xxx
+openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl https://fathippo.ai/api
+openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical true
 
 # 4. Restart gateway
 openclaw gateway restart
 ```
 
-**Done.** Your OpenClaw agent now gets hosted retrieval, deeper cognition, dashboard receipts, sync/import features, and last-seen plugin version tracking.
+**Done.** Your OpenClaw agent now gets the full hosted FatHippo stack: hosted retrieval, cognition features, dashboard receipts, sync/import features, and last-seen plugin version tracking.
 
 If you previously installed `@fathippo/context-engine`, reinstall from `@fathippo/fathippo-context-engine` so the published package name matches the plugin id OpenClaw discovers.
 
@@ -34,16 +34,16 @@ If you previously installed `@fathippo/context-engine`, reinstall from `@fathipp
 openclaw plugins install @fathippo/fathippo-context-engine
 
 # 2. Set as the active context engine
-openclaw config set plugins.slots.contextEngine=fathippo-context-engine
+openclaw config set plugins.slots.contextEngine fathippo-context-engine
 
 # 3. Force local-only mode
-openclaw config set plugins.entries.fathippo-context-engine.config.mode=local
+openclaw config set plugins.entries.fathippo-context-engine.config.mode local
 
 # 4. Restart gateway
 openclaw gateway restart
 ```
 
-This stores and reuses local memory on the machine running OpenClaw and applies lightweight private workflow/fix learning. It does **not** use hosted cognition, sync/import features, or report plugin version back to the hosted FatHippo dashboard. Local mode stores its data in the configured local file on that machine.
+This stores and reuses local memory on the machine running OpenClaw and applies lightweight private workflow/fix learning. It does **not** use hosted features like sync/imports, hosted cognition, or dashboard receipts. Local mode stores its data in the configured local file on that machine.
 
 ## What Happens Automatically
 
@@ -57,7 +57,7 @@ This stores and reuses local memory on the machine running OpenClaw and applies 
 
 No manual API calls. No "remember this" commands. It just works.
 
-Hosted mode gives the full FatHippo experience. Local-only mode keeps data private on the machine and supports memory plus lightweight local fix/workflow reuse, but not hosted sync/imports or account-backed cognition.
+FatHippo currently has two customer-facing offers: local-only and hosted. Hosted mode gives the full FatHippo experience, including cognition features. Local-only mode keeps data private on the machine and supports memory plus lightweight local fix/workflow reuse, but not hosted sync/imports or account-backed cognition.
 
 ## Works Across
 

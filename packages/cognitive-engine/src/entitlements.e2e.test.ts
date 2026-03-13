@@ -81,7 +81,7 @@ describe("entitlements", () => {
     expect(hostedIdentity.userId).toBe("user-hosted-sync");
   });
 
-  it("blocks cognition endpoints without a cognition entitlement", async () => {
+  it("blocks cognition endpoints without a hosted entitlement", async () => {
     const { apiKey: freeKey } = await db.createApiKey("user-free-cognition", "Free cognition", [
       "cognitive.traces.list",
     ]);
@@ -99,11 +99,11 @@ describe("entitlements", () => {
       code: "ENTITLEMENT_REQUIRED",
       details: {
         feature: "cognition",
-        requiredPlan: "cognition",
+        requiredPlan: "hosted",
       },
     });
 
-    await db.setUserEntitlementPlan("user-free-cognition", "cognition");
+    await db.setUserEntitlementPlan("user-free-cognition", "hosted");
 
     const identity = await apiAuth.validateApiKey(
       new Request("http://localhost/api/v1/cognitive/traces", {
