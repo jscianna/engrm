@@ -4,7 +4,7 @@
  * Persistent agent memory with hosted cognition or private local mode.
  *
  * Usage:
- *   openclaw plugins install @fathippo/context-engine
+ *   openclaw plugins install @fathippo/fathippo-context-engine
  *
  * Config:
  *   plugins:
@@ -14,7 +14,10 @@
  *       fathippo-context-engine:
  *         enabled: true
  *         config:
+ *           mode: "hosted"
  *           apiKey: "${FATHIPPO_API_KEY}"
+ *           baseUrl: "https://fathippo.ai/api"
+ *           injectCritical: true
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 /**

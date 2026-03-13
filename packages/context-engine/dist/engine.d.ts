@@ -73,6 +73,7 @@ export declare class FatHippoContextEngine implements ContextEngine {
         tokenBudget?: number;
     }): Promise<AssembleResult>;
     private assembleLocalContext;
+    private buildRuntimeAwarenessInstruction;
     /**
      * Check if query looks like a coding task
      */
