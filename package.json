@@ -13,6 +13,8 @@
     "db:migrate:status": "node scripts/db-migrate.mjs --status",
     "embeddings:reindex": "node scripts/reindex-embeddings.mjs",
     "start": "next start",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "eslint",
     "check:examples": "./node_modules/.bin/tsc -p examples/tsconfig.json --noEmit",
     "check:cognitive-launch": "./node_modules/.bin/tsc --noEmit && ./node_modules/.bin/vitest run --config packages/cognitive-engine/vitest.config.ts packages/cognitive-engine/src/eval-harness.test.ts packages/cognitive-engine/src/evidence-weighting.test.ts packages/cognitive-engine/src/adaptive-policy.test.ts packages/cognitive-engine/src/adaptive-policy.e2e.test.ts packages/cognitive-engine/src/tool-workflow-strategy.test.ts packages/cognitive-engine/src/tool-workflow-strategy.e2e.test.ts packages/cognitive-engine/src/application-attribution.e2e.test.ts packages/cognitive-engine/src/shared-learning-settings.e2e.test.ts packages/cognitive-engine/src/api-key-scopes.e2e.test.ts packages/cognitive-engine/src/entitlements.e2e.test.ts packages/cognitive-engine/src/operational-hardening.e2e.test.ts packages/cognitive-engine/src/alert-delivery.test.ts packages/cognitive-engine/src/operational-alert-dispatch.test.ts packages/cognitive-engine/src/request-throttle.test.ts packages/cognitive-engine/src/admin-auth.test.ts packages/cognitive-engine/src/cognitive-privacy.e2e.test.ts packages/cognitive-engine/src/heartbeat-thresholds.test.ts packages/cognitive-engine/src/tool-result-parsing.test.ts packages/cognitive-engine/src/org-patterns.e2e.test.ts packages/cognitive-engine/src/org-governance.e2e.test.ts && npm run check:examples"
@@ -51,7 +53,8 @@
     "shadcn": "^3.8.5",
     "tailwindcss": "^4",
     "tw-animate-css": "^1.4.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^1.6.1"
   },
   "packageManager": "npm@10.8.0",
   "license": "Apache-2.0"

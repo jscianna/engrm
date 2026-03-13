@@ -29,6 +29,19 @@ import { containsSecrets } from "@/lib/secrets";
 
 const ENCRYPTION_ALGORITHM = "aes-256-gcm";
 
+function parseCanonicalBase64Key(input: string): Buffer | null {
+  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(input)) {
+    return null;
+  }
+
+  const decoded = Buffer.from(input, "base64");
+  if (decoded.length !== 32) {
+    return null;
+  }
+
+  return decoded.toString("base64") === input ? decoded : null;
+}
+
 function getMasterKey(): Buffer {
   const raw = process.env.ENCRYPTION_KEY;
   if (!raw) {
@@ -36,20 +49,28 @@ function getMasterKey(): Buffer {
   }
 
   const trimmed = raw.trim();
+
+  // Accept 64-char hex string (32 bytes)
   if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
     return Buffer.from(trimmed, "hex");
   }
 
-  try {
-    const maybeBase64 = Buffer.from(trimmed, "base64");
-    if (maybeBase64.length === 32) {
-      return maybeBase64;
-    }
-  } catch {
-    // no-op
+  // Accept canonical 32-byte base64 string
+  const base64Key = parseCanonicalBase64Key(trimmed);
+  if (base64Key) {
+    return base64Key;
   }
 
-  return crypto.createHash("sha256").update(trimmed, "utf8").digest();
+  console.error(
+    "[FATAL] ENCRYPTION_KEY is not a valid format. " +
+    "Weak passphrases are no longer accepted. " +
+    "If you relied on the legacy SHA-256 fallback, derive the replacement " +
+    "64-char hex key offline from the previous value before restarting."
+  );
+  throw new Error(
+    `ENCRYPTION_KEY is not a valid 64-char hex or 32-byte base64 key. ` +
+    `Weak keys are no longer accepted. Check server logs for migration instructions.`
+  );
 }
 
 /**
@@ -76,9 +97,11 @@ function encryptMemoryContent(plaintext: string, userId: string): string {
  * Expects the encrypted content as a JSON string containing ciphertext and iv.
  */
 export function decryptMemoryContent(encryptedJson: string, userId: string): string {
+  // Key config errors (missing/invalid ENCRYPTION_KEY) propagate as-is
+  const key = deriveUserKey(userId);
+
   try {
     const payload = JSON.parse(encryptedJson) as { ciphertext: string; iv: string };
-    const key = deriveUserKey(userId);
     return decryptAesGcm(payload, key).toString("utf8");
   } catch (error) {
     console.error("[DB] Failed to decrypt memory content:", error);
