@@ -11,13 +11,13 @@ OpenClaw users only install `@fathippo/fathippo-context-engine`. The `@fathippo/
 openclaw plugins install @fathippo/fathippo-context-engine
 
 # 2. Set as the active context engine
-openclaw config set plugins.slots.contextEngine=fathippo-context-engine
+openclaw config set plugins.slots.contextEngine fathippo-context-engine
 
 # 3. Configure hosted mode
-openclaw config set plugins.entries.fathippo-context-engine.config.mode=hosted
-openclaw config set plugins.entries.fathippo-context-engine.config.apiKey=mem_xxx
-openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl=https://fathippo.ai/api
-openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical=true
+openclaw config set plugins.entries.fathippo-context-engine.config.mode hosted
+openclaw config set plugins.entries.fathippo-context-engine.config.apiKey mem_xxx
+openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl https://fathippo.ai/api
+openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical true
 
 # 4. Restart gateway
 openclaw gateway restart
@@ -34,10 +34,10 @@ If you previously installed `@fathippo/context-engine`, reinstall from `@fathipp
 openclaw plugins install @fathippo/fathippo-context-engine
 
 # 2. Set as the active context engine
-openclaw config set plugins.slots.contextEngine=fathippo-context-engine
+openclaw config set plugins.slots.contextEngine fathippo-context-engine
 
 # 3. Force local-only mode
-openclaw config set plugins.entries.fathippo-context-engine.config.mode=local
+openclaw config set plugins.entries.fathippo-context-engine.config.mode local
 
 # 4. Restart gateway
 openclaw gateway restart

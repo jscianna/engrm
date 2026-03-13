@@ -59,11 +59,11 @@ Get your API key at [fathippo.ai](https://fathippo.ai)
 
 ```bash
 openclaw plugins install @fathippo/fathippo-context-engine
-openclaw config set plugins.slots.contextEngine=fathippo-context-engine
-openclaw config set plugins.entries.fathippo-context-engine.config.mode=hosted
-openclaw config set plugins.entries.fathippo-context-engine.config.apiKey=mem_xxx
-openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl=https://fathippo.ai/api
-openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical=true
+openclaw config set plugins.slots.contextEngine fathippo-context-engine
+openclaw config set plugins.entries.fathippo-context-engine.config.mode hosted
+openclaw config set plugins.entries.fathippo-context-engine.config.apiKey mem_xxx
+openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl https://fathippo.ai/api
+openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical true
 openclaw gateway restart
 ```
 

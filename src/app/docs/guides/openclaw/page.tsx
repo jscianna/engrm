@@ -26,13 +26,13 @@ export default function OpenClawGuidePage() {
 openclaw plugins install @fathippo/fathippo-context-engine
 
 # Set as context engine
-openclaw config set plugins.slots.contextEngine=fathippo-context-engine
+openclaw config set plugins.slots.contextEngine fathippo-context-engine
 
 # Configure hosted mode
-openclaw config set plugins.entries.fathippo-context-engine.config.mode=hosted
-openclaw config set plugins.entries.fathippo-context-engine.config.apiKey=mem_your_key
-openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl=https://fathippo.ai/api
-openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical=true
+openclaw config set plugins.entries.fathippo-context-engine.config.mode hosted
+openclaw config set plugins.entries.fathippo-context-engine.config.apiKey mem_your_key
+openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl https://fathippo.ai/api
+openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical true
 
 # Restart
 openclaw gateway restart`}</CodeBlock>
@@ -42,10 +42,10 @@ openclaw gateway restart`}</CodeBlock>
 openclaw plugins install @fathippo/fathippo-context-engine
 
 # Set as context engine
-openclaw config set plugins.slots.contextEngine=fathippo-context-engine
+openclaw config set plugins.slots.contextEngine fathippo-context-engine
 
 # Configure local mode
-openclaw config set plugins.entries.fathippo-context-engine.config.mode=local
+openclaw config set plugins.entries.fathippo-context-engine.config.mode local
 
 # Restart
 openclaw gateway restart`}</CodeBlock>
