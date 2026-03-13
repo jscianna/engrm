@@ -4,7 +4,7 @@ import { extractEntities } from "@/lib/entities";
 import { insertAgentMemory } from "@/lib/db";
 import { upsertMemoryVector } from "@/lib/qdrant";
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { cleanText } from "@/lib/content";
 
 export const runtime = "nodejs";
@@ -18,22 +18,22 @@ export async function POST(request: Request) {
     const file = formData.get("file");
 
     if (!(file instanceof File)) {
-      throw new MemryError("VALIDATION_ERROR", { field: "file", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "file", reason: "required" });
     }
 
     const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
     if (!isPdf) {
-      throw new MemryError("VALIDATION_ERROR", { field: "file", reason: "must be a PDF" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "file", reason: "must be a PDF" });
     }
     if (file.size > MAX_PDF_UPLOAD_BYTES) {
-      throw new MemryError("VALIDATION_ERROR", { field: "file", reason: "max 10MB" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "file", reason: "max 10MB" });
     }
 
     const parsed = await PDFParse(Buffer.from(await file.arrayBuffer()));
 
     const text = cleanText(parsed.text ?? "");
     if (!text) {
-      throw new MemryError("VALIDATION_ERROR", { field: "file", reason: "no extractable text" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "file", reason: "no extractable text" });
     }
 
     const entities = extractEntities(text);

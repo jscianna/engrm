@@ -441,4 +441,4 @@ Phase 3:     Client ──▶ Local Pipeline ──▶┬─▶ Return (local)
 
 - [PRODUCT_SPLIT_PLAN.md](./PRODUCT_SPLIT_PLAN.md) - Package structure for local/hosted split
 - [IMPLEMENTATION_PHASES.md](../roadmap/IMPLEMENTATION_PHASES.md) - Week-by-week execution plan
-- `packages/engrm-mcp/` - Existing MCP implementation with local embeddings
+- `packages/mcp-server/` - Existing MCP implementation for hosted/client integrations

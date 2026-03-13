@@ -10,7 +10,7 @@ import {
   type SourceRecord,
   type SourceType,
 } from "@/lib/chatbot/storage";
-import { MemryError } from "@/lib/errors";
+import { FatHippoError } from "@/lib/errors";
 
 function resolveChunkType(type: SourceType): "text" | "markdown" {
   return type === "markdown" ? "markdown" : "text";
@@ -18,7 +18,7 @@ function resolveChunkType(type: SourceType): "text" | "markdown" {
 
 function assertSupportedSourceType(type: SourceType): void {
   if (type === "pdf") {
-    throw new MemryError("VALIDATION_ERROR", {
+    throw new FatHippoError("VALIDATION_ERROR", {
       field: "type",
       reason: "PDF ingestion is not implemented in Phase 1",
     });
@@ -37,7 +37,7 @@ export async function ingestSource(params: {
 
   const chatbot = await getChatbotById(params.userId, params.chatbotId);
   if (!chatbot) {
-    throw new MemryError("CHATBOT_NOT_FOUND");
+    throw new FatHippoError("CHATBOT_NOT_FOUND");
   }
 
   const source = await createSource({
@@ -99,12 +99,12 @@ export async function getOwnedSource(params: {
 }): Promise<SourceRecord> {
   const chatbot = await getChatbotById(params.userId, params.chatbotId);
   if (!chatbot) {
-    throw new MemryError("CHATBOT_NOT_FOUND");
+    throw new FatHippoError("CHATBOT_NOT_FOUND");
   }
 
   const source = await getSourceById(params.chatbotId, params.sourceId);
   if (!source) {
-    throw new MemryError("SOURCE_NOT_FOUND");
+    throw new FatHippoError("SOURCE_NOT_FOUND");
   }
 
   return source;

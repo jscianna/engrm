@@ -9,7 +9,7 @@ import {
 } from "@/lib/db";
 import { embedText } from "@/lib/embeddings";
 import { extractEntities } from "@/lib/entities";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { LLMError, callLLM } from "@/lib/llm";
 import { upsertMemoryVector } from "@/lib/qdrant";
 import type { MemoryKind } from "@/lib/types";
@@ -69,16 +69,16 @@ async function resolveScopeNamespace(
   }
 
   if (scope !== "namespace") {
-    throw new MemryError("VALIDATION_ERROR", { field: "scope", reason: "must be 'global' or 'namespace'" });
+    throw new FatHippoError("VALIDATION_ERROR", { field: "scope", reason: "must be 'global' or 'namespace'" });
   }
 
   if (typeof namespaceId !== "string" || !namespaceId.trim()) {
-    throw new MemryError("VALIDATION_ERROR", { field: "namespaceId", reason: "required for namespace scope" });
+    throw new FatHippoError("VALIDATION_ERROR", { field: "namespaceId", reason: "required for namespace scope" });
   }
 
   const namespace = await getNamespaceById(userId, namespaceId);
   if (!namespace) {
-    throw new MemryError("NAMESPACE_NOT_FOUND");
+    throw new FatHippoError("NAMESPACE_NOT_FOUND");
   }
 
   return namespace.id;
@@ -124,7 +124,7 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body)) {
-      throw new MemryError("VALIDATION_ERROR", { field: "body", reason: "object required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "body", reason: "object required" });
     }
 
     const scope = body.scope;

@@ -5,13 +5,13 @@ Install once. Agent remembers forever. No manual API calls.
 
 ## How It Works
 
-### Level 1: Skill-Based (Current)
-Agent reads SKILL.md and follows automatic behaviors.
+### Level 1: Plugin-Based (Current)
+OpenClaw loads the FatHippo context engine and injects memory automatically.
 ```
-User installs skill → Agent reads instructions → Agent calls FatHippo APIs
+User installs plugin → OpenClaw loads context engine → FatHippo injects and captures memory
 ```
 **Pros:** Works today
-**Cons:** Depends on agent following instructions
+**Cons:** Requires OpenClaw plugin configuration
 
 ### Level 2: Config Integration (Proposed)
 OpenClaw config enables FatHippo automatically.
@@ -50,10 +50,10 @@ Agent automatically has memory tools available.
 
 ## Implementation Plan
 
-### Phase 1: Enhanced Skill (Now)
-- [x] SKILL.md with automatic behaviors
-- [x] Clear triggers for when to query/store
-- [ ] OpenClaw recognizes `fathippo` skill and prioritizes loading
+### Phase 1: Hosted Plugin (Now)
+- [x] `@fathippo/fathippo-context-engine` published
+- [x] Context engine slot mapping
+- [x] Automatic hosted context injection and capture
 
 ### Phase 2: OpenClaw Plugin (Next)
 - [ ] Expand `@fathippo/fathippo-context-engine` with more zero-config hooks
@@ -70,25 +70,23 @@ Agent automatically has memory tools available.
 
 ## For Users Today
 
-Until Level 2/3 ship, use the skill:
+Until deeper OpenClaw hooks ship, use the context engine plugin:
 
-1. **Install skill:**
+1. **Install the plugin:**
 ```bash
-# Copy to your skills folder
-cp -r fathippo-skill ~/.openclaw/skills/fathippo
+openclaw plugins install @fathippo/fathippo-context-engine
+openclaw config set plugins.slots.contextEngine fathippo-context-engine
+openclaw config set plugins.entries.fathippo-context-engine.config.mode hosted
+openclaw config set plugins.entries.fathippo-context-engine.config.apiKey mem_xxx
+openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl https://fathippo.ai/api
+openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical true
+openclaw gateway restart
 ```
 
-2. **Add to AGENTS.md or TOOLS.md:**
-```markdown
-### FatHippo Memory
-API Key: mem_xxx
-Skill loaded. Auto-query on project/preference topics.
-```
-
-3. **Agent automatically:**
+2. **OpenClaw automatically:**
 - Queries FatHippo at conversation start (if relevant)
 - Stores insights during conversation
-- Logs search misses for improvement
+- Tracks memory usage through the context engine slot
 
 ---
 
@@ -97,8 +95,8 @@ Skill loaded. Auto-query on project/preference topics.
 | Level | User Action | Agent Behavior |
 |-------|-------------|----------------|
 | **Manual** | Call APIs explicitly | Only when told |
-| **Skill** | Install skill | Follows instructions |
+| **Plugin** | Install plugin | Automatic context injection |
 | **Config** | Add 3 lines to config | Automatic hooks |
 | **MCP** | Enable server | Native tool access |
 
-We're building toward Config/MCP. Skill works today.
+We're building toward deeper Config/MCP hooks. The plugin works today.

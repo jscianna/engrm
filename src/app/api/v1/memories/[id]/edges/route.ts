@@ -5,7 +5,7 @@
  */
 
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { getMemoryById, getMemoryEdgesForMemory } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -24,13 +24,13 @@ export async function GET(request: Request, { params }: RouteParams) {
     const { id: memoryId } = await params;
     
     if (!memoryId) {
-      throw new MemryError("VALIDATION_ERROR", { field: "id", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "id", reason: "required" });
     }
     
     // Verify memory exists and belongs to user
     const memory = await getMemoryById(memoryId);
     if (!memory || memory.userId !== identity.userId) {
-      throw new MemryError("MEMORY_NOT_FOUND", { resource: "memory", id: memoryId });
+      throw new FatHippoError("MEMORY_NOT_FOUND", { resource: "memory", id: memoryId });
     }
     
     const { incoming, outgoing } = await getMemoryEdgesForMemory(identity.userId, memoryId);

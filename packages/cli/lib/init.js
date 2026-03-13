@@ -9,7 +9,7 @@ import { uploadMemories, generateSkill } from './api.js';
 
 export async function init(options) {
   const dir = path.resolve(options.dir);
-  const apiKey = options.key || process.env.ENGRM_API_KEY;
+  const apiKey = options.key || process.env.FATHIPPO_API_KEY;
   
   console.log(chalk.cyan('\n📁 Scanning workspace...\n'));
   
@@ -49,7 +49,7 @@ export async function init(options) {
   
   // Calculate savings
   const slimTokens = 600; // Approximate slim MEMORY.md
-  const perQueryTokens = 1500; // Average Engrm query result
+  const perQueryTokens = 1500; // Average FatHippo query result
   const avgQueriesPerSession = 2;
   const savedPerSession = totalTokens - slimTokens - (perQueryTokens * avgQueriesPerSession);
   
@@ -77,8 +77,8 @@ export async function init(options) {
   
   if (!apiKey) {
     console.log(chalk.red('\n❌ No API key provided.'));
-    console.log(chalk.dim('Set ENGRM_API_KEY or use --key <key>'));
-    console.log(chalk.dim('Get your key at https://engrm.xyz/dashboard/settings\n'));
+    console.log(chalk.dim('Set FATHIPPO_API_KEY or use --key <key>'));
+    console.log(chalk.dim('Get your key at https://fathippo.ai/dashboard/settings\n'));
     return;
   }
   
@@ -96,14 +96,14 @@ export async function init(options) {
   
   try {
     const uploaded = await uploadMemories(memories, apiKey);
-    uploadSpinner.succeed(`Uploaded ${uploaded} memories to Engrm`);
+    uploadSpinner.succeed(`Uploaded ${uploaded} memories to FatHippo`);
   } catch (err) {
     uploadSpinner.fail(`Upload failed: ${err.message}`);
     return;
   }
   
   // Generate skill file
-  const skillPath = path.join(dir, 'skills', 'engrm', 'SKILL.md');
+  const skillPath = path.join(dir, 'skills', 'fathippo', 'SKILL.md');
   const skillDir = path.dirname(skillPath);
   
   if (!fs.existsSync(skillDir)) {
@@ -122,7 +122,7 @@ export async function init(options) {
   console.log(chalk.cyan('🎉 Migration complete!\n'));
   console.log(chalk.dim('Your agent will now:'));
   console.log(chalk.dim('  1. Load slim MEMORY.md (identity only)'));
-  console.log(chalk.dim('  2. Query Engrm for relevant context'));
+  console.log(chalk.dim('  2. Query FatHippo for relevant context'));
   console.log(chalk.dim('  3. Save ~' + savedPerSession.toLocaleString() + ' tokens per session\n'));
 }
 
@@ -161,10 +161,10 @@ function generateSlimMemory() {
 
 ## Memory Recall
 For project details, past decisions, and context:
-→ Query Engrm using the engrm skill
+→ Query FatHippo using the fathippo skill
 → Don't store everything here - recall what counts
 
-MEMORY.md is identity. Engrm is recall.
+MEMORY.md is identity. FatHippo is recall.
 `;
 }
 

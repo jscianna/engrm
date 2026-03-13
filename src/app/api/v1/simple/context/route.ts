@@ -19,7 +19,7 @@ import {
 import { recordInjectionEvent } from "@/lib/memory-analytics";
 import { validateApiKey } from "@/lib/api-auth";
 import { assertEntitlement, EntitlementFeature, hasEntitlement } from "@/lib/entitlements";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 import { detectSecretQueryIntent, VAULT_HINT_MESSAGE } from "@/lib/secrets";
 import { expandQuery, detectQueryIntent, mergeExpandedResults } from "@/lib/query-expansion";
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body)) {
-      throw new MemryError("VALIDATION_ERROR", { field: "body", reason: "Invalid request body" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "body", reason: "Invalid request body" });
     }
 
     const message = typeof body.message === "string" ? body.message.trim() : "";

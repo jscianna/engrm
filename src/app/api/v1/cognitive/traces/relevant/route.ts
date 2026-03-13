@@ -5,7 +5,7 @@
  */
 
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import {
   getMatchingPatterns,
   getRelevantSkills,
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
         : null;
     
     if (!problem) {
-      throw new MemryError("VALIDATION_ERROR", { field: "problem", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "problem", reason: "required" });
     }
     
     const technologies = Array.isArray(body.context?.technologies)

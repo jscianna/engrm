@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { deleteChatbot, getChatbotById, updateChatbot } from "@/lib/chatbot";
 import { validateApiKey } from "@/lib/api-auth";
-import { errorResponse, MemryError } from "@/lib/errors";
+import { errorResponse, FatHippoError } from "@/lib/errors";
 
 export const runtime = "nodejs";
 
@@ -27,7 +27,7 @@ export async function GET(
     const { id } = await context.params;
     const chatbot = await getChatbotById(identity.userId, id);
     if (!chatbot) {
-      throw new MemryError("CHATBOT_NOT_FOUND");
+      throw new FatHippoError("CHATBOT_NOT_FOUND");
     }
 
     return Response.json({ chatbot });
@@ -45,7 +45,7 @@ export async function PATCH(
     const { id } = await context.params;
     const payload = updateChatbotSchema.safeParse(await request.json().catch(() => null));
     if (!payload.success) {
-      throw new MemryError("VALIDATION_ERROR", {
+      throw new FatHippoError("VALIDATION_ERROR", {
         field: "body",
         reason: payload.error.flatten(),
       });
@@ -53,7 +53,7 @@ export async function PATCH(
 
     const chatbot = await updateChatbot(identity.userId, id, payload.data);
     if (!chatbot) {
-      throw new MemryError("CHATBOT_NOT_FOUND");
+      throw new FatHippoError("CHATBOT_NOT_FOUND");
     }
 
     return Response.json({ chatbot });
@@ -71,7 +71,7 @@ export async function DELETE(
     const { id } = await context.params;
     const deleted = await deleteChatbot(identity.userId, id);
     if (!deleted) {
-      throw new MemryError("CHATBOT_NOT_FOUND");
+      throw new FatHippoError("CHATBOT_NOT_FOUND");
     }
 
     return Response.json({ success: true });

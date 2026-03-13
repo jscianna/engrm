@@ -6,7 +6,7 @@ import {
   deleteSynthesizedMemory,
 } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 
 export const runtime = "nodejs";
 
@@ -20,7 +20,7 @@ export async function GET(
     const synthesis = await getSynthesizedMemoryById(identity.userId, id);
 
     if (!synthesis) {
-      throw new MemryError("SYNTHESIS_NOT_FOUND");
+      throw new FatHippoError("SYNTHESIS_NOT_FOUND");
     }
 
     await incrementSynthesizedMemoryAccess(identity.userId, synthesis.id);
@@ -55,7 +55,7 @@ export async function PATCH(
 
     const existing = await getSynthesizedMemoryById(identity.userId, id);
     if (!existing) {
-      throw new MemryError("SYNTHESIS_NOT_FOUND");
+      throw new FatHippoError("SYNTHESIS_NOT_FOUND");
     }
 
     const updated = await updateSynthesizedMemory(identity.userId, id, {
@@ -84,7 +84,7 @@ export async function DELETE(
 
     const existing = await getSynthesizedMemoryById(identity.userId, id);
     if (!existing) {
-      throw new MemryError("SYNTHESIS_NOT_FOUND");
+      throw new FatHippoError("SYNTHESIS_NOT_FOUND");
     }
 
     await deleteSynthesizedMemory(identity.userId, id);

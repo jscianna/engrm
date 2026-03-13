@@ -1,5 +1,5 @@
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { getSkillById } from "@/lib/cognitive-db";
 
 export const runtime = "nodejs";
@@ -14,7 +14,7 @@ export async function GET(
     const skill = await getSkillById(identity.userId, id);
 
     if (!skill) {
-      throw new MemryError("MEMORY_NOT_FOUND", { resource: "skill", id });
+      throw new FatHippoError("MEMORY_NOT_FOUND", { resource: "skill", id });
     }
 
     return Response.json({

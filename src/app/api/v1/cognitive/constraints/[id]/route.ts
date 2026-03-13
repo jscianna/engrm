@@ -6,7 +6,7 @@
  */
 
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { deactivateConstraint } from "@/lib/constraints-db";
 import { getDb } from "@/lib/turso";
 
@@ -26,7 +26,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     const { id } = await params;
     
     if (!id) {
-      throw new MemryError("VALIDATION_ERROR", { field: "id", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "id", reason: "required" });
     }
     
     // Verify constraint belongs to user
@@ -37,7 +37,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     });
     
     if (result.rows.length === 0) {
-      throw new MemryError("MEMORY_NOT_FOUND", { resource: "constraint", id });
+      throw new FatHippoError("MEMORY_NOT_FOUND", { resource: "constraint", id });
     }
     
     await deactivateConstraint(id);
@@ -63,7 +63,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const body = await request.json();
     
     if (!id) {
-      throw new MemryError("VALIDATION_ERROR", { field: "id", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "id", reason: "required" });
     }
     
     const client = getDb();
@@ -75,7 +75,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     });
     
     if (existing.rows.length === 0) {
-      throw new MemryError("MEMORY_NOT_FOUND", { resource: "constraint", id });
+      throw new FatHippoError("MEMORY_NOT_FOUND", { resource: "constraint", id });
     }
     
     // Build update based on what's provided

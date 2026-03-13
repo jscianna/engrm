@@ -23,10 +23,9 @@ FatHippo is OpenClaw's pluggable memory layer. It provides AI agents with persis
 ├── packages/
 │   ├── context-engine/   # OpenClaw plugin - encrypted agent memory
 │   ├── cognitive-engine/ # AI learning & pattern extraction (PRIVATE)
-│   ├── engrm-mcp/        # MCP server - zero-knowledge memory ops
 │   ├── cli/              # FatHippo CLI
-│   ├── mcp-server/       # Additional MCP implementation
-│   └── python-sdk/       # Python client SDK
+│   ├── local/            # Local-first retrieval and cache helpers
+│   └── mcp-server/       # MCP server - zero-knowledge memory ops
 ├── scripts/              # Build & automation scripts
 └── docs/                 # Documentation
 ```
@@ -42,7 +41,7 @@ FatHippo is OpenClaw's pluggable memory layer. It provides AI agents with persis
 | Security patterns | `src/lib/constraint-patterns.ts` | 96+ regex patterns for constraint detection |
 | OpenClaw plugin | `packages/context-engine/` | Main entry: `src/index.ts` |
 | AI learning | `packages/cognitive-engine/` | **PROPRIETARY** - do not open source |
-| MCP server | `packages/engrm-mcp/` | Model Context Protocol interface |
+| MCP server | `packages/mcp-server/` | Model Context Protocol interface |
 | CLI tool | `packages/cli/` | Command-line interface |
 
 ---
@@ -50,7 +49,7 @@ FatHippo is OpenClaw's pluggable memory layer. It provides AI agents with persis
 ## CONVENTIONS (THIS PROJECT)
 
 ### Non-Standard Structure
-- **NO npm workspaces** despite monorepo layout - manual dependency management
+- **npm workspaces at the root** - some packages still assume local package installs/builds
 - **Constraint patterns** in `src/lib/constraint-patterns.ts` detect 96+ security/privacy constraints
 - **Per-user encryption** - AES-256-GCM with derived keys per userId
 
@@ -99,7 +98,7 @@ cd packages/cognitive-engine && npm test  # vitest
 
 ## GOTCHAS
 
-1. **No workspace config** - Install deps in each package separately
+1. **Workspaces plus package-local builds** - Root scripts use npm workspaces, but some packages still expect local installs/builds
 2. **Cognitive engine is PRIVATE** - Do not commit strategy docs or proprietary algorithms
 3. **Encryption required** - `ENCRYPTION_KEY` env var must be 32-byte hex
 4. **Test coverage sparse** - Only cognitive-engine has tests (vitest)

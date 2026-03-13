@@ -1,5 +1,5 @@
 import { validateApiKey } from "@/lib/api-auth";
-import { errorResponse, MemryError } from "@/lib/errors";
+import { errorResponse, FatHippoError } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 import { getAnalytics, type AnalyticsMetric } from "@/lib/analytics";
 
@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body)) {
-      throw new MemryError("VALIDATION_ERROR", { field: "body", reason: "Invalid request body" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "body", reason: "Invalid request body" });
     }
 
     const period = typeof body.period === "string" && ["7d", "30d", "90d"].includes(body.period)
@@ -44,7 +44,7 @@ export async function GET(request: Request) {
     
     const period = url.searchParams.get("period") as "7d" | "30d" | "90d" ?? "7d";
     if (!["7d", "30d", "90d"].includes(period)) {
-      throw new MemryError("VALIDATION_ERROR", { field: "period", reason: "Must be 7d, 30d, or 90d" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "period", reason: "Must be 7d, 30d, or 90d" });
     }
 
     const analytics = await getAnalytics({

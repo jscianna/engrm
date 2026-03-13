@@ -16,7 +16,7 @@ import {
   listCriticalSynthesizedMemories,
 } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 import {
   createAnalyticsConversationId,
@@ -39,17 +39,17 @@ export async function POST(request: Request, props: Props) {
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body)) {
-      throw new MemryError("VALIDATION_ERROR", { field: "body", reason: "Invalid request body" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "body", reason: "Invalid request body" });
     }
 
     // Validate session exists
     const session = await getExtendedSessionById(identity.userId, sessionId);
     if (!session) {
-      throw new MemryError("SESSION_NOT_FOUND");
+      throw new FatHippoError("SESSION_NOT_FOUND");
     }
 
     if (session.endedAt) {
-      throw new MemryError("VALIDATION_ERROR", { 
+      throw new FatHippoError("VALIDATION_ERROR", { 
         field: "sessionId", 
         reason: "Session has already ended" 
       });
@@ -58,7 +58,7 @@ export async function POST(request: Request, props: Props) {
     // Parse messages
     const messages = Array.isArray(body.messages) ? body.messages : [];
     if (messages.length === 0) {
-      throw new MemryError("VALIDATION_ERROR", { field: "messages", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "messages", reason: "required" });
     }
 
     const turnNumber = typeof body.turnNumber === "number" 

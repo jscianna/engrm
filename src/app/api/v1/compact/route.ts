@@ -8,7 +8,7 @@ import {
 } from "@/lib/db";
 import { embedText } from "@/lib/embeddings";
 import { extractEntities } from "@/lib/entities";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { LLMError, callLLM } from "@/lib/llm";
 import { upsertMemoryVector } from "@/lib/qdrant";
 import type { MemoryKind } from "@/lib/types";
@@ -193,7 +193,7 @@ export async function POST(request: Request) {
     const identity = await validateApiKey(request, "compact.create");
     const body = (await request.json().catch(() => ({}))) as unknown;
     if (!isObject(body)) {
-      throw new MemryError("VALIDATION_ERROR", { field: "body", reason: "object required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "body", reason: "object required" });
     }
 
     const namespaceIdRaw = body.namespaceId;
@@ -201,7 +201,7 @@ export async function POST(request: Request) {
     if (typeof namespaceIdRaw === "string" && namespaceIdRaw.trim()) {
       const namespace = await getNamespaceById(identity.userId, namespaceIdRaw);
       if (!namespace) {
-        throw new MemryError("NAMESPACE_NOT_FOUND");
+        throw new FatHippoError("NAMESPACE_NOT_FOUND");
       }
       namespaceId = namespace.id;
     }

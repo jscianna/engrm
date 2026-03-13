@@ -1,5 +1,5 @@
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { updateTraceOutcome } from "@/lib/cognitive-db";
 import { logCognitiveAuditEvent } from "@/lib/cognitive-audit";
 
@@ -21,7 +21,7 @@ async function updateOutcome(
       outcome !== "failed" &&
       outcome !== "abandoned"
     ) {
-      throw new MemryError("VALIDATION_ERROR", {
+      throw new FatHippoError("VALIDATION_ERROR", {
         field: "outcome",
         reason: "must be success, partial, failed, or abandoned",
       });
@@ -58,7 +58,7 @@ async function updateOutcome(
     });
 
     if (!trace) {
-      throw new MemryError("MEMORY_NOT_FOUND", { resource: "trace", id });
+      throw new FatHippoError("MEMORY_NOT_FOUND", { resource: "trace", id });
     }
 
     await logCognitiveAuditEvent({

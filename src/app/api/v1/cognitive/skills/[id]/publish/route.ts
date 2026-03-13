@@ -1,5 +1,5 @@
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { publishSkill } from "@/lib/cognitive-db";
 import { logCognitiveAuditEvent } from "@/lib/cognitive-audit";
 import { assertSkillPublicationEnabled } from "@/lib/cognitive-guards";
@@ -29,7 +29,7 @@ export async function POST(
     });
 
     if (!skill) {
-      throw new MemryError("MEMORY_NOT_FOUND", { resource: "skill", id });
+      throw new FatHippoError("MEMORY_NOT_FOUND", { resource: "skill", id });
     }
 
     await logCognitiveAuditEvent({

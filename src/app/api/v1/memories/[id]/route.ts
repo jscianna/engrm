@@ -1,6 +1,6 @@
 import { deleteAgentMemoryById, getAgentMemoryById, updateAgentMemory } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { recordMemoryDeleted } from "@/lib/rate-limiter";
 import { invalidateLocalResultsByMemoryIds } from "@/lib/local-retrieval";
 import { assertPreActionRecall } from "@/lib/pre-action-recall";
@@ -17,7 +17,7 @@ export async function GET(
     const memory = await getAgentMemoryById(identity.userId, id, { excludeSensitive: true });
 
     if (!memory) {
-      throw new MemryError("MEMORY_NOT_FOUND");
+      throw new FatHippoError("MEMORY_NOT_FOUND");
     }
 
     return Response.json({ memory });
@@ -45,12 +45,12 @@ export async function PATCH(
     }
     
     if (Object.keys(updates).length === 0) {
-      throw new MemryError("VALIDATION_ERROR", { reason: "No valid fields to update (title or text)" });
+      throw new FatHippoError("VALIDATION_ERROR", { reason: "No valid fields to update (title or text)" });
     }
 
     const updated = await updateAgentMemory(identity.userId, id, updates);
     if (!updated) {
-      throw new MemryError("MEMORY_NOT_FOUND");
+      throw new FatHippoError("MEMORY_NOT_FOUND");
     }
 
     // Invalidate any local retrieval cache entries referencing this memory.
@@ -75,12 +75,12 @@ export async function DELETE(
     // Get memory first to know the size
     const memory = await getAgentMemoryById(identity.userId, id, { excludeSensitive: true });
     if (!memory) {
-      throw new MemryError("MEMORY_NOT_FOUND");
+      throw new FatHippoError("MEMORY_NOT_FOUND");
     }
 
     const deleted = await deleteAgentMemoryById(identity.userId, id);
     if (!deleted) {
-      throw new MemryError("MEMORY_NOT_FOUND");
+      throw new FatHippoError("MEMORY_NOT_FOUND");
     }
 
     // Invalidate any local retrieval cache entries referencing this memory.

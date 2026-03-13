@@ -2,7 +2,7 @@ import {
   getNamespaceByName,
   type NamespaceRecord,
 } from "@/lib/db";
-import { MemryError } from "@/lib/errors";
+import { FatHippoError } from "@/lib/errors";
 
 export function jsonError(error: string, code: string, status: number): Response {
   return Response.json({ error, code }, { status });
@@ -32,7 +32,7 @@ export function normalizeIsoTimestamp(raw: unknown, field: string): string | und
 
   const parsed = Date.parse(trimmed);
   if (Number.isNaN(parsed)) {
-    throw new MemryError("VALIDATION_ERROR", { field, reason: "invalid timestamp" });
+    throw new FatHippoError("VALIDATION_ERROR", { field, reason: "invalid timestamp" });
   }
 
   return new Date(parsed).toISOString();

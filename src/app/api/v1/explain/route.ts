@@ -15,7 +15,7 @@ import { countEntityOverlap, extractEntities } from "@/lib/entities";
 import { semanticSearchVectors } from "@/lib/qdrant";
 import { getAgentMemoriesByIds, getAgentMemoryById } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 
 export const runtime = "nodejs";
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body) || typeof body.query !== "string" || !body.query.trim()) {
-      throw new MemryError("VALIDATION_ERROR", { field: "query", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "query", reason: "required" });
     }
 
     const query = body.query.trim();
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
       // Explain a specific memory
       const memory = await getAgentMemoryById(identity.userId, specificMemoryId);
       if (!memory) {
-        throw new MemryError("MEMORY_NOT_FOUND", { id: specificMemoryId });
+        throw new FatHippoError("MEMORY_NOT_FOUND", { id: specificMemoryId });
       }
 
       // Search for this specific memory's score

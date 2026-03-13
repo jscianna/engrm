@@ -3,7 +3,7 @@
  */
 
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { restoreFromArchive } from "@/lib/memory-lifecycle";
 
 export const runtime = "nodejs";
@@ -16,13 +16,13 @@ export async function POST(request: Request) {
     const memoryId = body.memoryId || body.id;
     
     if (!memoryId || typeof memoryId !== "string") {
-      throw new MemryError("VALIDATION_ERROR", { field: "memoryId", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "memoryId", reason: "required" });
     }
     
     const restored = await restoreFromArchive(identity.userId, memoryId);
     
     if (!restored) {
-      throw new MemryError("MEMORY_NOT_FOUND", { 
+      throw new FatHippoError("MEMORY_NOT_FOUND", { 
         reason: "Memory not found in archive or already active" 
       });
     }

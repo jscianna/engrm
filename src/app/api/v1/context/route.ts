@@ -21,7 +21,7 @@ import {
   listCriticalSynthesizedMemories,
 } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 import { countEntityOverlap } from "@/lib/entities";
 import { recordInjectionEvent } from "@/lib/memory-analytics";
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body)) {
-      throw new MemryError("VALIDATION_ERROR", { field: "body", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "body", reason: "required" });
     }
 
     const message = typeof body.message === "string" ? body.message.trim() : "";

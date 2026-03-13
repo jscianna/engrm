@@ -2,11 +2,11 @@ import chalk from 'chalk';
 import { searchMemories } from './api.js';
 
 export async function search(query, options) {
-  const apiKey = options.key || process.env.ENGRM_API_KEY;
+  const apiKey = options.key || process.env.FATHIPPO_API_KEY;
   
   if (!apiKey) {
     console.log(chalk.red('No API key provided.'));
-    console.log(chalk.dim('Set ENGRM_API_KEY or use --key <key>'));
+    console.log(chalk.dim('Set FATHIPPO_API_KEY or use --key <key>'));
     return;
   }
   

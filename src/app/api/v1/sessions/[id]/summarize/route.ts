@@ -8,7 +8,7 @@ import {
 } from "@/lib/db";
 import { embedText } from "@/lib/embeddings";
 import { extractEntities } from "@/lib/entities";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 import { LLMError, callLLM } from "@/lib/llm";
 import { upsertMemoryVector } from "@/lib/qdrant";
@@ -90,12 +90,12 @@ export async function POST(
     const { id: sessionId } = await context.params;
     const session = await getSessionById(identity.userId, sessionId);
     if (!session) {
-      throw new MemryError("SESSION_NOT_FOUND");
+      throw new FatHippoError("SESSION_NOT_FOUND");
     }
 
     const body = (await request.json().catch(() => ({}))) as unknown;
     if (!isObject(body)) {
-      throw new MemryError("VALIDATION_ERROR", { field: "body", reason: "object required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "body", reason: "object required" });
     }
 
     const deleteOriginals = body.deleteOriginals === true;
@@ -104,7 +104,7 @@ export async function POST(
     );
 
     if (memories.length === 0) {
-      throw new MemryError("VALIDATION_ERROR", {
+      throw new FatHippoError("VALIDATION_ERROR", {
         field: "sessionId",
         reason: "No session memories available to summarize",
       });
@@ -125,7 +125,7 @@ export async function POST(
     const payload = parseSummaryPayload(llmResponse);
     const text = buildSummaryText(payload);
     if (!text) {
-      throw new MemryError("VALIDATION_ERROR", {
+      throw new FatHippoError("VALIDATION_ERROR", {
         field: "summary",
         reason: "LLM returned an empty session summary",
       });

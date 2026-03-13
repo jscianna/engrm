@@ -12,7 +12,7 @@ import {
 } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { invalidateAllLocalResultsForUser } from "@/lib/local-retrieval";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { isObject, normalizeIsoTimestamp, normalizeLimit, resolveNamespaceIdOrError } from "@/lib/api-v1";
 import type { MemoryKind } from "@/lib/types";
 
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body)) {
-      throw new MemryError("VALIDATION_ERROR", { field: "body", reason: "Invalid request body" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "body", reason: "Invalid request body" });
     }
 
     // Check for encrypted vs plaintext format
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     const hasPlaintext = plaintextContent && plaintextContent.length > 0;
 
     if (!hasEncrypted && !hasPlaintext) {
-      throw new MemryError("VALIDATION_ERROR", { 
+      throw new FatHippoError("VALIDATION_ERROR", { 
         field: "content", 
         reason: "Provide either content (plaintext) or encrypted content with an iv" 
       });
@@ -80,10 +80,10 @@ export async function POST(request: Request) {
     if (sessionId) {
       const session = await getSessionById(identity.userId, sessionId);
       if (!session) {
-        throw new MemryError("SESSION_NOT_FOUND");
+        throw new FatHippoError("SESSION_NOT_FOUND");
       }
       if (resolved.namespaceId && session.namespaceId !== resolved.namespaceId) {
-        throw new MemryError("VALIDATION_ERROR", {
+        throw new FatHippoError("VALIDATION_ERROR", {
           field: "sessionId",
           reason: "Session namespace does not match request namespace",
         });

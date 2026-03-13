@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { getChatbotById, ingestSource, listSourcesByChatbot } from "@/lib/chatbot";
 import { validateApiKey } from "@/lib/api-auth";
-import { errorResponse, MemryError } from "@/lib/errors";
+import { errorResponse, FatHippoError } from "@/lib/errors";
 
 export const runtime = "nodejs";
 
@@ -21,7 +21,7 @@ export async function GET(
     const { id } = await context.params;
     const chatbot = await getChatbotById(identity.userId, id);
     if (!chatbot) {
-      throw new MemryError("CHATBOT_NOT_FOUND");
+      throw new FatHippoError("CHATBOT_NOT_FOUND");
     }
 
     const sources = await listSourcesByChatbot(id);
@@ -40,7 +40,7 @@ export async function POST(
     const { id } = await context.params;
     const payload = createSourceSchema.safeParse(await request.json().catch(() => null));
     if (!payload.success) {
-      throw new MemryError("VALIDATION_ERROR", {
+      throw new FatHippoError("VALIDATION_ERROR", {
         field: "body",
         reason: payload.error.flatten(),
       });

@@ -6,7 +6,7 @@
  */
 
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 import type { MemoryKind, MemoryImportanceTier } from "@/lib/types";
 
@@ -145,13 +145,13 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body)) {
-      throw new MemryError("VALIDATION_ERROR", { field: "body", reason: "Invalid request body" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "body", reason: "Invalid request body" });
     }
 
     // Parse conversation
     const conversation = Array.isArray(body.conversation) ? body.conversation : [];
     if (conversation.length === 0) {
-      throw new MemryError("VALIDATION_ERROR", { field: "conversation", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "conversation", reason: "required" });
     }
 
     const namespace = typeof body.namespace === "string" ? body.namespace.trim() : null;

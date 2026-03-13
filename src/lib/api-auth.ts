@@ -2,7 +2,7 @@ import {
   recordApiKeyPluginMetadata,
   validateApiKey as validateApiKeyInDb,
 } from "@/lib/db";
-import { MemryError, ApiAuthError, errorResponse } from "@/lib/errors";
+import { FatHippoError, ApiAuthError, errorResponse } from "@/lib/errors";
 import { checkRateLimit } from "@/lib/rate-limiter";
 import { assertEntitlement, featureForEndpoint } from "@/lib/entitlements";
 
@@ -36,7 +36,7 @@ function apiKeyAllowsScope(scopes: string[], requiredScope: string): boolean {
 
 /**
  * Validate API key and check rate limits
- * Returns identity if valid, throws MemryError if not
+ * Returns identity if valid, throws FatHippoError if not
  */
 export async function validateApiKey(
   request: Request,
@@ -44,21 +44,21 @@ export async function validateApiKey(
 ): Promise<ApiKeyIdentity> {
   const header = request.headers.get("authorization") ?? request.headers.get("Authorization");
   if (!header) {
-    throw new MemryError("AUTH_MISSING");
+    throw new FatHippoError("AUTH_MISSING");
   }
 
   const [scheme, token] = header.trim().split(/\s+/, 2);
   if (scheme?.toLowerCase() !== "bearer" || !token) {
-    throw new MemryError("AUTH_INVALID");
+    throw new FatHippoError("AUTH_INVALID");
   }
 
   const identity = await validateApiKeyInDb(token);
   if (!identity) {
-    throw new MemryError("AUTH_INVALID_KEY");
+    throw new FatHippoError("AUTH_INVALID_KEY");
   }
 
   if (!apiKeyAllowsScope(identity.scopes, endpoint)) {
-    throw new MemryError("AUTH_FORBIDDEN", {
+    throw new FatHippoError("AUTH_FORBIDDEN", {
       requiredScope: endpoint,
     });
   }
@@ -117,7 +117,7 @@ export async function validateApiKeyAnyScope(
   endpoints: string[],
 ): Promise<ApiKeyIdentity> {
   if (endpoints.length === 0) {
-    throw new MemryError("VALIDATION_ERROR", { reason: "No scopes provided" });
+    throw new FatHippoError("VALIDATION_ERROR", { reason: "No scopes provided" });
   }
 
   let lastError: unknown;
@@ -129,5 +129,5 @@ export async function validateApiKeyAnyScope(
     }
   }
 
-  throw (lastError ?? new MemryError("AUTH_FORBIDDEN"));
+  throw (lastError ?? new FatHippoError("AUTH_FORBIDDEN"));
 }

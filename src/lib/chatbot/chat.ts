@@ -10,7 +10,7 @@ import {
   type MessageRecord,
 } from "@/lib/chatbot/storage";
 import { buildRagContext, retrieveRelevantChunks } from "@/lib/chatbot/rag";
-import { MemryError } from "@/lib/errors";
+import { FatHippoError } from "@/lib/errors";
 
 type ChatHistoryMessage = {
   role: "user" | "assistant";
@@ -50,7 +50,7 @@ async function ensureConversation(params: {
   if (params.conversationId) {
     const existing = await getConversationById(params.chatbotId, params.conversationId);
     if (!existing) {
-      throw new MemryError("CONVERSATION_NOT_FOUND");
+      throw new FatHippoError("CONVERSATION_NOT_FOUND");
     }
     return existing;
   }
@@ -200,7 +200,7 @@ export async function streamChatReply(params: {
 }> {
   const chatbot = await getChatbotById(params.userId, params.chatbotId);
   if (!chatbot) {
-    throw new MemryError("CHATBOT_NOT_FOUND");
+    throw new FatHippoError("CHATBOT_NOT_FOUND");
   }
 
   const conversation = await ensureConversation({
@@ -285,12 +285,12 @@ export async function getConversationTranscript(params: {
 }): Promise<{ chatbot: ChatbotRecord; conversation: ConversationRecord; messages: MessageRecord[] }> {
   const chatbot = await getChatbotById(params.userId, params.chatbotId);
   if (!chatbot) {
-    throw new MemryError("CHATBOT_NOT_FOUND");
+    throw new FatHippoError("CHATBOT_NOT_FOUND");
   }
 
   const conversation = await getConversationById(params.chatbotId, params.conversationId);
   if (!conversation) {
-    throw new MemryError("CONVERSATION_NOT_FOUND");
+    throw new FatHippoError("CONVERSATION_NOT_FOUND");
   }
 
   const messages = await listMessagesByConversation(conversation.id);

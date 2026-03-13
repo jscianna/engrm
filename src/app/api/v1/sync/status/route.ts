@@ -6,7 +6,7 @@
  */
 
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 import {
   getSyncQueueMetrics,
@@ -73,20 +73,20 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body)) {
-      throw new MemryError("VALIDATION_ERROR", { field: "body", reason: "Invalid request body" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "body", reason: "Invalid request body" });
     }
 
     const action = typeof body.action === "string" ? body.action : null;
 
     if (!action) {
-      throw new MemryError("VALIDATION_ERROR", { field: "action", reason: "Action is required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "action", reason: "Action is required" });
     }
 
     switch (action) {
       case "retry": {
         const entryId = typeof body.entryId === "string" ? body.entryId : null;
         if (!entryId) {
-          throw new MemryError("VALIDATION_ERROR", { field: "entryId", reason: "entryId is required" });
+          throw new FatHippoError("VALIDATION_ERROR", { field: "entryId", reason: "entryId is required" });
         }
         const success = retryDeadLetter(entryId);
         return Response.json({ success, action: "retry", entryId });
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
       case "purge": {
         const entryId = typeof body.entryId === "string" ? body.entryId : null;
         if (!entryId) {
-          throw new MemryError("VALIDATION_ERROR", { field: "entryId", reason: "entryId is required" });
+          throw new FatHippoError("VALIDATION_ERROR", { field: "entryId", reason: "entryId is required" });
         }
         const success = purgeDeadLetter(entryId);
         return Response.json({ success, action: "purge", entryId });
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
 
       case "force_sync": {
         if (!isWorkerRunning()) {
-          throw new MemryError("VALIDATION_ERROR", { 
+          throw new FatHippoError("VALIDATION_ERROR", { 
             field: "worker", 
             reason: "Sync worker is not running" 
           });
@@ -118,7 +118,7 @@ export async function POST(request: Request) {
       }
 
       default:
-        throw new MemryError("VALIDATION_ERROR", { 
+        throw new FatHippoError("VALIDATION_ERROR", { 
           field: "action", 
           reason: `Unknown action: ${action}` 
         });

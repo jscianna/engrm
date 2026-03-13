@@ -6,7 +6,7 @@
  */
 
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { CONSTRAINT_TEMPLATES, applyTemplate, GLOBAL_CONSTRAINTS } from "@/lib/constraints-db";
 
 export const runtime = "nodejs";
@@ -53,12 +53,12 @@ export async function POST(request: Request) {
     const templateId = typeof body.templateId === "string" ? body.templateId : "";
     
     if (!templateId) {
-      throw new MemryError("VALIDATION_ERROR", { field: "templateId", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "templateId", reason: "required" });
     }
     
     const template = CONSTRAINT_TEMPLATES.find(t => t.id === templateId);
     if (!template) {
-      throw new MemryError("VALIDATION_ERROR", { 
+      throw new FatHippoError("VALIDATION_ERROR", { 
         field: "templateId", 
         reason: `Template not found. Available: ${CONSTRAINT_TEMPLATES.map(t => t.id).join(", ")}` 
       });

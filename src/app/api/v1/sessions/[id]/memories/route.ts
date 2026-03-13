@@ -2,7 +2,7 @@ import { embedText } from "@/lib/embeddings";
 import { upsertMemoryVector } from "@/lib/qdrant";
 import { getSessionById, insertAgentMemory, listSessionMemories } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 
 export const runtime = "nodejs";
@@ -17,7 +17,7 @@ export async function GET(
     const session = await getSessionById(identity.userId, sessionId);
     
     if (!session) {
-      throw new MemryError("SESSION_NOT_FOUND");
+      throw new FatHippoError("SESSION_NOT_FOUND");
     }
 
     const memories = await listSessionMemories(identity.userId, sessionId);
@@ -37,12 +37,12 @@ export async function POST(
     const session = await getSessionById(identity.userId, sessionId);
     
     if (!session) {
-      throw new MemryError("SESSION_NOT_FOUND");
+      throw new FatHippoError("SESSION_NOT_FOUND");
     }
 
     const body = (await request.json().catch(() => null)) as unknown;
     if (!isObject(body) || typeof body.text !== "string" || !body.text.trim()) {
-      throw new MemryError("VALIDATION_ERROR", { field: "text", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "text", reason: "required" });
     }
     const metadata = isObject(body.metadata) ? body.metadata : null;
     const memory = await insertAgentMemory({

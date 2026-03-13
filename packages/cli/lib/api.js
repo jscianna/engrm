@@ -1,4 +1,4 @@
-const API_BASE = 'https://www.engrm.xyz/api/v1';
+const API_BASE = 'https://www.fathippo.ai/api/v1';
 
 export async function uploadMemories(memories, apiKey) {
   let uploaded = 0;
@@ -75,11 +75,11 @@ export function generateSkill(apiKey) {
   const maskedKey = apiKey.slice(0, 8) + '...' + apiKey.slice(-4);
   
   return `---
-name: engrm
-description: Query Engrm for persistent memory before answering questions about projects, decisions, preferences, or context that may have changed.
+name: fathippo
+description: Query FatHippo for persistent memory before answering questions about projects, decisions, preferences, or context that may have changed.
 ---
 
-# Engrm Memory Recall
+# FatHippo Memory Recall
 
 **When to use:** Before answering questions about:
 - Active projects and their current state
@@ -89,14 +89,14 @@ description: Query Engrm for persistent memory before answering questions about 
 
 ## API Reference
 
-**Endpoint:** \`https://www.engrm.xyz/api/v1/search\`
-**API Key:** \`${maskedKey}\` (set ENGRM_API_KEY in environment)
+**Endpoint:** \`https://www.fathippo.ai/api/v1/search\`
+**API Key:** \`${maskedKey}\` (set FATHIPPO_API_KEY in environment)
 
 ### Search Memories
 
 \`\`\`bash
-curl -s -X POST "https://www.engrm.xyz/api/v1/search" \\
-  -H "Authorization: Bearer $ENGRM_API_KEY" \\
+curl -s -X POST "https://www.fathippo.ai/api/v1/search" \\
+  -H "Authorization: Bearer $FATHIPPO_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"query": "YOUR SEARCH QUERY", "limit": 5}'
 \`\`\`
@@ -104,8 +104,8 @@ curl -s -X POST "https://www.engrm.xyz/api/v1/search" \\
 ### Store Memory
 
 \`\`\`bash
-curl -s -X POST "https://www.engrm.xyz/api/v1/memories" \\
-  -H "Authorization: Bearer $ENGRM_API_KEY" \\
+curl -s -X POST "https://www.fathippo.ai/api/v1/memories" \\
+  -H "Authorization: Bearer $FATHIPPO_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"title": "Memory Title", "content": "Memory content"}'
 \`\`\`

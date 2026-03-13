@@ -1,6 +1,6 @@
 import { ensureDatabaseMigrations } from "@/lib/db-migrations";
 import { getDb } from "@/lib/turso";
-import { MemryError } from "@/lib/errors";
+import { FatHippoError } from "@/lib/errors";
 import { extractRequestInfo } from "@/lib/audit-log";
 
 let initialized = false;
@@ -105,7 +105,7 @@ export async function enforceRequestThrottle(params: {
 
     const count = Number((result.rows[0] as Record<string, unknown> | undefined)?.request_count ?? 0);
     if (count > params.limit) {
-      throw new MemryError("RATE_LIMIT_ACTION", {
+      throw new FatHippoError("RATE_LIMIT_ACTION", {
         scope: params.scope,
         limit: params.limit,
         retryAfterSeconds: Math.max(1, Math.ceil((new Date(resetAt).getTime() - nowMs) / 1000)),

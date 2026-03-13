@@ -6,7 +6,7 @@
  */
 
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { createMemoryEdge, getMemoryById, listMemoryEdgesByUser } from "@/lib/db";
 import type { MemoryRelationshipType } from "@/lib/types";
 
@@ -62,19 +62,19 @@ export async function POST(request: Request) {
     const metadata = body.metadata || null;
     
     if (!sourceId) {
-      throw new MemryError("VALIDATION_ERROR", { field: "sourceId", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "sourceId", reason: "required" });
     }
     if (!targetId) {
-      throw new MemryError("VALIDATION_ERROR", { field: "targetId", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "targetId", reason: "required" });
     }
     if (!relationshipType) {
-      throw new MemryError("VALIDATION_ERROR", { field: "relationshipType", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "relationshipType", reason: "required" });
     }
     if (sourceId === targetId) {
-      throw new MemryError("VALIDATION_ERROR", { reason: "sourceId and targetId must be different" });
+      throw new FatHippoError("VALIDATION_ERROR", { reason: "sourceId and targetId must be different" });
     }
     if (!ALLOWED_RELATIONSHIP_TYPES.includes(relationshipType)) {
-      throw new MemryError("VALIDATION_ERROR", { 
+      throw new FatHippoError("VALIDATION_ERROR", { 
         field: "relationshipType", 
         reason: `must be one of: ${ALLOWED_RELATIONSHIP_TYPES.join(", ")}` 
       });
@@ -87,10 +87,10 @@ export async function POST(request: Request) {
     ]);
     
     if (!sourceMemory || sourceMemory.userId !== identity.userId) {
-      throw new MemryError("MEMORY_NOT_FOUND", { resource: "source_memory", id: sourceId });
+      throw new FatHippoError("MEMORY_NOT_FOUND", { resource: "source_memory", id: sourceId });
     }
     if (!targetMemory || targetMemory.userId !== identity.userId) {
-      throw new MemryError("MEMORY_NOT_FOUND", { resource: "target_memory", id: targetId });
+      throw new FatHippoError("MEMORY_NOT_FOUND", { resource: "target_memory", id: targetId });
     }
     
     const edge = await createMemoryEdge({

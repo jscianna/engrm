@@ -6,7 +6,7 @@
  */
 
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 import { updateAgentMemory, deleteAgentMemoryById, insertAgentMemory } from "@/lib/db";
 import { invalidateAllLocalResultsForUser, invalidateLocalResultsByMemoryIds } from "@/lib/local-retrieval";
@@ -57,20 +57,20 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body)) {
-      throw new MemryError("VALIDATION_ERROR", { field: "body", reason: "Invalid request body" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "body", reason: "Invalid request body" });
     }
 
     const operations = Array.isArray(body.operations) ? body.operations : null;
 
     if (!operations || operations.length === 0) {
-      throw new MemryError("VALIDATION_ERROR", { 
+      throw new FatHippoError("VALIDATION_ERROR", { 
         field: "operations", 
         reason: "Operations array is required and must not be empty" 
       });
     }
 
     if (operations.length > 100) {
-      throw new MemryError("VALIDATION_ERROR", { 
+      throw new FatHippoError("VALIDATION_ERROR", { 
         field: "operations", 
         reason: "Maximum 100 operations per batch" 
       });
