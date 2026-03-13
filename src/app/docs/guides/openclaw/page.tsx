@@ -17,27 +17,29 @@ export default function OpenClawGuidePage() {
 
       <H2 id="plugin">Plugin Installation (Recommended)</H2>
       <P>
-        OpenClaw users only install <InlineCode>@fathippo/context-engine</InlineCode>. The other Fathippo packages are
+        OpenClaw users only install <InlineCode>@fathippo/fathippo-context-engine</InlineCode>. The other Fathippo packages are
         developer boundaries, not separate end-user installs.
       </P>
 
       <H3>Hosted Mode</H3>
       <CodeBlock language="bash">{`# Install the plugin
-openclaw plugins install @fathippo/context-engine
+openclaw plugins install @fathippo/fathippo-context-engine
 
 # Set as context engine
 openclaw config set plugins.slots.contextEngine=fathippo-context-engine
 
-# Configure hosted mode + your API key
+# Configure hosted mode
 openclaw config set plugins.entries.fathippo-context-engine.config.mode=hosted
 openclaw config set plugins.entries.fathippo-context-engine.config.apiKey=mem_your_key
+openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl=https://fathippo.ai/api
+openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical=true
 
 # Restart
 openclaw gateway restart`}</CodeBlock>
 
       <H3>Local-Only Mode (No API Key)</H3>
       <CodeBlock language="bash">{`# Install the plugin
-openclaw plugins install @fathippo/context-engine
+openclaw plugins install @fathippo/fathippo-context-engine
 
 # Set as context engine
 openclaw config set plugins.slots.contextEngine=fathippo-context-engine
@@ -51,7 +53,9 @@ openclaw gateway restart`}</CodeBlock>
       <Note type="tip">
         Hosted mode reports the plugin version back to your FatHippo dashboard and unlocks hosted cognition, sync,
         and import features. Local-only mode stays private, does not send version telemetry to the hosted dashboard,
-        and only uses lightweight on-device learning stored locally on disk.
+        and only uses lightweight on-device learning stored locally on disk. If you used the older
+        <InlineCode>@fathippo/context-engine</InlineCode> package, reinstall from
+        <InlineCode>@fathippo/fathippo-context-engine</InlineCode> so OpenClaw discovers the matching plugin id cleanly.
       </Note>
 
       <H3>Features</H3>

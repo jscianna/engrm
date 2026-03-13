@@ -301,7 +301,7 @@ console.log('Captured trace:', trace); // May leak secrets!
 
 ## INTEGRATION WITH OPENCLAW
 
-Cognitive Engine extends the Context Engine (`@fathippo/context-engine`):
+Cognitive Engine extends the Context Engine (`@fathippo/fathippo-context-engine`):
 
 **In Context Engine's `assemble()`:**
 ```typescript

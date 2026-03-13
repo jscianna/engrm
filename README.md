@@ -12,14 +12,14 @@
 <p align="center">
   <a href="https://fathippo.ai">Website</a> •
   <a href="https://fathippo.ai/docs">Documentation</a> •
-  <a href="https://www.npmjs.com/package/@fathippo/context-engine">OpenClaw Context Engine</a>
+  <a href="https://www.npmjs.com/package/@fathippo/fathippo-context-engine">OpenClaw Context Engine</a>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License" />
   <img src="https://img.shields.io/badge/typescript-5.0+-blue.svg" alt="TypeScript" />
   <img src="https://img.shields.io/badge/next.js-16+-black.svg" alt="Next.js" />
-  <img src="https://img.shields.io/npm/v/@fathippo/context-engine.svg" alt="npm" />
+  <img src="https://img.shields.io/npm/v/@fathippo/fathippo-context-engine.svg" alt="npm" />
 </p>
 
 ---
@@ -48,17 +48,22 @@ If you already use OpenClaw, this is the main setup path.
 
 ```bash
 # 1. Install the plugin
-openclaw plugins install @fathippo/context-engine
+openclaw plugins install @fathippo/fathippo-context-engine
 
 # 2. Set it as the active context engine
 openclaw config set plugins.slots.contextEngine=fathippo-context-engine
 
-# 3. Add your FatHippo API key
+# 3. Configure hosted mode
+openclaw config set plugins.entries.fathippo-context-engine.config.mode=hosted
 openclaw config set plugins.entries.fathippo-context-engine.config.apiKey=mem_xxx
+openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl=https://fathippo.ai/api
+openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical=true
 
 # 4. Restart the gateway
 openclaw gateway restart
 ```
+
+If you previously installed `@fathippo/context-engine`, reinstall from `@fathippo/fathippo-context-engine` on the OpenClaw machine so the published package name matches the plugin id OpenClaw discovers.
 
 After that, FatHippo starts working automatically:
 
@@ -121,7 +126,7 @@ This repo is now split into installable package boundaries:
 
 | Package | Purpose |
 | --- | --- |
-| `@fathippo/context-engine` | OpenClaw plugin and easiest way to connect FatHippo |
+| `@fathippo/fathippo-context-engine` | OpenClaw plugin and easiest way to connect FatHippo |
 | `@fathippo/local` | Local-first retrieval, cache, and edge helpers |
 | `@fathippo/hosted` | Hosted sync and retrieval-upgrade helpers |
 | `@fathippo/cognition` | Cognitive substrate APIs and learning helpers |

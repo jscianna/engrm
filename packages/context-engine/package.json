@@ -1,5 +1,5 @@
 {
-  "name": "@fathippo/context-engine",
+  "name": "@fathippo/fathippo-context-engine",
   "version": "0.1.1",
   "openclaw": {
     "extensions": ["./dist/index.js"]

@@ -206,7 +206,7 @@ function OpenClawCodePreview() {
             <span className={colors.command}>openclaw</span>{" "}
             <span className={colors.subcommand}>plugins</span>{" "}
             <span className={colors.action}>install</span>{" "}
-            <span className={colors.package}>@fathippo/context-engine</span>
+            <span className={colors.package}>@fathippo/fathippo-context-engine</span>
           </motion.div>
           
           {/* Empty line */}
@@ -575,7 +575,7 @@ export default function Home() {
               className="mb-6 border-[#E5E7EB] bg-white text-[#6B7280] font-medium"
             >
               <Sparkles className="mr-1.5 h-3 w-3 text-[#0070F3]" />
-              OpenClaw's pluggable memory layer
+              OpenClaw&apos;s pluggable memory layer
             </Badge>
           </motion.div>
 
