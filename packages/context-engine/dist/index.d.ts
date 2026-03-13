@@ -1,7 +1,7 @@
 /**
  * FatHippo Context Engine for OpenClaw
  *
- * Persistent agent memory with hosted cognition or private local mode.
+ * Persistent agent memory with full hosted features or private local mode.
  *
  * Usage:
  *   openclaw plugins install @fathippo/fathippo-context-engine

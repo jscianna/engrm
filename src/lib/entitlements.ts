@@ -12,19 +12,18 @@ const FEATURE_MIN_PLAN: Record<EntitlementFeature, EntitlementPlan> = {
   [EntitlementFeature.HostedSync]: "hosted",
   [EntitlementFeature.HostedHyde]: "hosted",
   [EntitlementFeature.HostedRerank]: "hosted",
-  [EntitlementFeature.Cognition]: "cognition",
+  [EntitlementFeature.Cognition]: "hosted",
 };
 
 const PLAN_ORDER: Record<EntitlementPlan, number> = {
   free: 0,
   hosted: 1,
-  cognition: 2,
 };
 
 function upgradeHintForFeature(feature: EntitlementFeature): string {
   switch (feature) {
     case EntitlementFeature.Cognition:
-      return "Upgrade to the Cognition plan to enable traces, patterns, skills, and cognitive APIs.";
+      return "Upgrade to the Hosted plan to enable traces, patterns, skills, and cognitive APIs.";
     case EntitlementFeature.HostedHyde:
     case EntitlementFeature.HostedRerank:
     case EntitlementFeature.HostedSync:

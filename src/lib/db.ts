@@ -639,7 +639,7 @@ export type ApiKeyIdentity = {
   scopes: string[];
 };
 
-export type EntitlementPlan = "free" | "hosted" | "cognition";
+export type EntitlementPlan = "free" | "hosted";
 
 export type UserEntitlement = {
   userId: string;
@@ -685,8 +685,9 @@ export const DEFAULT_AGENT_API_KEY_SCOPES = [
 ] as const;
 
 function normalizeEntitlementPlan(value: unknown): EntitlementPlan {
+  // Backward compatibility: old cognition rows now map to hosted.
   if (value === "hosted" || value === "cognition") {
-    return value;
+    return "hosted";
   }
   return "free";
 }
@@ -699,7 +700,7 @@ function planFromEnv(userId: string): EntitlementPlan | null {
       .filter(Boolean),
   );
   if (cognitionUsers.has(userId)) {
-    return "cognition";
+    return "hosted";
   }
 
   const hostedUsers = new Set(

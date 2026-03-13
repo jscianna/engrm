@@ -28,11 +28,11 @@ export function OpenClawConnectCard(props: OpenClawConnectCardProps) {
     const keyValue = createdKey ?? "mem_your_openclaw_key";
     return [
       "openclaw plugins install @fathippo/fathippo-context-engine",
-      "openclaw config set plugins.slots.contextEngine=fathippo-context-engine",
-      "openclaw config set plugins.entries.fathippo-context-engine.config.mode=hosted",
-      `openclaw config set plugins.entries.fathippo-context-engine.config.apiKey=${keyValue}`,
-      "openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl=https://fathippo.ai/api",
-      "openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical=true",
+      "openclaw config set plugins.slots.contextEngine fathippo-context-engine",
+      "openclaw config set plugins.entries.fathippo-context-engine.config.mode hosted",
+      `openclaw config set plugins.entries.fathippo-context-engine.config.apiKey ${keyValue}`,
+      "openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl https://fathippo.ai/api",
+      "openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical true",
       "openclaw gateway restart",
     ].join("\n");
   }, [createdKey]);
@@ -41,8 +41,8 @@ export function OpenClawConnectCard(props: OpenClawConnectCardProps) {
     () =>
       [
         "openclaw plugins install @fathippo/fathippo-context-engine",
-        "openclaw config set plugins.slots.contextEngine=fathippo-context-engine",
-        "openclaw config set plugins.entries.fathippo-context-engine.config.mode=local",
+        "openclaw config set plugins.slots.contextEngine fathippo-context-engine",
+        "openclaw config set plugins.entries.fathippo-context-engine.config.mode local",
         "openclaw gateway restart",
       ].join("\n"),
     [],
@@ -176,7 +176,7 @@ export function OpenClawConnectCard(props: OpenClawConnectCardProps) {
             <div>
               <p className="text-sm font-medium text-zinc-100">Hosted mode (recommended when you want dashboard receipts)</p>
               <p className="mt-1 text-xs text-zinc-500">
-                This connects OpenClaw to your FatHippo account, unlocks hosted retrieval and cognition features, supports account-backed sync and imports, and reports plugin version back to the dashboard.
+                This is the paid hosted offer. It connects OpenClaw to your FatHippo account, unlocks hosted retrieval and cognition features, supports account-backed sync and imports, and reports plugin version back to the dashboard.
               </p>
               <p className="mt-1 text-xs text-zinc-600">
                 The install command below pulls the latest published plugin package from npm.
@@ -197,7 +197,7 @@ export function OpenClawConnectCard(props: OpenClawConnectCardProps) {
             <div>
               <p className="text-sm font-medium text-zinc-100">Local-only mode (no API key)</p>
               <p className="mt-1 text-xs text-zinc-500">
-                Good for a private free setup. Fathippo keeps memory and lightweight private learning on the machine running OpenClaw, but it does not use hosted cognition, sync, imports, or dashboard receipts.
+                This is the free offer. Fathippo keeps memory and lightweight private learning on the machine running OpenClaw, but it does not use hosted features like sync, dashboard receipts, or hosted cognition.
               </p>
               <p className="mt-1 text-xs text-zinc-600">
                 Local mode stores its data on disk at the configured local storage path instead of checking in with the hosted dashboard.
