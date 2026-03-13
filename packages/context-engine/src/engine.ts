@@ -388,9 +388,10 @@ export class FatHippoContextEngine implements ContextEngine {
     tokenBudget?: number;
   }): Promise<AssembleResult> {
     const lastUserMessage = this.findLastUserMessage(params.messages)?.trim() ?? "";
+    const runtimeAwareness = this.buildRuntimeAwarenessInstruction();
 
     if (this.mode === "local") {
-      return this.assembleLocalContext(params, lastUserMessage);
+      return this.assembleLocalContext(params, lastUserMessage, runtimeAwareness);
     }
 
     const client = this.client;
@@ -415,10 +416,11 @@ export class FatHippoContextEngine implements ContextEngine {
     if (!lastUserMessage || this.isTrivialQuery(lastUserMessage)) {
       // Still include indexed summaries even for trivial queries
       const baseTokens = this.estimateMessageTokens(params.messages);
+      const systemPromptAddition = runtimeAwareness + indexedContext;
       return {
         messages: params.messages,
-        estimatedTokens: baseTokens + estimateTokens(indexedContext),
-        systemPromptAddition: indexedContext || undefined,
+        estimatedTokens: baseTokens + estimateTokens(systemPromptAddition),
+        systemPromptAddition: systemPromptAddition.trim() || undefined,
       };
     }
 
@@ -532,6 +534,7 @@ export class FatHippoContextEngine implements ContextEngine {
     const fullContext = typeof params.tokenBudget === "number" && params.tokenBudget > 0
       ? this.fitContextToBudget({
           sections: [
+            runtimeAwareness,
             constraintsContext,
             memoryBlock ? `${memoryBlock}\n` : "",
             indexedContext,
@@ -540,7 +543,7 @@ export class FatHippoContextEngine implements ContextEngine {
           ],
           contextBudget: Math.max(0, params.tokenBudget - baseMessageTokens),
         })
-      : constraintsContext + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + cognitiveContext + hippoNodInstruction;
+      : runtimeAwareness + constraintsContext + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + cognitiveContext + hippoNodInstruction;
     const tokens = estimateTokens(fullContext) + baseMessageTokens;
 
     return {
@@ -553,6 +556,7 @@ export class FatHippoContextEngine implements ContextEngine {
   private async assembleLocalContext(
     params: { sessionId: string; messages: AgentMessage[]; tokenBudget?: number },
     lastUserMessage: string,
+    runtimeAwareness: string,
   ): Promise<AssembleResult> {
     const profileId = this.getLocalProfileId(params.sessionId);
     const indexed = await this.localStore?.getIndexedSummaries({
@@ -566,10 +570,11 @@ export class FatHippoContextEngine implements ContextEngine {
     const baseTokens = this.estimateMessageTokens(params.messages);
 
     if (!lastUserMessage || this.isTrivialQuery(lastUserMessage)) {
+      const systemPromptAddition = runtimeAwareness + indexedContext;
       return {
         messages: params.messages,
-        estimatedTokens: baseTokens + estimateTokens(indexedContext),
-        systemPromptAddition: indexedContext || undefined,
+        estimatedTokens: baseTokens + estimateTokens(systemPromptAddition),
+        systemPromptAddition: systemPromptAddition.trim() || undefined,
       };
     }
 
@@ -649,6 +654,7 @@ export class FatHippoContextEngine implements ContextEngine {
     const fullContext = typeof params.tokenBudget === "number" && params.tokenBudget > 0
         ? this.fitContextToBudget({
           sections: [
+            runtimeAwareness,
             workflowBlock,
             patternBlock,
             memoryBlock ? `${memoryBlock}\n` : "",
@@ -657,13 +663,25 @@ export class FatHippoContextEngine implements ContextEngine {
           ],
           contextBudget: Math.max(0, params.tokenBudget - baseTokens),
         })
-      : workflowBlock + patternBlock + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + hippoNodInstruction;
+      : runtimeAwareness + workflowBlock + patternBlock + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + hippoNodInstruction;
 
     return {
       messages: params.messages,
       estimatedTokens: baseTokens + estimateTokens(fullContext),
       systemPromptAddition: fullContext.trim() || undefined,
     };
+  }
+
+  private buildRuntimeAwarenessInstruction(): string {
+    return [
+      "## FatHippo Runtime",
+      "FatHippo context engine is active for this session.",
+      "If asked whether FatHippo is active or configured for this chat, answer yes.",
+      "Only attribute a specific fact to FatHippo when it appears in a FatHippo-labeled section of this prompt.",
+      "If a fact appears in another source such as a workspace file, say FatHippo is active but that specific fact came from the other source.",
+      "Do not claim access to runtime traces, logs, dashboards, or hook internals unless they are provided in the conversation.",
+      "",
+    ].join("\n");
   }
   
   /**
