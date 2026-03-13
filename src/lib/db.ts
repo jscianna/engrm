@@ -36,20 +36,33 @@ function getMasterKey(): Buffer {
   }
 
   const trimmed = raw.trim();
+
+  // Accept 64-char hex string (32 bytes)
   if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
     return Buffer.from(trimmed, "hex");
   }
 
+  // Accept 32-byte base64 string
   try {
     const maybeBase64 = Buffer.from(trimmed, "base64");
     if (maybeBase64.length === 32) {
       return maybeBase64;
     }
   } catch {
-    // no-op
+    // not valid base64
   }
 
-  return crypto.createHash("sha256").update(trimmed, "utf8").digest();
+  // Reject weak keys — log the SHA-256 derived hex so operators can migrate
+  const derivedHex = crypto.createHash("sha256").update(trimmed, "utf8").digest("hex");
+  console.error(
+    `[FATAL] ENCRYPTION_KEY is not a valid format. ` +
+    `To migrate without re-encrypting data, set ENCRYPTION_KEY to:\n\n` +
+    `  ENCRYPTION_KEY=${derivedHex}\n`
+  );
+  throw new Error(
+    `ENCRYPTION_KEY is not a valid 64-char hex or 32-byte base64 key. ` +
+    `Weak keys are no longer accepted. Check server logs for migration instructions.`
+  );
 }
 
 /**
@@ -76,9 +89,11 @@ function encryptMemoryContent(plaintext: string, userId: string): string {
  * Expects the encrypted content as a JSON string containing ciphertext and iv.
  */
 export function decryptMemoryContent(encryptedJson: string, userId: string): string {
+  // Key config errors (missing/invalid ENCRYPTION_KEY) propagate as-is
+  const key = deriveUserKey(userId);
+
   try {
     const payload = JSON.parse(encryptedJson) as { ciphertext: string; iv: string };
-    const key = deriveUserKey(userId);
     return decryptAesGcm(payload, key).toString("utf8");
   } catch (error) {
     console.error("[DB] Failed to decrypt memory content:", error);
