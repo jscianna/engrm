@@ -14,7 +14,10 @@
  *       fathippo-context-engine:
  *         enabled: true
  *         config:
+ *           mode: "hosted"
  *           apiKey: "${FATHIPPO_API_KEY}"
+ *           baseUrl: "https://fathippo.ai/api"
+ *           injectCritical: true
  */
 
 import { FatHippoContextEngine } from "./engine.js";

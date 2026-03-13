@@ -21,6 +21,7 @@ plugins:
       config:
         mode: hosted                # hosted or local
         apiKey: "${FATHIPPO_API_KEY}" # Hosted mode only
+        baseUrl: "https://fathippo.ai/api"
         # Optional settings
         injectCritical: true        # Auto-inject critical memories (default: true)
         injectLimit: 20             # Max memories per turn (default: 20)
@@ -53,6 +54,20 @@ Instead of bolting memory onto OpenClaw, this makes FatHippo the **entire contex
 ## API Key
 
 Get your API key at [fathippo.ai](https://fathippo.ai)
+
+## OpenClaw CLI Setup
+
+```bash
+openclaw plugins install @fathippo/context-engine
+openclaw config set plugins.slots.contextEngine=fathippo-context-engine
+openclaw config set plugins.entries.fathippo-context-engine.config.mode=hosted
+openclaw config set plugins.entries.fathippo-context-engine.config.apiKey=mem_xxx
+openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl=https://fathippo.ai/api
+openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical=true
+openclaw gateway restart
+```
+
+If OpenClaw warns that the manifest uses `fathippo-context-engine` while the entry hints `context-engine`, that warning is cosmetic. Keep using `fathippo-context-engine` for `plugins.slots.contextEngine` and `plugins.entries.*`.
 
 ## Links
 

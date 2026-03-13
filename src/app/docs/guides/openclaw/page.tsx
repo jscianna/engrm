@@ -28,9 +28,11 @@ openclaw plugins install @fathippo/context-engine
 # Set as context engine
 openclaw config set plugins.slots.contextEngine=fathippo-context-engine
 
-# Configure hosted mode + your API key
+# Configure hosted mode
 openclaw config set plugins.entries.fathippo-context-engine.config.mode=hosted
 openclaw config set plugins.entries.fathippo-context-engine.config.apiKey=mem_your_key
+openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl=https://fathippo.ai/api
+openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical=true
 
 # Restart
 openclaw gateway restart`}</CodeBlock>
@@ -52,6 +54,12 @@ openclaw gateway restart`}</CodeBlock>
         Hosted mode reports the plugin version back to your FatHippo dashboard and unlocks hosted cognition, sync,
         and import features. Local-only mode stays private, does not send version telemetry to the hosted dashboard,
         and only uses lightweight on-device learning stored locally on disk.
+      </Note>
+
+      <Note type="info">
+        If OpenClaw warns that the manifest uses <InlineCode>fathippo-context-engine</InlineCode> but the entry hints
+        <InlineCode>context-engine</InlineCode>, that warning is cosmetic. The correct plugin id for slots and config
+        keys is still <InlineCode>fathippo-context-engine</InlineCode>.
       </Note>
 
       <H3>Features</H3>

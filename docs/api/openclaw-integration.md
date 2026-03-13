@@ -13,15 +13,19 @@ openclaw plugins install @fathippo/context-engine
 # 2. Set as the active context engine
 openclaw config set plugins.slots.contextEngine=fathippo-context-engine
 
-# 3. Set hosted mode + your API key
+# 3. Configure hosted mode
 openclaw config set plugins.entries.fathippo-context-engine.config.mode=hosted
 openclaw config set plugins.entries.fathippo-context-engine.config.apiKey=mem_xxx
+openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl=https://fathippo.ai/api
+openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical=true
 
 # 4. Restart gateway
 openclaw gateway restart
 ```
 
 **Done.** Your OpenClaw agent now gets hosted retrieval, deeper cognition, dashboard receipts, sync/import features, and last-seen plugin version tracking.
+
+If OpenClaw shows a warning like `plugin id mismatch (manifest uses "fathippo-context-engine", entry hints "context-engine")`, that is currently cosmetic. Keep using `fathippo-context-engine` for `plugins.slots.contextEngine` and `plugins.entries.*`.
 
 ## Quick Start (Local-Only Mode, No API Key)
 

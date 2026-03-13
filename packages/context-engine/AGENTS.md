@@ -477,7 +477,9 @@ plugins:
     fathippo-context-engine:
       enabled: true
       config:
+        mode: hosted
         apiKey: "${FATHIPPO_API_KEY}"
+        baseUrl: "https://fathippo.ai/api"
         injectCritical: true
         injectLimit: 20
         captureUserOnly: true
@@ -505,7 +507,13 @@ npm run prepublishOnly # Build before publish
 # Usage via OpenClaw
 openclaw plugins install @fathippo/context-engine
 openclaw config set plugins.slots.contextEngine=fathippo-context-engine
+openclaw config set plugins.entries.fathippo-context-engine.config.mode=hosted
+openclaw config set plugins.entries.fathippo-context-engine.config.apiKey=mem_xxx
+openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl=https://fathippo.ai/api
+openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical=true
 ```
+
+If OpenClaw warns that the manifest uses `fathippo-context-engine` but the entry hints `context-engine`, treat that as cosmetic. The correct plugin id for slots and config keys remains `fathippo-context-engine`.
 
 ---
 
