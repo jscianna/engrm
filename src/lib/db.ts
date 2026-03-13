@@ -29,6 +29,19 @@ import { containsSecrets } from "@/lib/secrets";
 
 const ENCRYPTION_ALGORITHM = "aes-256-gcm";
 
+function parseCanonicalBase64Key(input: string): Buffer | null {
+  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(input)) {
+    return null;
+  }
+
+  const decoded = Buffer.from(input, "base64");
+  if (decoded.length !== 32) {
+    return null;
+  }
+
+  return decoded.toString("base64") === input ? decoded : null;
+}
+
 function getMasterKey(): Buffer {
   const raw = process.env.ENCRYPTION_KEY;
   if (!raw) {
@@ -42,22 +55,17 @@ function getMasterKey(): Buffer {
     return Buffer.from(trimmed, "hex");
   }
 
-  // Accept 32-byte base64 string
-  try {
-    const maybeBase64 = Buffer.from(trimmed, "base64");
-    if (maybeBase64.length === 32) {
-      return maybeBase64;
-    }
-  } catch {
-    // not valid base64
+  // Accept canonical 32-byte base64 string
+  const base64Key = parseCanonicalBase64Key(trimmed);
+  if (base64Key) {
+    return base64Key;
   }
 
-  // Reject weak keys — log the SHA-256 derived hex so operators can migrate
-  const derivedHex = crypto.createHash("sha256").update(trimmed, "utf8").digest("hex");
   console.error(
-    `[FATAL] ENCRYPTION_KEY is not a valid format. ` +
-    `To migrate without re-encrypting data, set ENCRYPTION_KEY to:\n\n` +
-    `  ENCRYPTION_KEY=${derivedHex}\n`
+    "[FATAL] ENCRYPTION_KEY is not a valid format. " +
+    "Weak passphrases are no longer accepted. " +
+    "If you relied on the legacy SHA-256 fallback, derive the replacement " +
+    "64-char hex key offline from the previous value before restarting."
   );
   throw new Error(
     `ENCRYPTION_KEY is not a valid 64-char hex or 32-byte base64 key. ` +

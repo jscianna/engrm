@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 
 // ── Encryption key tests ─────────────────────────────────────────────────
 //
@@ -47,25 +47,35 @@ describe("getMasterKey — key format validation", () => {
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const { decryptMemoryContent } = await import("@/lib/db");
 
-    const expectedHex = crypto
-      .createHash("sha256")
-      .update("password", "utf8")
-      .digest("hex");
-
     // Error thrown to caller is generic (no key material)
     expect(() => decryptMemoryContent("anything", "user1")).toThrow(
       "Weak keys are no longer accepted"
     );
 
-    // Migration hint with derived hex goes to server logs only
+    // Migration hint stays generic and never logs the effective derived key
     expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining(expectedHex)
+      expect.stringContaining("derive the replacement 64-char hex key offline")
+    );
+    expect(consoleSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining(
+        crypto.createHash("sha256").update("password", "utf8").digest("hex")
+      )
     );
     consoleSpy.mockRestore();
   });
 
   it("rejects a short hex string (not 64 chars)", async () => {
     vi.stubEnv("ENCRYPTION_KEY", "abcdef1234567890");
+    vi.stubEnv("TURSO_DATABASE_URL", "file::memory:");
+
+    const { decryptMemoryContent } = await import("@/lib/db");
+    expect(() => decryptMemoryContent("anything", "user1")).toThrow(
+      "Weak keys are no longer accepted"
+    );
+  });
+
+  it("rejects a non-canonical base64 lookalike", async () => {
+    vi.stubEnv("ENCRYPTION_KEY", "passwordpasswordpasswordpasswordpasswordpas");
     vi.stubEnv("TURSO_DATABASE_URL", "file::memory:");
 
     const { decryptMemoryContent } = await import("@/lib/db");
