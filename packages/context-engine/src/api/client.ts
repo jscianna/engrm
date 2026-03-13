@@ -14,7 +14,7 @@ import type {
   IndexedMemoriesResponse,
 } from "../types.js";
 
-const DEFAULT_BASE_URL = "https://www.fathippo.com/api";
+const DEFAULT_BASE_URL = "https://fathippo.ai/api";
 
 function mapMemoryRecord(record: {
   id: string;

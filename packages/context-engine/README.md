@@ -52,10 +52,10 @@ Instead of bolting memory onto OpenClaw, this makes FatHippo the **entire contex
 
 ## API Key
 
-Get your API key at [fathippo.com](https://www.fathippo.com)
+Get your API key at [fathippo.ai](https://fathippo.ai)
 
 ## Links
 
-- [FatHippo Docs](https://www.fathippo.com/docs)
+- [FatHippo Docs](https://fathippo.ai/docs)
 - [OpenClaw Plugins](https://docs.openclaw.ai/tools/plugin)
 - [GitHub](https://github.com/jscianna/fathippo)

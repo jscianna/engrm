@@ -9,7 +9,7 @@
  *
  * Environment:
  *   FATHIPPO_API_KEY - Your FatHippo API key (required)
- *   FATHIPPO_BASE_URL - API base URL (optional, defaults to https://fathippo.com/api)
+ *   FATHIPPO_BASE_URL - API base URL (optional, defaults to https://fathippo.ai/api)
  */
 export {};
 //# sourceMappingURL=index.d.ts.map

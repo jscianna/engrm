@@ -1052,7 +1052,7 @@ export class FatHippoContextEngine implements ContextEngine {
   }
 
   private getApiBaseUrl(): string {
-    const baseUrl = this.config.baseUrl || "https://www.fathippo.com/api";
+    const baseUrl = this.config.baseUrl || "https://fathippo.ai/api";
     return baseUrl.replace(/\/v1$/, "");
   }
 

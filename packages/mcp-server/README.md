@@ -65,14 +65,14 @@ Add to your Cursor MCP settings:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `FATHIPPO_API_KEY` | Yes | Your FatHippo API key |
-| `FATHIPPO_BASE_URL` | No | API base URL (default: `https://fathippo.com/api`) |
+| `FATHIPPO_BASE_URL` | No | API base URL (default: `https://fathippo.ai/api`) |
 
 ## Get Your API Key
 
-Sign up at [fathippo.com](https://fathippo.com) to get your API key.
+Sign up at [fathippo.ai](https://fathippo.ai) to get your API key.
 
 ## Links
 
-- [FatHippo Website](https://fathippo.com)
-- [FatHippo Docs](https://fathippo.com/docs)
+- [FatHippo Website](https://fathippo.ai)
+- [FatHippo Docs](https://fathippo.ai/docs)
 - [MCP Protocol](https://modelcontextprotocol.io)

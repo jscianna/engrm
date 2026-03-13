@@ -809,7 +809,7 @@ export class FatHippoContextEngine {
         }
     }
     getApiBaseUrl() {
-        const baseUrl = this.config.baseUrl || "https://www.fathippo.com/api";
+        const baseUrl = this.config.baseUrl || "https://fathippo.ai/api";
         return baseUrl.replace(/\/v1$/, "");
     }
     getHostedHeaders(includeContentType = true) {

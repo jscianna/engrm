@@ -1,7 +1,7 @@
 /**
  * FatHippo API Client
  */
-const DEFAULT_BASE_URL = "https://www.fathippo.com/api";
+const DEFAULT_BASE_URL = "https://fathippo.ai/api";
 function mapMemoryRecord(record) {
     return {
         id: record.id,

@@ -30,7 +30,7 @@ import { initSyncQueue, queueWrite, startSyncWorker } from "@fathippo/hosted";
 initSyncQueue(process.env.FATHIPPO_SYNC_ENCRYPTION_KEY ?? "dev-only-sync-key");
 queueWrite("demo-user", "update", { memoryId: "mem_1", summary: "Hosted sync payload" });
 startSyncWorker(
-  process.env.FATHIPPO_API_ENDPOINT ?? "https://api.fathippo.com",
+  process.env.FATHIPPO_API_ENDPOINT ?? "https://fathippo.ai",
   process.env.FATHIPPO_API_KEY ?? "demo-api-key",
 );
 ```
