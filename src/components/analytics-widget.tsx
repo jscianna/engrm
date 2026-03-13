@@ -134,12 +134,12 @@ export function AnalyticsWidget() {
           </div>
         )}
 
-        {/* Link to Browser */}
+        {/* Link to Memories */}
         <Link 
-          href="/dashboard/browser" 
+          href="/dashboard/search" 
           className="block text-center text-xs text-cyan-400 hover:text-cyan-300 pt-2"
         >
-          View detailed analytics →
+          Explore memories →
         </Link>
       </CardContent>
     </Card>

@@ -17,7 +17,7 @@ export default function OpenClawGuidePage() {
 
       <H2 id="plugin">Plugin Installation (Recommended)</H2>
       <P>
-        OpenClaw users only install <InlineCode>@fathippo/fathippo-context-engine</InlineCode>. The other Fathippo packages are
+        OpenClaw users only install <InlineCode>@fathippo/fathippo-context-engine</InlineCode>. The other FatHippo packages are
         developer boundaries, not separate end-user installs.
       </P>
 

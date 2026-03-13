@@ -85,7 +85,7 @@ export function OpenClawConnectCard(props: OpenClawConnectCardProps) {
         ? `OpenClaw has used this connection recently (${new Date(props.lastUsed).toLocaleDateString()}).`
         : props.hasExistingOpenClawKey && props.isActive
           ? "You already have an active OpenClaw key. If you have not connected it yet, create a fresh one below."
-          : "Connect Fathippo to the OpenClaw you already use with the setup block below."
+          : "Connect FatHippo to the OpenClaw you already use with the setup block below."
 ;
 
   return (
@@ -96,7 +96,7 @@ export function OpenClawConnectCard(props: OpenClawConnectCardProps) {
           Connect Your Existing OpenClaw
         </CardTitle>
         <CardDescription>
-          Install Fathippo once, then let it quietly improve retrieval, workflows, and repeated fixes over time.
+          Install FatHippo once, then let it quietly improve retrieval, workflows, and repeated fixes over time.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -197,7 +197,7 @@ export function OpenClawConnectCard(props: OpenClawConnectCardProps) {
             <div>
               <p className="text-sm font-medium text-zinc-100">Local-only mode (no API key)</p>
               <p className="mt-1 text-xs text-zinc-500">
-                This is the free offer. Fathippo keeps memory and lightweight private learning on the machine running OpenClaw, but it does not use hosted features like sync, dashboard receipts, or hosted cognition.
+                This is the free offer. FatHippo keeps memory and lightweight private learning on the machine running OpenClaw, but it does not use hosted features like sync, dashboard receipts, or hosted cognition.
               </p>
               <p className="mt-1 text-xs text-zinc-600">
                 Local mode stores its data on disk at the configured local storage path instead of checking in with the hosted dashboard.
