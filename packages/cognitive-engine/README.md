@@ -54,7 +54,7 @@ Coding Session:
 
 ## Integration with OpenClaw
 
-This extends the existing `@fathippo/context-engine`:
+This extends the existing `@fathippo/fathippo-context-engine`:
 
 ```typescript
 // In context-engine's assemble():

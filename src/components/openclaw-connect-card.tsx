@@ -27,10 +27,12 @@ export function OpenClawConnectCard(props: OpenClawConnectCardProps) {
   const hostedInstallBlock = useMemo(() => {
     const keyValue = createdKey ?? "mem_your_openclaw_key";
     return [
-      "openclaw plugins install @fathippo/context-engine",
+      "openclaw plugins install @fathippo/fathippo-context-engine",
       "openclaw config set plugins.slots.contextEngine=fathippo-context-engine",
       "openclaw config set plugins.entries.fathippo-context-engine.config.mode=hosted",
       `openclaw config set plugins.entries.fathippo-context-engine.config.apiKey=${keyValue}`,
+      "openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl=https://fathippo.ai/api",
+      "openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical=true",
       "openclaw gateway restart",
     ].join("\n");
   }, [createdKey]);
@@ -38,7 +40,7 @@ export function OpenClawConnectCard(props: OpenClawConnectCardProps) {
   const localInstallBlock = useMemo(
     () =>
       [
-        "openclaw plugins install @fathippo/context-engine",
+        "openclaw plugins install @fathippo/fathippo-context-engine",
         "openclaw config set plugins.slots.contextEngine=fathippo-context-engine",
         "openclaw config set plugins.entries.fathippo-context-engine.config.mode=local",
         "openclaw gateway restart",
@@ -83,7 +85,7 @@ export function OpenClawConnectCard(props: OpenClawConnectCardProps) {
         ? `OpenClaw has used this connection recently (${new Date(props.lastUsed).toLocaleDateString()}).`
         : props.hasExistingOpenClawKey && props.isActive
           ? "You already have an active OpenClaw key. If you have not connected it yet, create a fresh one below."
-          : "Connect Fathippo to the OpenClaw you already use in four commands."
+          : "Connect Fathippo to the OpenClaw you already use with the setup block below."
 ;
 
   return (

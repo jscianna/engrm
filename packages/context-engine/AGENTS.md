@@ -1,6 +1,6 @@
 # Context Engine Knowledge Base
 
-**Package:** `@fathippo/context-engine`  
+**Package:** `@fathippo/fathippo-context-engine`  
 **Version:** 0.1.1  
 **License:** MIT  
 **Purpose:** OpenClaw plugin for encrypted agent memory
@@ -463,7 +463,7 @@ await client.remember(data); // Use fire-and-forget for non-critical
 ### Installation
 
 ```bash
-openclaw plugins install @fathippo/context-engine
+openclaw plugins install @fathippo/fathippo-context-engine
 ```
 
 ### Configuration
@@ -505,7 +505,7 @@ npm run dev            # Watch mode
 npm run prepublishOnly # Build before publish
 
 # Usage via OpenClaw
-openclaw plugins install @fathippo/context-engine
+openclaw plugins install @fathippo/fathippo-context-engine
 openclaw config set plugins.slots.contextEngine=fathippo-context-engine
 openclaw config set plugins.entries.fathippo-context-engine.config.mode=hosted
 openclaw config set plugins.entries.fathippo-context-engine.config.apiKey=mem_xxx
@@ -513,7 +513,7 @@ openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl=https
 openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical=true
 ```
 
-If OpenClaw warns that the manifest uses `fathippo-context-engine` but the entry hints `context-engine`, treat that as cosmetic. The correct plugin id for slots and config keys remains `fathippo-context-engine`.
+If you previously installed `@fathippo/context-engine`, reinstall from `@fathippo/fathippo-context-engine` so OpenClaw discovers a matching package name and plugin id.
 
 ---
 

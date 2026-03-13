@@ -207,7 +207,7 @@ export default async function AdminDashboardPage({
             <p><span className="text-zinc-500">Published plugin version:</span> {publishedOpenClawPluginVersion ?? "Missing OPENCLAW_PUBLISHED_PLUGIN_VERSION"}</p>
             <p className="text-xs text-zinc-500">
               Set <code>OPENCLAW_PUBLISHED_PLUGIN_VERSION</code> in your deployment environment to the latest published
-              <code> @fathippo/context-engine</code> version after each npm release.
+              <code> @fathippo/fathippo-context-engine</code> version after each npm release.
             </p>
           </CardContent>
         </Card>

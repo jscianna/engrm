@@ -91,10 +91,10 @@ curl -X POST https://fathippo.ai/api/v1/sync/status \
 
 ## Client Integration
 
-The `@fathippo/context-engine` package includes the sync queue client:
+The `@fathippo/fathippo-context-engine` package includes the sync queue client:
 
 ```typescript
-import { initSyncQueue, queueWrite, startSyncWorker } from "@fathippo/context-engine";
+import { initSyncQueue, queueWrite, startSyncWorker } from "@fathippo/fathippo-context-engine";
 
 // Initialize with encryption key
 initSyncQueue("your-32-byte-key");

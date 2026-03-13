@@ -1,11 +1,11 @@
-# @fathippo/context-engine
+# @fathippo/fathippo-context-engine
 
 FatHippo Context Engine for OpenClaw — persistent agent memory with hosted cognition or private local mode.
 
 ## Installation
 
 ```bash
-openclaw plugins install @fathippo/context-engine
+openclaw plugins install @fathippo/fathippo-context-engine
 ```
 
 ## Configuration
@@ -58,7 +58,7 @@ Get your API key at [fathippo.ai](https://fathippo.ai)
 ## OpenClaw CLI Setup
 
 ```bash
-openclaw plugins install @fathippo/context-engine
+openclaw plugins install @fathippo/fathippo-context-engine
 openclaw config set plugins.slots.contextEngine=fathippo-context-engine
 openclaw config set plugins.entries.fathippo-context-engine.config.mode=hosted
 openclaw config set plugins.entries.fathippo-context-engine.config.apiKey=mem_xxx
@@ -67,7 +67,7 @@ openclaw config set plugins.entries.fathippo-context-engine.config.injectCritica
 openclaw gateway restart
 ```
 
-If OpenClaw warns that the manifest uses `fathippo-context-engine` while the entry hints `context-engine`, that warning is cosmetic. Keep using `fathippo-context-engine` for `plugins.slots.contextEngine` and `plugins.entries.*`.
+If you previously installed `@fathippo/context-engine`, reinstall from `@fathippo/fathippo-context-engine` so OpenClaw discovers a matching package name and plugin id.
 
 ## Links
 

@@ -2,13 +2,13 @@
 
 Install once. FatHippo then improves OpenClaw quietly over time.
 
-OpenClaw users only install `@fathippo/context-engine`. The `@fathippo/local`, `@fathippo/hosted`, and `@fathippo/cognition` packages are developer package boundaries, not separate end-user installs.
+OpenClaw users only install `@fathippo/fathippo-context-engine`. The `@fathippo/local`, `@fathippo/hosted`, and `@fathippo/cognition` packages are developer package boundaries, not separate end-user installs.
 
 ## Quick Start (Hosted Mode)
 
 ```bash
 # 1. Install the plugin
-openclaw plugins install @fathippo/context-engine
+openclaw plugins install @fathippo/fathippo-context-engine
 
 # 2. Set as the active context engine
 openclaw config set plugins.slots.contextEngine=fathippo-context-engine
@@ -25,13 +25,13 @@ openclaw gateway restart
 
 **Done.** Your OpenClaw agent now gets hosted retrieval, deeper cognition, dashboard receipts, sync/import features, and last-seen plugin version tracking.
 
-If OpenClaw shows a warning like `plugin id mismatch (manifest uses "fathippo-context-engine", entry hints "context-engine")`, that is currently cosmetic. Keep using `fathippo-context-engine` for `plugins.slots.contextEngine` and `plugins.entries.*`.
+If you previously installed `@fathippo/context-engine`, reinstall from `@fathippo/fathippo-context-engine` so the published package name matches the plugin id OpenClaw discovers.
 
 ## Quick Start (Local-Only Mode, No API Key)
 
 ```bash
 # 1. Install the plugin
-openclaw plugins install @fathippo/context-engine
+openclaw plugins install @fathippo/fathippo-context-engine
 
 # 2. Set as the active context engine
 openclaw config set plugins.slots.contextEngine=fathippo-context-engine
