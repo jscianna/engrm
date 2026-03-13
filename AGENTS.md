@@ -26,7 +26,6 @@ FatHippo is OpenClaw's pluggable memory layer. It provides AI agents with persis
 │   ├── engrm-mcp/        # MCP server - zero-knowledge memory ops
 │   ├── cli/              # FatHippo CLI
 │   ├── mcp-server/       # Additional MCP implementation
-│   ├── openclaw-plugin/  # OpenClaw integration
 │   └── python-sdk/       # Python client SDK
 ├── scripts/              # Build & automation scripts
 └── docs/                 # Documentation

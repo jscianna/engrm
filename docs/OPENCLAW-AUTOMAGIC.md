@@ -56,7 +56,7 @@ Agent automatically has memory tools available.
 - [ ] OpenClaw recognizes `fathippo` skill and prioritizes loading
 
 ### Phase 2: OpenClaw Plugin (Next)
-- [ ] `openclaw-plugin-fathippo` npm package
+- [ ] Expand `@fathippo/fathippo-context-engine` with more zero-config hooks
 - [ ] Config-based auto-injection
 - [ ] Hooks: onSessionStart, onMessage, onSessionEnd
 - [ ] Zero code required after config
