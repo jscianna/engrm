@@ -1,0 +1,8 @@
+[mcp_servers.fathippo]
+command = "npx"
+args = ["@fathippo/mcp-server"]
+
+[mcp_servers.fathippo.env]
+FATHIPPO_API_KEY = "mem_xxx"
+FATHIPPO_RUNTIME = "codex"
+FATHIPPO_NAMESPACE = "my-project"

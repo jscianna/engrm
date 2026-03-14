@@ -10,7 +10,7 @@
 
 import { setMemoryLockedTier, getMemoryWithLockInfo, setMemoryDecayImmune } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 import type { MemoryImportanceTier } from "@/lib/types";
 
@@ -29,7 +29,7 @@ export async function GET(
     const info = await getMemoryWithLockInfo(identity.userId, id);
 
     if (!info) {
-      throw new MemryError("MEMORY_NOT_FOUND");
+      throw new FatHippoError("MEMORY_NOT_FOUND");
     }
 
     return Response.json({
@@ -56,7 +56,7 @@ export async function POST(
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body)) {
-      throw new MemryError("VALIDATION_ERROR", { field: "body", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "body", reason: "required" });
     }
 
     // Handle tier locking
@@ -67,7 +67,7 @@ export async function POST(
       
       // Validate tier is valid or null (to unlock)
       if (tier !== null && !VALID_TIERS.includes(tier as (typeof VALID_TIERS)[number])) {
-        throw new MemryError("VALIDATION_ERROR", { 
+        throw new FatHippoError("VALIDATION_ERROR", { 
           field: "tier", 
           reason: `Must be one of: ${VALID_TIERS.join(", ")}, or null to unlock` 
         });
@@ -80,7 +80,7 @@ export async function POST(
       );
 
       if (!tierResult.success) {
-        throw new MemryError("MEMORY_NOT_FOUND");
+        throw new FatHippoError("MEMORY_NOT_FOUND");
       }
     }
 
@@ -90,7 +90,7 @@ export async function POST(
       const success = await setMemoryDecayImmune(identity.userId, id, immune);
       
       if (!success && !tierResult) {
-        throw new MemryError("MEMORY_NOT_FOUND");
+        throw new FatHippoError("MEMORY_NOT_FOUND");
       }
     }
 
@@ -98,7 +98,7 @@ export async function POST(
     const info = await getMemoryWithLockInfo(identity.userId, id);
 
     if (!info) {
-      throw new MemryError("MEMORY_NOT_FOUND");
+      throw new FatHippoError("MEMORY_NOT_FOUND");
     }
 
     // Build response message

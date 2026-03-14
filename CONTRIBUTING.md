@@ -1,6 +1,6 @@
-# Contributing to Engrm
+# Contributing to FatHippo
 
-Thank you for your interest in contributing to Engrm! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing to FatHippo! This document provides guidelines and information for contributors.
 
 ## Code of Conduct
 
@@ -10,7 +10,7 @@ Be respectful, inclusive, and constructive. We're building memory for AI agents 
 
 ### Reporting Bugs
 
-1. Check existing [issues](https://github.com/jscianna/engrm/issues) to avoid duplicates
+1. Check existing [issues](https://github.com/jscianna/fathippo/issues) to avoid duplicates
 2. Create a new issue with:
    - Clear title describing the bug
    - Steps to reproduce
@@ -51,8 +51,8 @@ Be respectful, inclusive, and constructive. We're building memory for AI agents 
 
 ```bash
 # Clone your fork
-git clone https://github.com/YOUR_USERNAME/engrm.git
-cd engrm
+git clone https://github.com/YOUR_USERNAME/fathippo.git
+cd fathippo
 
 # Install dependencies
 npm install
@@ -81,7 +81,7 @@ npm run dev
 ## Project Structure
 
 ```
-engrm/
+fathippo/
 ├── src/
 │   ├── app/           # Next.js app router pages
 │   │   └── api/       # API routes
@@ -116,7 +116,7 @@ engrm/
 
 ## Questions?
 
-- Open a [Discussion](https://github.com/jscianna/engrm/discussions)
+- Open a [Discussion](https://github.com/jscianna/fathippo/discussions)
 - Twitter: [@scianna](https://x.com/scianna)
 
 ## License

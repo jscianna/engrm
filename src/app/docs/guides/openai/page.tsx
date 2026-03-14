@@ -27,16 +27,16 @@ import requests
 from openai import OpenAI
 
 # Configuration
-ENGRM_API_KEY = os.environ.get("ENGRM_API_KEY", "mem_your_key")
-ENGRM_URL = "https://fathippo.ai/api/v1"
+FATHIPPO_API_KEY = os.environ.get("FATHIPPO_API_KEY", "mem_your_key")
+FATHIPPO_URL = "https://fathippo.ai/api/v1"
 
 client = OpenAI()
 
 def get_context(user_message: str) -> str:
     """Get relevant context from FatHippo"""
     response = requests.post(
-        f"{ENGRM_URL}/simple/context",
-        headers={"Authorization": f"Bearer {ENGRM_API_KEY}"},
+        f"{FATHIPPO_URL}/simple/context",
+        headers={"Authorization": f"Bearer {FATHIPPO_API_KEY}"},
         json={"message": user_message}
     )
     return response.json().get("context", "")
@@ -79,8 +79,8 @@ print(chat("Schedule a meeting for next week"))
 from openai import OpenAI
 from typing import Optional
 
-ENGRM_API_KEY = "mem_your_key"
-ENGRM_URL = "https://fathippo.ai/api/v1"
+FATHIPPO_API_KEY = "mem_your_key"
+FATHIPPO_URL = "https://fathippo.ai/api/v1"
 
 client = OpenAI()
 
@@ -94,8 +94,8 @@ class MemoryAgent:
     def start_session(self, first_message: str):
         """Start a new session and get initial context"""
         response = requests.post(
-            f"{ENGRM_URL}/sessions/start",
-            headers={"Authorization": f"Bearer {ENGRM_API_KEY}"},
+            f"{FATHIPPO_URL}/sessions/start",
+            headers={"Authorization": f"Bearer {FATHIPPO_API_KEY}"},
             json={"firstMessage": first_message}
         ).json()
         
@@ -146,8 +146,8 @@ class MemoryAgent:
         
         # Record the turn
         turn_response = requests.post(
-            f"{ENGRM_URL}/sessions/{self.session_id}/turn",
-            headers={"Authorization": f"Bearer {ENGRM_API_KEY}"},
+            f"{FATHIPPO_URL}/sessions/{self.session_id}/turn",
+            headers={"Authorization": f"Bearer {FATHIPPO_API_KEY}"},
             json={
                 "turnNumber": self.turn_count,
                 "messages": [
@@ -180,8 +180,8 @@ class MemoryAgent:
     def remember(self, text: str):
         """Store a new memory"""
         requests.post(
-            f"{ENGRM_URL}/simple/remember",
-            headers={"Authorization": f"Bearer {ENGRM_API_KEY}"},
+            f"{FATHIPPO_URL}/simple/remember",
+            headers={"Authorization": f"Bearer {FATHIPPO_API_KEY}"},
             json={"text": text}
         )
     
@@ -189,8 +189,8 @@ class MemoryAgent:
         """End the session"""
         if self.session_id:
             requests.post(
-                f"{ENGRM_URL}/sessions/{self.session_id}/end",
-                headers={"Authorization": f"Bearer {ENGRM_API_KEY}"},
+                f"{FATHIPPO_URL}/sessions/{self.session_id}/end",
+                headers={"Authorization": f"Bearer {FATHIPPO_API_KEY}"},
                 json={"outcome": outcome}
             )
             self.session_id = None
@@ -211,8 +211,8 @@ agent.end_session()
       <CodeBlock language="python">{`def extract_and_store(conversation: list[dict]):
     """Extract memories from conversation and store them"""
     response = requests.post(
-        f"{ENGRM_URL}/extract",
-        headers={"Authorization": f"Bearer {ENGRM_API_KEY}"},
+        f"{FATHIPPO_URL}/extract",
+        headers={"Authorization": f"Bearer {FATHIPPO_API_KEY}"},
         json={"conversation": conversation}
     ).json()
     
@@ -220,8 +220,8 @@ agent.end_session()
     for suggestion in response["suggestions"]:
         if suggestion["confidence"] >= 0.8:
             requests.post(
-                f"{ENGRM_URL}/memories",
-                headers={"Authorization": f"Bearer {ENGRM_API_KEY}"},
+                f"{FATHIPPO_URL}/memories",
+                headers={"Authorization": f"Bearer {FATHIPPO_API_KEY}"},
                 json={
                     "content": suggestion["content"],
                     "memoryType": suggestion["memoryType"],
@@ -253,12 +253,12 @@ extract_and_store([
           <strong>Use reinforcement:</strong> When a memory is helpful, call <InlineCode>/reinforce</InlineCode> with +1
         </li>
         <li>
-          <strong>Log misses:</strong> When you don't have relevant context, log it with <InlineCode>/memories/miss</InlineCode>
+          <strong>Log misses:</strong> When you don&apos;t have relevant context, log it with <InlineCode>/memories/miss</InlineCode>
         </li>
       </ul>
 
       <Note type="tip">
-        OpenAI's function calling works great with FatHippo. Create functions for 
+        OpenAI&apos;s function calling works great with FatHippo. Create functions for 
         <InlineCode>remember</InlineCode> and <InlineCode>recall</InlineCode> so the model 
         can decide when to store and retrieve memories.
       </Note>

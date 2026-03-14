@@ -19,7 +19,7 @@ export default function AnthropicGuidePage() {
 
       <H2 id="basic">Basic Integration</H2>
       <P>
-        Simple context injection into Claude's system prompt:
+        Simple context injection into Claude&apos;s system prompt:
       </P>
 
       <CodeBlock language="python">{`import os
@@ -27,16 +27,16 @@ import requests
 import anthropic
 
 # Configuration
-ENGRM_API_KEY = os.environ.get("ENGRM_API_KEY", "mem_your_key")
-ENGRM_URL = "https://fathippo.ai/api/v1"
+FATHIPPO_API_KEY = os.environ.get("FATHIPPO_API_KEY", "mem_your_key")
+FATHIPPO_URL = "https://fathippo.ai/api/v1"
 
 client = anthropic.Anthropic()
 
 def get_context(user_message: str) -> str:
     """Get relevant context from FatHippo"""
     response = requests.post(
-        f"{ENGRM_URL}/simple/context",
-        headers={"Authorization": f"Bearer {ENGRM_API_KEY}"},
+        f"{FATHIPPO_URL}/simple/context",
+        headers={"Authorization": f"Bearer {FATHIPPO_API_KEY}"},
         json={"message": user_message}
     )
     return response.json().get("context", "")
@@ -78,13 +78,13 @@ import anthropic
 from typing import Optional
 from dataclasses import dataclass, field
 
-ENGRM_API_KEY = "mem_your_key"
-ENGRM_URL = "https://fathippo.ai/api/v1"
+FATHIPPO_API_KEY = "mem_your_key"
+FATHIPPO_URL = "https://fathippo.ai/api/v1"
 
 client = anthropic.Anthropic()
 
 @dataclass
-class EngramSession:
+class FatHippoSession:
     session_id: Optional[str] = None
     context: str = ""
     turn_count: int = 0
@@ -94,8 +94,8 @@ class EngramSession:
 class ClaudeMemoryAgent:
     def __init__(self, namespace: Optional[str] = None):
         self.namespace = namespace
-        self.session = EngramSession()
-        self.headers = {"Authorization": f"Bearer {ENGRM_API_KEY}"}
+        self.session = FatHippoSession()
+        self.headers = {"Authorization": f"Bearer {FATHIPPO_API_KEY}"}
     
     def start(self, first_message: str) -> dict:
         """Start session and get initial context"""
@@ -104,7 +104,7 @@ class ClaudeMemoryAgent:
             payload["namespace"] = self.namespace
         
         response = requests.post(
-            f"{ENGRM_URL}/sessions/start",
+            f"{FATHIPPO_URL}/sessions/start",
             headers=self.headers,
             json=payload
         ).json()
@@ -155,7 +155,7 @@ class ClaudeMemoryAgent:
         
         # Record turn
         turn_response = requests.post(
-            f"{ENGRM_URL}/sessions/{self.session.session_id}/turn",
+            f"{FATHIPPO_URL}/sessions/{self.session.session_id}/turn",
             headers=self.headers,
             json={
                 "turnNumber": self.session.turn_count,
@@ -183,7 +183,7 @@ class ClaudeMemoryAgent:
     def remember(self, text: str) -> str:
         """Store a memory"""
         response = requests.post(
-            f"{ENGRM_URL}/simple/remember",
+            f"{FATHIPPO_URL}/simple/remember",
             headers=self.headers,
             json={"text": text}
         ).json()
@@ -192,7 +192,7 @@ class ClaudeMemoryAgent:
     def recall(self, query: str, limit: int = 5) -> list[str]:
         """Search memories"""
         response = requests.post(
-            f"{ENGRM_URL}/simple/recall",
+            f"{FATHIPPO_URL}/simple/recall",
             headers=self.headers,
             json={"query": query, "limit": limit}
         ).json()
@@ -202,11 +202,11 @@ class ClaudeMemoryAgent:
         """End the session"""
         if self.session.session_id:
             requests.post(
-                f"{ENGRM_URL}/sessions/{self.session.session_id}/end",
+                f"{FATHIPPO_URL}/sessions/{self.session.session_id}/end",
                 headers=self.headers,
                 json={"outcome": outcome}
             )
-        self.session = EngramSession()
+        self.session = FatHippoSession()
 
 # Usage
 agent = ClaudeMemoryAgent(namespace="project-work")
@@ -229,7 +229,7 @@ agent.end()
 import requests
 import anthropic
 
-ENGRM_API_KEY = "mem_your_key"
+FATHIPPO_API_KEY = "mem_your_key"
 client = anthropic.Anthropic()
 
 # Define tools
@@ -266,7 +266,7 @@ tools = [
 
 def handle_tool(name: str, input: dict) -> str:
     """Handle tool calls"""
-    headers = {"Authorization": f"Bearer {ENGRM_API_KEY}"}
+    headers = {"Authorization": f"Bearer {FATHIPPO_API_KEY}"}
     
     if name == "remember":
         response = requests.post(
@@ -345,11 +345,11 @@ print(chat_with_tools("What programming language do I prefer?"))
           and should use the context provided
         </li>
         <li>
-          <strong>Avoid repetition:</strong> Include a note like "don't repeatedly 
-          mention that you remember things" to keep responses natural
+          <strong>Avoid repetition:</strong> Include a note like &quot;don&apos;t repeatedly 
+          mention that you remember things&quot; to keep responses natural
         </li>
         <li>
-          <strong>Use tool use:</strong> Claude's tool use is excellent for dynamic 
+          <strong>Use tool use:</strong> Claude&apos;s tool use is excellent for dynamic 
           remember/recall during conversations
         </li>
       </ul>

@@ -10,7 +10,7 @@
 
 import { markRetrievalEvaluationAccepted, reinforceMemoryExplicit } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 
 export const runtime = "nodejs";
@@ -25,13 +25,13 @@ export async function POST(
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body)) {
-      throw new MemryError("VALIDATION_ERROR", { field: "body", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "body", reason: "required" });
     }
 
     // Validate value is 1 or -1
     const value = body.value;
     if (value !== 1 && value !== -1) {
-      throw new MemryError("VALIDATION_ERROR", { 
+      throw new FatHippoError("VALIDATION_ERROR", { 
         field: "value", 
         reason: "Must be 1 (positive) or -1 (negative)" 
       });
@@ -48,7 +48,7 @@ export async function POST(
     const result = await reinforceMemoryExplicit(identity.userId, id, value);
 
     if (!result) {
-      throw new MemryError("MEMORY_NOT_FOUND");
+      throw new FatHippoError("MEMORY_NOT_FOUND");
     }
 
     const evaluation = evaluationId

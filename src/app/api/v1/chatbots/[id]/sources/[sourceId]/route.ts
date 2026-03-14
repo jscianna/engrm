@@ -1,6 +1,6 @@
 import { deleteSource, getChatbotById, getOwnedSource } from "@/lib/chatbot";
 import { validateApiKey } from "@/lib/api-auth";
-import { errorResponse, MemryError } from "@/lib/errors";
+import { errorResponse, FatHippoError } from "@/lib/errors";
 
 export const runtime = "nodejs";
 
@@ -13,7 +13,7 @@ export async function GET(
     const { id, sourceId } = await context.params;
     const chatbot = await getChatbotById(identity.userId, id);
     if (!chatbot) {
-      throw new MemryError("CHATBOT_NOT_FOUND");
+      throw new FatHippoError("CHATBOT_NOT_FOUND");
     }
 
     const source = await getOwnedSource({
@@ -36,12 +36,12 @@ export async function DELETE(
     const { id, sourceId } = await context.params;
     const chatbot = await getChatbotById(identity.userId, id);
     if (!chatbot) {
-      throw new MemryError("CHATBOT_NOT_FOUND");
+      throw new FatHippoError("CHATBOT_NOT_FOUND");
     }
 
     const deleted = await deleteSource(id, sourceId);
     if (!deleted) {
-      throw new MemryError("SOURCE_NOT_FOUND");
+      throw new FatHippoError("SOURCE_NOT_FOUND");
     }
 
     return Response.json({ success: true });

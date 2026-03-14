@@ -1,6 +1,6 @@
 import { getChatbotById, listConversationsByChatbot } from "@/lib/chatbot";
 import { validateApiKey } from "@/lib/api-auth";
-import { errorResponse, MemryError } from "@/lib/errors";
+import { errorResponse, FatHippoError } from "@/lib/errors";
 
 export const runtime = "nodejs";
 
@@ -13,7 +13,7 @@ export async function GET(
     const { id } = await context.params;
     const chatbot = await getChatbotById(identity.userId, id);
     if (!chatbot) {
-      throw new MemryError("CHATBOT_NOT_FOUND");
+      throw new FatHippoError("CHATBOT_NOT_FOUND");
     }
 
     const conversations = await listConversationsByChatbot(id);

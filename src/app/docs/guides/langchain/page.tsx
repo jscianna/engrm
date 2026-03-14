@@ -27,7 +27,7 @@ from typing import Any, Dict, List
 from langchain.memory.chat_memory import BaseChatMemory
 from langchain.schema import BaseMessage, HumanMessage, AIMessage
 
-class EngramMemory(BaseChatMemory):
+class FatHippoMemory(BaseChatMemory):
     """LangChain memory backed by FatHippo"""
     
     api_key: str
@@ -44,7 +44,7 @@ class EngramMemory(BaseChatMemory):
         return {"Authorization": f"Bearer {self.api_key}"}
     
     def start_session(self, first_message: str = "") -> str:
-        """Start an FatHippo session"""
+        """Start a FatHippo session"""
         payload = {"firstMessage": first_message}
         if self.namespace:
             payload["namespace"] = self.namespace
@@ -124,7 +124,7 @@ class EngramMemory(BaseChatMemory):
 
       <H2 id="conversation-chain">Conversation Chain</H2>
       <P>
-        Use with LangChain's ConversationChain:
+        Use with LangChain&apos;s ConversationChain:
       </P>
 
       <CodeBlock language="python">{`from langchain.chains import ConversationChain
@@ -132,7 +132,7 @@ from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
 
 # Initialize memory
-memory = EngramMemory(
+memory = FatHippoMemory(
     api_key="mem_your_key",
     namespace="langchain-demo"
 )
@@ -185,13 +185,13 @@ from langchain.tools import Tool
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 import requests
 
-ENGRM_API_KEY = "mem_your_key"
+FATHIPPO_API_KEY = "mem_your_key"
 
 def remember_tool(text: str) -> str:
     """Store a memory about the user"""
     response = requests.post(
         "https://fathippo.ai/api/v1/simple/remember",
-        headers={"Authorization": f"Bearer {ENGRM_API_KEY}"},
+        headers={"Authorization": f"Bearer {FATHIPPO_API_KEY}"},
         json={"text": text}
     ).json()
     return f"Remembered: {text}"
@@ -200,7 +200,7 @@ def recall_tool(query: str) -> str:
     """Search for relevant memories"""
     response = requests.post(
         "https://fathippo.ai/api/v1/simple/recall",
-        headers={"Authorization": f"Bearer {ENGRM_API_KEY}"},
+        headers={"Authorization": f"Bearer {FATHIPPO_API_KEY}"},
         json={"query": query, "limit": 5}
     ).json()
     results = response.get("results", [])
@@ -252,7 +252,7 @@ print(result["output"])`}</CodeBlock>
 from typing import List
 import requests
 
-class EngramRetriever(BaseRetriever):
+class FatHippoRetriever(BaseRetriever):
     """LangChain retriever backed by FatHippo"""
     
     api_key: str
@@ -286,7 +286,7 @@ class EngramRetriever(BaseRetriever):
 from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI
 
-retriever = EngramRetriever(api_key="mem_your_key", top_k=5)
+retriever = FatHippoRetriever(api_key="mem_your_key", top_k=5)
 llm = ChatOpenAI(model="gpt-4o")
 
 qa_chain = RetrievalQA.from_chain_type(
@@ -315,7 +315,7 @@ print(result["result"])`}</CodeBlock>
       </ul>
 
       <Note type="tip">
-        LangChain's memory classes are being deprecated in favor of LangGraph. 
+        LangChain&apos;s memory classes are being deprecated in favor of LangGraph. 
         Consider using the retriever or tool patterns for new projects.
       </Note>
 

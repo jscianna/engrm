@@ -5,8 +5,14 @@ import { bm25Search, rrfFusion, ensureFtsInitialized } from "@/lib/fts";
 import { getAgentMemoriesByIds, incrementAccessCounts, checkAndPromoteMemories, logRetrievalEvaluation } from "@/lib/db";
 import { recordInjectionEvent } from "@/lib/memory-analytics";
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
-import { isObject, normalizeIsoTimestamp, normalizeLimit, resolveNamespaceIdOrError } from "@/lib/api-v1";
+import { FatHippoError, errorResponse } from "@/lib/errors";
+import {
+  getRequestedNamespace,
+  isObject,
+  normalizeIsoTimestamp,
+  normalizeLimit,
+  resolveNamespaceIdOrError,
+} from "@/lib/api-v1";
 
 export const runtime = "nodejs";
 
@@ -32,15 +38,20 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body) || typeof body.query !== "string" || !body.query.trim()) {
-      throw new MemryError("VALIDATION_ERROR", { field: "query", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "query", reason: "required" });
     }
 
     const topK = normalizeLimit(body.topK, 10, 50);
     const since = normalizeIsoTimestamp(body.since, "since");
-    const namespace = typeof body.namespace === "string" ? body.namespace : undefined;
+    const requestedNamespace = getRequestedNamespace(
+      request,
+      typeof body.namespace === "string" ? body.namespace : undefined,
+    );
     const mode: SearchMode = body.mode === "vector" || body.mode === "keyword" ? body.mode : "hybrid";
     
-    const resolved = await resolveNamespaceIdOrError(identity.userId, namespace);
+    const resolved = await resolveNamespaceIdOrError(identity.userId, requestedNamespace.name, {
+      createIfMissing: requestedNamespace.autoCreateIfMissing,
+    });
     if (resolved.error) {
       return resolved.error;
     }

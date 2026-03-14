@@ -5,7 +5,7 @@ import {
   upsertSynthesizedMemory,
 } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { clusterMemories, type ClusteredMemory, type MemoryCluster } from "@/lib/synthesis/clustering";
 import { synthesizeCluster } from "@/lib/synthesis/synthesize";
 
@@ -38,7 +38,7 @@ export async function POST(
     const existing = await getSynthesizedMemoryById(identity.userId, id);
 
     if (!existing) {
-      throw new MemryError("SYNTHESIS_NOT_FOUND");
+      throw new FatHippoError("SYNTHESIS_NOT_FOUND");
     }
 
     const clusters = await clusterMemories(identity.userId);
@@ -59,7 +59,7 @@ export async function POST(
       });
 
       if (sourceMemories.length < 3) {
-        throw new MemryError("VALIDATION_ERROR", {
+        throw new FatHippoError("VALIDATION_ERROR", {
           reason: "At least 3 live source memories are required to refresh a synthesis",
         });
       }

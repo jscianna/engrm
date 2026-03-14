@@ -100,8 +100,6 @@ export declare class FatHippoContextEngine implements ContextEngine {
     private mapLocalMemory;
     private toLocalToolSignals;
     private captureLocalTrace;
-    private getApiBaseUrl;
-    private getHostedHeaders;
     private buildHippoNodInstruction;
     private isHighUrgencyOrFormalMoment;
     /**

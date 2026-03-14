@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createChatbot, listChatbotsByUser } from "@/lib/chatbot";
 import { validateApiKey } from "@/lib/api-auth";
-import { errorResponse, MemryError } from "@/lib/errors";
+import { errorResponse, FatHippoError } from "@/lib/errors";
 
 export const runtime = "nodejs";
 
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     const identity = await validateApiKey(request, "chatbots.create");
     const payload = createChatbotSchema.safeParse(await request.json().catch(() => null));
     if (!payload.success) {
-      throw new MemryError("VALIDATION_ERROR", {
+      throw new FatHippoError("VALIDATION_ERROR", {
         field: "body",
         reason: payload.error.flatten(),
       });

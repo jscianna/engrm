@@ -9,7 +9,7 @@
  */
 
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { getDb } from "@/lib/turso";
 import { embedText } from "@/lib/embeddings";
 
@@ -58,18 +58,18 @@ export async function POST(request: Request) {
     const metadata = body.metadata || null;
     
     if (!indexKey) {
-      throw new MemryError("VALIDATION_ERROR", { field: "index", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "index", reason: "required" });
     }
     if (!summary) {
-      throw new MemryError("VALIDATION_ERROR", { field: "summary", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "summary", reason: "required" });
     }
     if (!fullContent) {
-      throw new MemryError("VALIDATION_ERROR", { field: "content", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "content", reason: "required" });
     }
     
     // Validate index key format (alphanumeric, hyphens, underscores)
     if (!/^[a-zA-Z0-9_-]{1,64}$/.test(indexKey)) {
-      throw new MemryError("VALIDATION_ERROR", { 
+      throw new FatHippoError("VALIDATION_ERROR", { 
         field: "index", 
         reason: "must be 1-64 alphanumeric characters, hyphens, or underscores" 
       });

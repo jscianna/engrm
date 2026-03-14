@@ -5,7 +5,7 @@
  */
 
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { deleteMemoryEdge } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -23,13 +23,13 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     const { edgeId } = await params;
     
     if (!edgeId) {
-      throw new MemryError("VALIDATION_ERROR", { field: "edgeId", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "edgeId", reason: "required" });
     }
     
     const deleted = await deleteMemoryEdge(identity.userId, edgeId);
     
     if (!deleted) {
-      throw new MemryError("MEMORY_NOT_FOUND", { resource: "edge", id: edgeId });
+      throw new FatHippoError("MEMORY_NOT_FOUND", { resource: "edge", id: edgeId });
     }
     
     return Response.json({ deleted: true, edgeId });

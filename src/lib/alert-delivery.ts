@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { MemryError } from "@/lib/errors";
+import { FatHippoError } from "@/lib/errors";
 import type { OperationalAlert } from "@/lib/operational-alerts";
 import { getOperationalAlertsSummary } from "@/lib/operational-alerts";
 import { releaseJobLease, tryAcquireJobLease } from "@/lib/cognitive-db";
@@ -236,7 +236,7 @@ export async function deliverOperationalAlerts(
 ): Promise<DeliveredOperationalAlerts> {
   const config = getOperationalAlertDeliveryConfig();
   if (!config.configured || config.destination == null) {
-    throw new MemryError("INTERNAL_ERROR", {
+    throw new FatHippoError("INTERNAL_ERROR", {
       reason: "ops_alert_webhook_not_configured",
     });
   }
@@ -267,7 +267,7 @@ export async function deliverOperationalAlerts(
   });
 
   if (!response.ok) {
-    throw new MemryError("INTERNAL_ERROR", {
+    throw new FatHippoError("INTERNAL_ERROR", {
       reason: "ops_alert_delivery_failed",
       status: response.status,
     });

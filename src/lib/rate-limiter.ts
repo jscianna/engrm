@@ -8,7 +8,7 @@ import crypto from "node:crypto";
 import type { Transaction } from "@libsql/client";
 import { ensureDatabaseMigrations } from "./db-migrations";
 import { getDb } from "./turso";
-import { MemryError } from "./errors";
+import { FatHippoError } from "./errors";
 
 // Beta limits - generous but protective
 export const LIMITS = {
@@ -96,7 +96,7 @@ export type UsageStats = {
 
 /**
  * Check rate limits and record API call (atomic)
- * Throws MemryError if limits exceeded
+ * Throws FatHippoError if limits exceeded
  */
 export async function checkRateLimit(
   userId: string,
@@ -148,7 +148,7 @@ export async function checkRateLimit(
 
     const minuteCount = Number((minuteResult.rows[0] as Record<string, unknown> | undefined)?.count ?? 0);
     if (minuteCount >= LIMITS.REQUESTS_PER_MINUTE) {
-      throw new MemryError("RATE_LIMIT_MINUTE", {
+      throw new FatHippoError("RATE_LIMIT_MINUTE", {
         limit: LIMITS.REQUESTS_PER_MINUTE,
         window: "1 minute",
         retryAfter: 60,
@@ -158,7 +158,7 @@ export async function checkRateLimit(
     const stats = statsResult.rows[0] as Record<string, unknown> | undefined;
     const apiCallsToday = stats?.last_reset_day === today ? Number(stats.api_calls_today ?? 0) : 0;
     if (apiCallsToday >= dailyLimit) {
-      throw new MemryError("RATE_LIMIT_DAILY", {
+      throw new FatHippoError("RATE_LIMIT_DAILY", {
         limit: dailyLimit,
         resetAt: getTomorrowMidnightUTC(),
       });
@@ -209,7 +209,7 @@ export async function checkRateLimit(
 export async function checkMemoryQuota(userId: string): Promise<void> {
   const stats = await getOrCreateStats(userId);
   if (stats.memoriesTotal >= LIMITS.MEMORIES_TOTAL) {
-    throw new MemryError("QUOTA_MEMORIES", {
+    throw new FatHippoError("QUOTA_MEMORIES", {
       limit: LIMITS.MEMORIES_TOTAL,
       current: stats.memoriesTotal,
     });
@@ -222,7 +222,7 @@ export async function checkMemoryQuota(userId: string): Promise<void> {
 export async function checkStorageQuota(userId: string, additionalBytes: number): Promise<void> {
   const stats = await getOrCreateStats(userId);
   if (stats.storageBytes + additionalBytes > LIMITS.STORAGE_BYTES) {
-    throw new MemryError("QUOTA_STORAGE", {
+    throw new FatHippoError("QUOTA_STORAGE", {
       limit: LIMITS.STORAGE_BYTES,
       current: stats.storageBytes,
       requested: additionalBytes,
@@ -431,14 +431,14 @@ export async function reserveMemoryQuotaInTransaction(
   const effectiveStorage = Number(row?.storage_bytes ?? 0);
 
   if (effectiveStorage + sizeBytes > LIMITS.STORAGE_BYTES) {
-    throw new MemryError("QUOTA_STORAGE", {
+    throw new FatHippoError("QUOTA_STORAGE", {
       limit: LIMITS.STORAGE_BYTES,
       current: effectiveStorage,
       requested: sizeBytes,
     });
   }
 
-  throw new MemryError("QUOTA_MEMORIES", {
+  throw new FatHippoError("QUOTA_MEMORIES", {
     limit: LIMITS.MEMORIES_TOTAL,
     current: effectiveMemories,
   });

@@ -17,7 +17,13 @@ import {
   type LocalToolSignal,
   type LocalStoredMemory,
 } from "@fathippo/local";
-import { FatHippoClient } from "./api/client.js";
+import {
+  FatHippoClient,
+  type CognitiveContextResponse,
+  type CognitivePattern,
+  type CognitiveSkill,
+  type CognitiveTrace,
+} from "@fathippo/hosted";
 import type {
   AssembleResult,
   BootstrapResult,
@@ -44,63 +50,7 @@ import {
   sanitizeContent,
 } from "./utils/filtering.js";
 
-// Cognitive Engine types
-interface CognitiveTrace {
-  id: string;
-  type: string;
-  problem: string;
-  reasoning: string;
-  solution?: string;
-  outcome: string;
-  context: { technologies?: string[] };
-}
-
-interface CognitivePattern {
-  id: string;
-  scope: "local" | "global" | "org";
-  domain: string;
-  approach: string;
-  confidence: number;
-  score?: number;
-}
-
 type RuntimeMode = "hosted" | "local";
-
-interface CognitiveSkill {
-  id: string;
-  name: string;
-  description: string;
-  scope: "local" | "global";
-  status: string;
-  successRate: number;
-}
-
-interface CognitiveContextResponse {
-  applicationId?: string;
-  policy?: {
-    key: string;
-    contextKey: string;
-    rationale: string;
-    exploration: boolean;
-    score: number;
-    traceLimit: number;
-    patternLimit: number;
-    skillLimit: number;
-    sectionOrder: Array<"local_patterns" | "global_patterns" | "traces" | "skills">;
-  } | null;
-  workflow?: {
-    key: string;
-    contextKey: string;
-    rationale: string;
-    exploration: boolean;
-    score: number;
-    title: string;
-    steps: string[];
-  } | null;
-  traces: CognitiveTrace[];
-  patterns: CognitivePattern[];
-  skills?: CognitiveSkill[];
-}
 
 type HippoHelpCue =
   | { kind: "workflow"; reason: string }
@@ -701,31 +651,28 @@ export class FatHippoContextEngine implements ContextEngine {
    * Fetch active constraints (always injected)
    */
   private async fetchConstraints(): Promise<string> {
-    const baseUrl = this.getApiBaseUrl();
-    
-    const response = await fetch(`${baseUrl}/v1/cognitive/constraints`, {
-      method: 'GET',
-      headers: this.getHostedHeaders(false),
-    });
-    
-    if (!response.ok) return '';
-    
-    const data = await response.json() as { contextFormat?: string };
-    return data.contextFormat || '';
+    if (!this.client) {
+      return "";
+    }
+
+    try {
+      const data = await this.client.getConstraints();
+      return data.contextFormat || "";
+    } catch {
+      return "";
+    }
   }
   
   /**
    * Auto-detect and store constraints from user message
    */
   private async maybeStoreConstraint(message: string): Promise<void> {
-    const baseUrl = this.getApiBaseUrl();
-    
+    if (!this.client) {
+      return;
+    }
+
     try {
-      await fetch(`${baseUrl}/v1/cognitive/constraints`, {
-        method: 'POST',
-        headers: this.getHostedHeaders(),
-        body: JSON.stringify({ message }),
-      });
+      await this.client.storeConstraint({ message });
     } catch {
       // Constraint detection is best-effort
     }
@@ -735,25 +682,23 @@ export class FatHippoContextEngine implements ContextEngine {
    * Fetch relevant traces and patterns from cognitive API
    */
   private async fetchCognitiveContext(sessionId: string, problem: string): Promise<CognitiveContextBundle> {
-    const baseUrl = this.getApiBaseUrl();
-    
-    const response = await fetch(`${baseUrl}/v1/cognitive/traces/relevant`, {
-      method: 'POST',
-      headers: this.getHostedHeaders(),
-      body: JSON.stringify({
+    if (!this.client) {
+      return { context: null, hippoCue: null };
+    }
+
+    let data: CognitiveContextResponse;
+    try {
+      data = await this.client.getRelevantCognitiveContext({
         sessionId,
         endpoint: "context-engine.assemble",
         problem,
         limit: 3,
         adaptivePolicy: this.config.adaptivePolicyEnabled !== false,
-      }),
-    });
-    
-    if (!response.ok) {
+      });
+    } catch {
       return { context: null, hippoCue: null };
     }
-    
-    const data = await response.json() as CognitiveContextResponse;
+
     if (data.applicationId) {
       this.sessionApplicationIds.set(sessionId, data.applicationId);
     }
@@ -874,19 +819,15 @@ export class FatHippoContextEngine implements ContextEngine {
     }
 
     try {
-      const baseUrl = this.getApiBaseUrl();
-      const response = await fetch(`${baseUrl}/v1/cognitive/traces`, {
-        method: "POST",
-        headers: this.getHostedHeaders(),
-        body: JSON.stringify({
+      if (!this.client) {
+        return;
+      }
+
+      await this.client.captureCognitiveTrace({
           ...payload,
           applicationId: this.sessionApplicationIds.get(params.sessionId) ?? null,
           shareEligible: this.config.shareEligibleByDefault !== false && payload.shareEligible,
-        }),
       });
-      if (!response.ok) {
-        throw new Error(`Trace capture failed with status ${response.status}`);
-      }
       this.sessionStartTimes.delete(params.sessionId);
       this.sessionApplicationIds.delete(params.sessionId);
     } catch (error) {
@@ -896,31 +837,18 @@ export class FatHippoContextEngine implements ContextEngine {
   }
 
   private async runCognitiveHeartbeat(): Promise<void> {
-    const baseUrl = this.getApiBaseUrl();
-    const headers = this.getHostedHeaders();
+    if (!this.client) {
+      return;
+    }
 
     try {
-      const response = await fetch(`${baseUrl}/v1/cognitive/patterns/extract`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({}),
-      });
-      if (!response.ok) {
-        throw new Error(`Pattern extraction failed with status ${response.status}`);
-      }
+      await this.client.extractCognitivePatterns({});
     } catch (error) {
       console.error("[FatHippo] Pattern extraction heartbeat error:", error);
     }
 
     try {
-      const response = await fetch(`${baseUrl}/v1/cognitive/skills/synthesize`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({}),
-      });
-      if (!response.ok) {
-        throw new Error(`Skill synthesis failed with status ${response.status}`);
-      }
+      await this.client.synthesizeCognitiveSkills({});
     } catch (error) {
       console.error("[FatHippo] Skill synthesis heartbeat error:", error);
     }
@@ -1067,26 +995,6 @@ export class FatHippoContextEngine implements ContextEngine {
       console.error("[FatHippo] Local trace capture error:", error);
       this.sessionStartTimes.set(params.sessionId, Date.now());
     }
-  }
-
-  private getApiBaseUrl(): string {
-    const baseUrl = this.config.baseUrl || "https://fathippo.ai/api";
-    return baseUrl.replace(/\/v1$/, "");
-  }
-
-  private getHostedHeaders(includeContentType = true): Record<string, string> {
-    const headers: Record<string, string> = {
-      "X-Fathippo-Plugin-Id": this.config.pluginId ?? CONTEXT_ENGINE_ID,
-      "X-Fathippo-Plugin-Version": this.config.pluginVersion ?? CONTEXT_ENGINE_VERSION,
-      "X-Fathippo-Plugin-Mode": this.mode,
-    };
-    if (this.config.apiKey) {
-      headers.Authorization = `Bearer ${this.config.apiKey}`;
-    }
-    if (includeContentType) {
-      headers["Content-Type"] = "application/json";
-    }
-    return headers;
   }
 
   private buildHippoNodInstruction(params: {

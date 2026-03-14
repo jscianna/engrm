@@ -1,5 +1,7 @@
 # Product Split Plan (Monorepo)
 
+> Update (2026-03-14): for universal memory across OpenClaw, Claude, and Codex, prefer a hosted-first runtime lifecycle shared from `@fathippo/hosted`. See `docs/architecture/UNIVERSAL_HOSTED_RUNTIME_PLAN.md`.
+
 ## Products
 - **Local Hippo (OSS/free):** local-only context engine, no auth, no hosted dependency.
 - **Hippo Hosted Context Engine (paid):** managed API, sync, premium retrieval.

@@ -6,7 +6,7 @@
  */
 
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { createTrace, getMatchingPatterns, getRecentTraces, syncTracePatternMatches, updateApplicationOutcome } from "@/lib/cognitive-db";
 import { logCognitiveAuditEvent } from "@/lib/cognitive-audit";
 
@@ -23,19 +23,19 @@ export async function POST(request: Request) {
     
     // Validate required fields
     if (!body.sessionId) {
-      throw new MemryError("VALIDATION_ERROR", { field: "sessionId", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "sessionId", reason: "required" });
     }
     if (!body.type) {
-      throw new MemryError("VALIDATION_ERROR", { field: "type", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "type", reason: "required" });
     }
     if (!body.problem) {
-      throw new MemryError("VALIDATION_ERROR", { field: "problem", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "problem", reason: "required" });
     }
     if (!body.outcome) {
-      throw new MemryError("VALIDATION_ERROR", { field: "outcome", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "outcome", reason: "required" });
     }
     if (!body.sanitized) {
-      throw new MemryError("VALIDATION_ERROR", { field: "sanitized", reason: "trace must be sanitized before storage" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "sanitized", reason: "trace must be sanitized before storage" });
     }
     const normalizedContext = {
       ...(body.context && typeof body.context === "object" && !Array.isArray(body.context) ? body.context : {}),

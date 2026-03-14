@@ -5,7 +5,7 @@
 <h1 align="center">FatHippo</h1>
 
 <p align="center">
-  <strong>Private cognitive substrate for OpenClaw and AI coding agents.</strong><br/>
+  <strong>Persistent memory and cognition layer for OpenClaw and AI coding agents.</strong><br/>
   Connect it once, then let your agent get better by the day.
 </p>
 
@@ -42,9 +42,20 @@ The goal is simple: install it once, then let your agent become more useful ever
 
 ---
 
-## Quick Start: Connect Your Existing OpenClaw
+## Two Ways To Use FatHippo
 
-If you already use OpenClaw, this is the main setup path.
+FatHippo currently has two customer-facing offers:
+
+- `Hosted`: the full FatHippo experience with hosted retrieval, cognition features, sync/imports, dashboard receipts, and plugin version visibility
+- `Local-only`: private on-device memory plus lightweight local workflow/fix reuse, without hosted sync/imports or account-backed cognition
+
+OpenClaw users only install one package: `@fathippo/fathippo-context-engine`.
+
+---
+
+## Quick Start: Hosted OpenClaw
+
+If you already use OpenClaw, this is the primary setup path.
 
 ```bash
 # 1. Install the plugin
@@ -71,9 +82,31 @@ After that, FatHippo starts working automatically:
 - coding traces are captured after meaningful work
 - patterns and skills are promoted from verified outcomes
 - retrieval and workflow strategy adapt privately over time
-- users see small “Fathippo helped” receipts when it materially contributed
+- users see small “FatHippo helped” receipts when it materially contributed
 
-OpenClaw guide: [docs/api/openclaw-integration.md](/Users/johnscianna/Desktop/FatHippo/docs/api/openclaw-integration.md)
+---
+
+## Quick Start: Local-Only OpenClaw
+
+If you want a fully private setup on the machine running OpenClaw:
+
+```bash
+# 1. Install the plugin
+openclaw plugins install @fathippo/fathippo-context-engine
+
+# 2. Set it as the active context engine
+openclaw config set plugins.slots.contextEngine fathippo-context-engine
+
+# 3. Force local-only mode
+openclaw config set plugins.entries.fathippo-context-engine.config.mode local
+
+# 4. Restart the gateway
+openclaw gateway restart
+```
+
+Local-only mode keeps memory and lightweight learning private on-device, but it does not use hosted features like sync/imports, dashboard receipts, or hosted cognition.
+
+OpenClaw guide: [docs/api/openclaw-integration.md](docs/api/openclaw-integration.md)
 
 ---
 
@@ -122,7 +155,7 @@ The ideal experience is:
 
 ## Packages
 
-This repo is now split into installable package boundaries:
+This repo is split into installable package boundaries. These are developer/package surfaces, not separate end-user plans:
 
 | Package | Purpose |
 | --- | --- |
@@ -133,11 +166,11 @@ This repo is now split into installable package boundaries:
 
 There are also internal/supporting packages in this monorepo, including the web app, dashboards, examples, and test harnesses.
 
-Example quickstarts live in [examples/README.md](/Users/johnscianna/Desktop/FatHippo/examples/README.md):
+Example quickstarts live in [examples/README.md](examples/README.md):
 
-- [examples/local-only.ts](/Users/johnscianna/Desktop/FatHippo/examples/local-only.ts)
-- [examples/hosted-hybrid.ts](/Users/johnscianna/Desktop/FatHippo/examples/hosted-hybrid.ts)
-- [examples/cognition-enabled.ts](/Users/johnscianna/Desktop/FatHippo/examples/cognition-enabled.ts)
+- [examples/local-only.ts](examples/local-only.ts)
+- [examples/hosted-hybrid.ts](examples/hosted-hybrid.ts)
+- [examples/cognition-enabled.ts](examples/cognition-enabled.ts)
 
 ---
 
@@ -188,7 +221,7 @@ They should mainly notice:
 - OpenClaw already knows what to try on repeated issues
 - the suggested workflow is better than before
 - fewer retries are needed on familiar bug classes
-- the dashboard shows short “Fathippo helped” receipts
+- the dashboard shows short “FatHippo helped” receipts
 
 That means the product stays low-friction while still making the value legible.
 
@@ -239,11 +272,11 @@ docs/                   Product, API, operations, and rollout docs
 
 ## Documentation
 
-- OpenClaw integration: [docs/api/openclaw-integration.md](/Users/johnscianna/Desktop/FatHippo/docs/api/openclaw-integration.md)
-- OpenClaw guide page: [src/app/docs/guides/openclaw/page.tsx](/Users/johnscianna/Desktop/FatHippo/src/app/docs/guides/openclaw/page.tsx)
-- Package examples: [examples/README.md](/Users/johnscianna/Desktop/FatHippo/examples/README.md)
-- Production launch runbook: [docs/PRODUCTION-LAUNCH-RUNBOOK.md](/Users/johnscianna/Desktop/FatHippo/docs/PRODUCTION-LAUNCH-RUNBOOK.md)
-- Cognitive strategy: [docs/COGNITIVE-SUBSTRATE-STRATEGY.md](/Users/johnscianna/Desktop/FatHippo/docs/COGNITIVE-SUBSTRATE-STRATEGY.md)
+- OpenClaw integration: [docs/api/openclaw-integration.md](docs/api/openclaw-integration.md)
+- OpenClaw guide page: [src/app/docs/guides/openclaw/page.tsx](src/app/docs/guides/openclaw/page.tsx)
+- Package examples: [examples/README.md](examples/README.md)
+- Production launch runbook: [docs/PRODUCTION-LAUNCH-RUNBOOK.md](docs/PRODUCTION-LAUNCH-RUNBOOK.md)
+- Cognitive strategy: [docs/COGNITIVE-SUBSTRATE-STRATEGY.md](docs/COGNITIVE-SUBSTRATE-STRATEGY.md)
 
 ---
 

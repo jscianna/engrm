@@ -12,8 +12,14 @@ import {
 } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { invalidateAllLocalResultsForUser } from "@/lib/local-retrieval";
-import { MemryError, errorResponse } from "@/lib/errors";
-import { isObject, normalizeIsoTimestamp, normalizeLimit, resolveNamespaceIdOrError } from "@/lib/api-v1";
+import { FatHippoError, errorResponse } from "@/lib/errors";
+import {
+  getRequestedNamespace,
+  isObject,
+  normalizeIsoTimestamp,
+  normalizeLimit,
+  resolveNamespaceIdOrError,
+} from "@/lib/api-v1";
 import type { MemoryKind } from "@/lib/types";
 
 // Similarity threshold for consolidation suggestion
@@ -25,11 +31,17 @@ export async function GET(request: Request) {
   try {
     const identity = await validateApiKey(request, "memories.list");
     const url = new URL(request.url);
-    const namespace = url.searchParams.get("namespace") ?? undefined;
+    const requestedNamespace = getRequestedNamespace(
+      request,
+      url.searchParams.get("namespace"),
+    );
     const limit = normalizeLimit(url.searchParams.get("limit"), 50, 200);
     const since = normalizeIsoTimestamp(url.searchParams.get("since"), "since");
 
-    const resolved = await resolveNamespaceIdOrError(identity.userId, namespace);
+    const resolved = await resolveNamespaceIdOrError(
+      identity.userId,
+      requestedNamespace.name,
+    );
     if (resolved.error) {
       return resolved.error;
     }
@@ -54,7 +66,7 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body)) {
-      throw new MemryError("VALIDATION_ERROR", { field: "body", reason: "Invalid request body" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "body", reason: "Invalid request body" });
     }
 
     // Check for encrypted vs plaintext format
@@ -64,14 +76,23 @@ export async function POST(request: Request) {
     const hasPlaintext = plaintextContent && plaintextContent.length > 0;
 
     if (!hasEncrypted && !hasPlaintext) {
-      throw new MemryError("VALIDATION_ERROR", { 
+      throw new FatHippoError("VALIDATION_ERROR", { 
         field: "content", 
         reason: "Provide either content (plaintext) or encrypted content with an iv" 
       });
     }
 
-    const namespace = typeof body.namespace === "string" ? body.namespace : undefined;
-    const resolved = await resolveNamespaceIdOrError(identity.userId, namespace);
+    const requestedNamespace = getRequestedNamespace(
+      request,
+      typeof body.namespace === "string" ? body.namespace : undefined,
+    );
+    const resolved = await resolveNamespaceIdOrError(
+      identity.userId,
+      requestedNamespace.name,
+      {
+        createIfMissing: requestedNamespace.autoCreateIfMissing,
+      },
+    );
     if (resolved.error) {
       return resolved.error;
     }
@@ -80,10 +101,10 @@ export async function POST(request: Request) {
     if (sessionId) {
       const session = await getSessionById(identity.userId, sessionId);
       if (!session) {
-        throw new MemryError("SESSION_NOT_FOUND");
+        throw new FatHippoError("SESSION_NOT_FOUND");
       }
       if (resolved.namespaceId && session.namespaceId !== resolved.namespaceId) {
-        throw new MemryError("VALIDATION_ERROR", {
+        throw new FatHippoError("VALIDATION_ERROR", {
           field: "sessionId",
           reason: "Session namespace does not match request namespace",
         });

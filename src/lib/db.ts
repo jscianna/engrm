@@ -2408,6 +2408,30 @@ export async function createNamespace(userId: string, name: string): Promise<Nam
   };
 }
 
+export async function getOrCreateNamespace(userId: string, name: string): Promise<NamespaceRecord> {
+  const cleaned = name.trim();
+  if (!cleaned) {
+    throw new Error("Namespace name is required.");
+  }
+
+  const existing = await getNamespaceByName(userId, cleaned);
+  if (existing) {
+    return existing;
+  }
+
+  try {
+    return await createNamespace(userId, cleaned);
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      const namespace = await getNamespaceByName(userId, cleaned);
+      if (namespace) {
+        return namespace;
+      }
+    }
+    throw error;
+  }
+}
+
 export async function listNamespaces(userId: string): Promise<NamespaceRecord[]> {
   await ensureInitialized();
   const client = getDb();

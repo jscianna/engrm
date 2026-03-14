@@ -5,7 +5,7 @@
 
 import { getDb } from "@/lib/turso";
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 
 export const runtime = "nodejs";
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body) || !Array.isArray(body.ids)) {
-      throw new MemryError("VALIDATION_ERROR", { field: "ids", reason: "required array" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "ids", reason: "required array" });
     }
 
     const ids = body.ids as string[];

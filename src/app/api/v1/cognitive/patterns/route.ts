@@ -6,7 +6,7 @@
  */
 
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { getPatterns, createPattern } from "@/lib/cognitive-db";
 import { logCognitiveAuditEvent } from "@/lib/cognitive-audit";
 import { assertGlobalCognitiveArtifactAccess } from "@/lib/cognitive-guards";
@@ -72,13 +72,13 @@ export async function POST(request: Request) {
     const body = await request.json();
     
     if (!body.domain) {
-      throw new MemryError("VALIDATION_ERROR", { field: "domain", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "domain", reason: "required" });
     }
     if (!body.trigger) {
-      throw new MemryError("VALIDATION_ERROR", { field: "trigger", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "trigger", reason: "required" });
     }
     if (!body.approach) {
-      throw new MemryError("VALIDATION_ERROR", { field: "approach", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "approach", reason: "required" });
     }
     
     if (body.scope === "global") {

@@ -7,17 +7,16 @@
 
 import { embedQuery } from "@/lib/embeddings";
 import { semanticSearchVectors } from "@/lib/qdrant";
-import { 
+import {
   filterSensitiveMemories,
   startExtendedSession, 
   getCriticalMemories, 
   getAgentMemoriesByIds,
-  getNamespaceByName,
   listCriticalSynthesizedMemories,
 } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
-import { isObject } from "@/lib/api-v1";
+import { FatHippoError, errorResponse } from "@/lib/errors";
+import { getRequestedNamespace, isObject, resolveNamespaceIdOrError } from "@/lib/api-v1";
 
 export const runtime = "nodejs";
 
@@ -27,20 +26,24 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body)) {
-      throw new MemryError("VALIDATION_ERROR", { field: "body", reason: "Invalid request body" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "body", reason: "Invalid request body" });
     }
 
     const firstMessage = typeof body.firstMessage === "string" ? body.firstMessage.trim() : "";
     const metadata = isObject(body.metadata) ? body.metadata : null;
-    
-    // Resolve namespace if provided
-    let namespaceId: string | null = null;
-    if (typeof body.namespace === "string" && body.namespace.trim()) {
-      const ns = await getNamespaceByName(identity.userId, body.namespace.trim());
-      if (ns) {
-        namespaceId = ns.id;
-      }
+    const requestedNamespace = getRequestedNamespace(
+      request,
+      typeof body.namespace === "string" ? body.namespace : undefined,
+    );
+    const resolved = await resolveNamespaceIdOrError(identity.userId, requestedNamespace.name, {
+      createIfMissing: requestedNamespace.autoCreateIfMissing,
+    });
+
+    if (resolved.error) {
+      return resolved.error;
     }
+
+    const namespaceId = resolved.namespaceId ?? null;
 
     // Start the session
     const session = await startExtendedSession({

@@ -121,9 +121,9 @@ html {
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
-  --memry-surface: oklch(0.21 0.02 233);
-  --memry-glow: oklch(0.74 0.11 205);
-  --memry-accent: oklch(0.71 0.17 167);
+  --fathippo-surface: oklch(0.21 0.02 233);
+  --fathippo-glow: oklch(0.74 0.11 205);
+  --fathippo-accent: oklch(0.71 0.17 167);
 }
 
 @layer base {
@@ -133,8 +133,8 @@ html {
   body {
     @apply bg-zinc-950 text-foreground font-sans;
     background-image:
-      radial-gradient(65rem 30rem at 8% -10%, color-mix(in oklch, var(--memry-glow) 16%, transparent), transparent 62%),
-      radial-gradient(44rem 24rem at 92% -8%, color-mix(in oklch, var(--memry-accent) 15%, transparent), transparent 66%),
+      radial-gradient(65rem 30rem at 8% -10%, color-mix(in oklch, var(--fathippo-glow) 16%, transparent), transparent 62%),
+      radial-gradient(44rem 24rem at 92% -8%, color-mix(in oklch, var(--fathippo-accent) 15%, transparent), transparent 66%),
       linear-gradient(160deg, oklch(0.15 0.01 235), oklch(0.13 0.01 245));
     background-attachment: fixed;
   }

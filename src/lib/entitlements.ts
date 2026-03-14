@@ -1,4 +1,4 @@
-import { MemryError } from "@/lib/errors";
+import { FatHippoError } from "@/lib/errors";
 import { getUserEntitlementPlan, type EntitlementPlan } from "@/lib/db";
 
 export enum EntitlementFeature {
@@ -49,7 +49,7 @@ export async function assertEntitlement(userId: string, feature: EntitlementFeat
   const plan = await getUserEntitlementPlan(userId);
   const requiredPlan = requiredPlanForFeature(feature);
   if (!planAllowsFeature(plan, feature)) {
-    throw new MemryError("ENTITLEMENT_REQUIRED", {
+    throw new FatHippoError("ENTITLEMENT_REQUIRED", {
       feature,
       currentPlan: plan,
       requiredPlan,

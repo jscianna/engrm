@@ -1,4 +1,4 @@
-import { MemryError } from "@/lib/errors";
+import { FatHippoError } from "@/lib/errors";
 
 const HIGH_RISK_ACTIONS = new Set([
   "memories.delete",
@@ -20,7 +20,7 @@ export function assertPreActionRecall(request: Request, action: string): void {
     request.headers.get("x-fathippo-preaction-recall") === "true";
 
   if (!recallChecked) {
-    throw new MemryError("VALIDATION_ERROR", {
+    throw new FatHippoError("VALIDATION_ERROR", {
       reason:
         "High-risk action requires pre-action recall. Set header x-fathippo-recall-checked: true after running memory recall.",
       action,

@@ -1,6 +1,6 @@
 import { createNamespace, listNamespaces } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 
 export const runtime = "nodejs";
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => null)) as unknown;
 
     if (!isObject(body) || typeof body.name !== "string" || !body.name.trim()) {
-      throw new MemryError("VALIDATION_ERROR", { field: "name", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "name", reason: "required" });
     }
 
     const namespace = await createNamespace(identity.userId, body.name);

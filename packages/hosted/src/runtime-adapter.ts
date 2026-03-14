@@ -1,0 +1,549 @@
+type FatHippoFetch = typeof fetch;
+
+export type FatHippoRuntimeName =
+  | "openclaw"
+  | "claude"
+  | "codex"
+  | "cursor"
+  | "custom";
+
+export type FatHippoMessageRole = "system" | "user" | "assistant" | "tool";
+
+export interface FatHippoRuntimeMetadata {
+  runtime: FatHippoRuntimeName;
+  runtimeVersion?: string;
+  adapterVersion?: string;
+  namespace?: string;
+  workspaceId?: string;
+  workspaceRoot?: string;
+  installationId?: string;
+  conversationId?: string;
+  agentId?: string;
+  model?: string;
+}
+
+export interface FatHippoConversationMessage {
+  role: FatHippoMessageRole;
+  content: string;
+  timestamp?: string;
+  toolName?: string;
+  toolCallId?: string;
+}
+
+export interface FatHippoInjectedMemoryRef {
+  id: string;
+  title: string;
+  text: string;
+  type?: string;
+  tier?: string;
+  source: "critical" | "high" | "working" | "refresh" | "search";
+}
+
+export interface FatHippoSessionStartInput {
+  firstMessage?: string;
+  namespace?: string;
+  metadata?: Record<string, unknown>;
+  runtime?: Partial<FatHippoRuntimeMetadata>;
+}
+
+export interface FatHippoSessionStartOutput {
+  sessionId: string;
+  systemPromptAddition: string;
+  injectedMemories: FatHippoInjectedMemoryRef[];
+  tokensInjected?: number;
+  criticalCount?: number;
+  highCount?: number;
+}
+
+export interface FatHippoBuildContextInput {
+  messages: FatHippoConversationMessage[];
+  lastUserMessage?: string;
+  conversationId?: string;
+  maxCritical?: number;
+  maxRelevant?: number;
+  runtime?: Partial<FatHippoRuntimeMetadata>;
+}
+
+export interface FatHippoBuildContextOutput {
+  systemPromptAddition: string;
+  injectedMemories: FatHippoInjectedMemoryRef[];
+  sensitiveOmitted?: number;
+  evaluationId?: string;
+  retrievalConfidence?: number;
+}
+
+export interface FatHippoRecordTurnInput {
+  sessionId: string;
+  messages: FatHippoConversationMessage[];
+  turnNumber?: number;
+  memoriesUsed?: string[];
+  runtime?: Partial<FatHippoRuntimeMetadata>;
+}
+
+export interface FatHippoRecordTurnOutput {
+  turnNumber: number;
+  refreshNeeded: boolean;
+  systemPromptAddition?: string;
+  injectedMemories: FatHippoInjectedMemoryRef[];
+  memoriesUsed: string[];
+}
+
+export interface FatHippoRememberInput {
+  text: string;
+  title?: string;
+  runtime?: Partial<FatHippoRuntimeMetadata>;
+}
+
+export interface FatHippoRememberOutput {
+  memoryId?: string;
+  stored: boolean;
+  consolidated?: boolean;
+  warning?: string;
+}
+
+export interface FatHippoSearchInput {
+  query: string;
+  limit?: number;
+  since?: string;
+  namespace?: string;
+  runtime?: Partial<FatHippoRuntimeMetadata>;
+}
+
+export interface FatHippoSearchResult {
+  id: string;
+  title: string;
+  text: string;
+  score: number;
+  memoryType?: string;
+  provenance?: {
+    source?: string;
+    fileName?: string;
+    sourceUrl?: string;
+    createdAt?: string;
+  };
+}
+
+export interface FatHippoSessionEndInput {
+  sessionId: string;
+  outcome?: "success" | "failure" | "abandoned";
+  feedback?: string;
+  runtime?: Partial<FatHippoRuntimeMetadata>;
+}
+
+export interface FatHippoSessionEndOutput {
+  summary: string;
+  suggestedMemories: Array<{
+    content: string;
+    memoryType: string;
+    confidence: number;
+  }>;
+  memoriesReinforced: number;
+  analytics?: {
+    turns: number;
+    memoriesUsed: number;
+    outcome: string;
+    duration: number | null;
+  };
+}
+
+export interface FatHippoHostedRuntimeClientContract {
+  startSession(input: FatHippoSessionStartInput): Promise<FatHippoSessionStartOutput>;
+  buildContext(input: FatHippoBuildContextInput): Promise<FatHippoBuildContextOutput>;
+  recordTurn(input: FatHippoRecordTurnInput): Promise<FatHippoRecordTurnOutput>;
+  remember(input: FatHippoRememberInput): Promise<FatHippoRememberOutput>;
+  search(input: FatHippoSearchInput): Promise<FatHippoSearchResult[]>;
+  endSession(input: FatHippoSessionEndInput): Promise<FatHippoSessionEndOutput>;
+}
+
+export interface FatHippoHostedRuntimeClientOptions {
+  baseUrl: string;
+  apiKey: string;
+  fetchImpl?: FatHippoFetch;
+  runtime?: FatHippoRuntimeMetadata;
+}
+
+type ApiTierMemory = {
+  id: string;
+  title: string;
+  text: string;
+  type?: string;
+  tier?: string;
+  synthesizedFrom?: string[];
+};
+
+type SessionStartApiResponse = {
+  sessionId: string;
+  context?: {
+    critical?: ApiTierMemory[];
+    high?: ApiTierMemory[];
+  };
+  stats?: {
+    tokensInjected?: number;
+    criticalCount?: number;
+    highCount?: number;
+  };
+};
+
+type SessionTurnApiResponse = {
+  turnNumber: number;
+  refreshNeeded: boolean;
+  newContext?: {
+    critical?: ApiTierMemory[];
+    high?: ApiTierMemory[];
+  };
+  memoriesUsed?: string[];
+};
+
+type SessionEndApiResponse = FatHippoSessionEndOutput;
+
+type RememberApiResponse = {
+  id?: string;
+  stored?: boolean;
+  consolidated?: boolean;
+  warning?: string;
+};
+
+type SearchApiResponse = Array<{
+  id: string;
+  score: number;
+  provenance?: FatHippoSearchResult["provenance"];
+  memory: {
+    id: string;
+    title: string;
+    text: string;
+    memoryType?: string;
+  };
+}>;
+
+function normalizeApiBaseUrl(baseUrl: string): string {
+  const normalized = baseUrl.replace(/\/+$/, "");
+  if (normalized.endsWith("/api/v1")) {
+    return normalized.slice(0, -3);
+  }
+  if (normalized.endsWith("/api")) {
+    return normalized;
+  }
+  return `${normalized}/api`;
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function pickLastUserMessage(messages: FatHippoConversationMessage[]): string {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === "user" && isNonEmptyString(message.content)) {
+      return message.content.trim();
+    }
+  }
+  return "";
+}
+
+function formatMemoryList(memories: ApiTierMemory[]): string[] {
+  return memories.map((memory) => {
+    const title = memory.title.trim() || "Memory";
+    const text = memory.text.trim();
+    return text ? `- ${title}: ${text}` : `- ${title}`;
+  });
+}
+
+function formatTieredContext(context: {
+  critical?: ApiTierMemory[];
+  working?: ApiTierMemory[];
+  high?: ApiTierMemory[];
+}): string {
+  const sections: string[] = [];
+
+  if ((context.critical?.length ?? 0) > 0) {
+    sections.push(`## Critical Memory\n${formatMemoryList(context.critical ?? []).join("\n")}`);
+  }
+
+  if ((context.working?.length ?? 0) > 0) {
+    sections.push(`## Working Memory\n${formatMemoryList(context.working ?? []).join("\n")}`);
+  }
+
+  if ((context.high?.length ?? 0) > 0) {
+    sections.push(`## Relevant Memory\n${formatMemoryList(context.high ?? []).join("\n")}`);
+  }
+
+  return sections.join("\n\n");
+}
+
+function mapInjectedMemories(
+  memories: ApiTierMemory[] | undefined,
+  source: FatHippoInjectedMemoryRef["source"],
+): FatHippoInjectedMemoryRef[] {
+  return (memories ?? []).map((memory) => ({
+    id: memory.id,
+    title: memory.title,
+    text: memory.text,
+    type: memory.type,
+    tier: memory.tier,
+    source,
+  }));
+}
+
+function parseNumberHeader(headers: Headers, name: string): number | undefined {
+  const value = headers.get(name);
+  if (!value) {
+    return undefined;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+export class FatHippoHostedRuntimeClient implements FatHippoHostedRuntimeClientContract {
+  private readonly apiKey: string;
+  private readonly baseUrl: string;
+  private readonly fetchImpl: FatHippoFetch;
+  private readonly defaultRuntime: FatHippoRuntimeMetadata;
+
+  constructor(options: FatHippoHostedRuntimeClientOptions) {
+    this.apiKey = options.apiKey;
+    this.baseUrl = normalizeApiBaseUrl(options.baseUrl);
+    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.defaultRuntime = {
+      runtime: "custom",
+      ...options.runtime,
+    };
+  }
+
+  async startSession(input: FatHippoSessionStartInput): Promise<FatHippoSessionStartOutput> {
+    const response = await this.requestJson<SessionStartApiResponse>("/v1/sessions/start", {
+      method: "POST",
+      runtime: input.runtime,
+      body: JSON.stringify({
+        firstMessage: input.firstMessage,
+        namespace: input.namespace ?? this.resolveRuntime(input.runtime).namespace,
+        metadata: input.metadata,
+      }),
+    });
+
+    const injectedMemories = [
+      ...mapInjectedMemories(response.context?.critical, "critical"),
+      ...mapInjectedMemories(response.context?.high, "high"),
+    ];
+
+    return {
+      sessionId: response.sessionId,
+      systemPromptAddition: formatTieredContext(response.context ?? {}),
+      injectedMemories,
+      tokensInjected: response.stats?.tokensInjected,
+      criticalCount: response.stats?.criticalCount,
+      highCount: response.stats?.highCount,
+    };
+  }
+
+  async buildContext(input: FatHippoBuildContextInput): Promise<FatHippoBuildContextOutput> {
+    const runtime = this.resolveRuntime(input.runtime);
+    const message = input.lastUserMessage?.trim() || pickLastUserMessage(input.messages);
+
+    const response = await this.requestText("/v1/simple/context", {
+      method: "POST",
+      runtime: input.runtime,
+      body: JSON.stringify({
+        message,
+        conversationId: input.conversationId ?? runtime.conversationId,
+        maxCritical: input.maxCritical,
+        maxRelevant: input.maxRelevant,
+      }),
+    });
+
+    return {
+      systemPromptAddition: response.text,
+      injectedMemories: [],
+      sensitiveOmitted: parseNumberHeader(response.headers, "X-FatHippo-Sensitive-Omitted"),
+      evaluationId: response.headers.get("X-FatHippo-Eval-Id") ?? undefined,
+      retrievalConfidence: parseNumberHeader(response.headers, "X-FatHippo-Retrieval-Confidence"),
+    };
+  }
+
+  async recordTurn(input: FatHippoRecordTurnInput): Promise<FatHippoRecordTurnOutput> {
+    const response = await this.requestJson<SessionTurnApiResponse>(
+      `/v1/sessions/${encodeURIComponent(input.sessionId)}/turn`,
+      {
+        method: "POST",
+        runtime: input.runtime,
+        body: JSON.stringify({
+          turnNumber: input.turnNumber,
+          messages: input.messages,
+          memoriesUsed: input.memoriesUsed ?? [],
+        }),
+      },
+    );
+
+    const injectedMemories = [
+      ...mapInjectedMemories(response.newContext?.critical, "refresh"),
+      ...mapInjectedMemories(response.newContext?.high, "refresh"),
+    ];
+    const systemPromptAddition = response.newContext
+      ? formatTieredContext(response.newContext)
+      : undefined;
+
+    return {
+      turnNumber: response.turnNumber,
+      refreshNeeded: response.refreshNeeded,
+      systemPromptAddition: systemPromptAddition || undefined,
+      injectedMemories,
+      memoriesUsed: response.memoriesUsed ?? input.memoriesUsed ?? [],
+    };
+  }
+
+  async remember(input: FatHippoRememberInput): Promise<FatHippoRememberOutput> {
+    const response = await this.requestJson<RememberApiResponse>("/v1/simple/remember", {
+      method: "POST",
+      runtime: input.runtime,
+      body: JSON.stringify({
+        text: input.text,
+        title: input.title,
+      }),
+    });
+
+    return {
+      memoryId: response.id,
+      stored: response.stored !== false,
+      consolidated: response.consolidated,
+      warning: response.warning,
+    };
+  }
+
+  async search(input: FatHippoSearchInput): Promise<FatHippoSearchResult[]> {
+    const runtime = this.resolveRuntime(input.runtime);
+    const response = await this.requestJson<SearchApiResponse>("/v1/search", {
+      method: "POST",
+      runtime: input.runtime,
+      body: JSON.stringify({
+        query: input.query,
+        topK: input.limit,
+        since: input.since,
+        namespace: input.namespace ?? runtime.namespace,
+      }),
+    });
+
+    return response.map((result) => ({
+      id: result.memory.id || result.id,
+      title: result.memory.title,
+      text: result.memory.text,
+      score: result.score,
+      memoryType: result.memory.memoryType,
+      provenance: result.provenance,
+    }));
+  }
+
+  async endSession(input: FatHippoSessionEndInput): Promise<FatHippoSessionEndOutput> {
+    return this.requestJson<SessionEndApiResponse>(
+      `/v1/sessions/${encodeURIComponent(input.sessionId)}/end`,
+      {
+        method: "POST",
+        runtime: input.runtime,
+        body: JSON.stringify({
+          outcome: input.outcome,
+          feedback: input.feedback,
+        }),
+      },
+    );
+  }
+
+  private resolveRuntime(
+    runtime?: Partial<FatHippoRuntimeMetadata>,
+  ): FatHippoRuntimeMetadata {
+    return {
+      ...this.defaultRuntime,
+      ...runtime,
+      runtime: runtime?.runtime ?? this.defaultRuntime.runtime,
+    };
+  }
+
+  private buildHeaders(runtime?: Partial<FatHippoRuntimeMetadata>): Record<string, string> {
+    const resolved = this.resolveRuntime(runtime);
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.apiKey}`,
+      "Content-Type": "application/json",
+      "X-Fathippo-Runtime": resolved.runtime,
+    };
+
+    if (resolved.runtimeVersion) {
+      headers["X-Fathippo-Runtime-Version"] = resolved.runtimeVersion;
+    }
+    if (resolved.adapterVersion) {
+      headers["X-Fathippo-Adapter-Version"] = resolved.adapterVersion;
+    }
+    if (resolved.namespace) {
+      headers["X-Fathippo-Namespace"] = resolved.namespace;
+    }
+    if (resolved.workspaceId) {
+      headers["X-Fathippo-Workspace-Id"] = resolved.workspaceId;
+    }
+    if (resolved.workspaceRoot) {
+      headers["X-Fathippo-Workspace-Root"] = resolved.workspaceRoot;
+    }
+    if (resolved.installationId) {
+      headers["X-Fathippo-Installation-Id"] = resolved.installationId;
+    }
+    if (resolved.conversationId) {
+      headers["X-Fathippo-Conversation-Id"] = resolved.conversationId;
+    }
+    if (resolved.agentId) {
+      headers["X-Fathippo-Agent-Id"] = resolved.agentId;
+    }
+    if (resolved.model) {
+      headers["X-Fathippo-Model"] = resolved.model;
+    }
+
+    return headers;
+  }
+
+  private async requestJson<T>(
+    path: string,
+    init: {
+      method: "POST" | "GET";
+      body?: string;
+      runtime?: Partial<FatHippoRuntimeMetadata>;
+    },
+  ): Promise<T> {
+    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+      method: init.method,
+      headers: this.buildHeaders(init.runtime),
+      body: init.body,
+    });
+
+    if (!response.ok) {
+      const error = await response.text().catch(() => "Unknown error");
+      throw new Error(`FatHippo request failed with ${response.status}: ${error}`);
+    }
+
+    return response.json() as Promise<T>;
+  }
+
+  private async requestText(
+    path: string,
+    init: {
+      method: "POST" | "GET";
+      body?: string;
+      runtime?: Partial<FatHippoRuntimeMetadata>;
+    },
+  ): Promise<{ text: string; headers: Headers }> {
+    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+      method: init.method,
+      headers: this.buildHeaders(init.runtime),
+      body: init.body,
+    });
+
+    if (!response.ok) {
+      const error = await response.text().catch(() => "Unknown error");
+      throw new Error(`FatHippo request failed with ${response.status}: ${error}`);
+    }
+
+    return {
+      text: await response.text(),
+      headers: response.headers,
+    };
+  }
+}
+
+export function createFatHippoHostedRuntimeClient(
+  options: FatHippoHostedRuntimeClientOptions,
+): FatHippoHostedRuntimeClient {
+  return new FatHippoHostedRuntimeClient(options);
+}

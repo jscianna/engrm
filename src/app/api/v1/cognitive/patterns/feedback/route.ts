@@ -5,7 +5,7 @@
  */
 
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { updatePatternFeedback } from "@/lib/cognitive-db";
 import { logCognitiveAuditEvent } from "@/lib/cognitive-audit";
 
@@ -25,13 +25,13 @@ export async function POST(request: Request) {
     const outcome = body.outcome as 'success' | 'failure';
     
     if (!patternId) {
-      throw new MemryError("VALIDATION_ERROR", { field: "patternId", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "patternId", reason: "required" });
     }
     if (!traceId) {
-      throw new MemryError("VALIDATION_ERROR", { field: "traceId", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "traceId", reason: "required" });
     }
     if (outcome !== 'success' && outcome !== 'failure') {
-      throw new MemryError("VALIDATION_ERROR", { field: "outcome", reason: "must be 'success' or 'failure'" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "outcome", reason: "must be 'success' or 'failure'" });
     }
     
     const updated = await updatePatternFeedback({
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
       notes: typeof body.notes === "string" ? body.notes : null,
     });
     if (!updated) {
-      throw new MemryError("AUTH_FORBIDDEN", {
+      throw new FatHippoError("AUTH_FORBIDDEN", {
         reason: "pattern_or_trace_not_accessible",
       });
     }

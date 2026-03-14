@@ -140,7 +140,7 @@ const ERROR_DETAILS: Record<ErrorCode, { status: number; message: string; userMe
   },
 };
 
-export class MemryError extends Error {
+export class FatHippoError extends Error {
   code: ErrorCode;
   status: number;
   userMessage: string;
@@ -167,7 +167,7 @@ export class MemryError extends Error {
 }
 
 /**
- * @deprecated Use MemryError instead
+ * @deprecated Use FatHippoError instead
  * Backward compatibility alias for existing API routes
  */
 export class ApiAuthError extends Error {
@@ -182,14 +182,14 @@ export class ApiAuthError extends Error {
 }
 
 export function errorResponse(error: unknown): Response {
-  if (error instanceof MemryError) {
+  if (error instanceof FatHippoError) {
     return Response.json(error.toJSON(), { status: error.status });
   }
 
   // Log unexpected errors
   console.error("[FatHippo] Unexpected error:", error);
 
-  const fallback = new MemryError("INTERNAL_ERROR");
+  const fallback = new FatHippoError("INTERNAL_ERROR");
   return Response.json(fallback.toJSON(), { status: fallback.status });
 }
 

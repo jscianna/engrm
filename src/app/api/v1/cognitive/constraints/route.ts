@@ -6,7 +6,7 @@
  */
 
 import { validateApiKey } from "@/lib/api-auth";
-import { MemryError, errorResponse } from "@/lib/errors";
+import { FatHippoError, errorResponse } from "@/lib/errors";
 import { 
   createConstraint, 
   getActiveConstraints, 
@@ -114,7 +114,7 @@ export async function POST(request: Request) {
     
     // Mode 2: Explicit constraint
     if (!body.rule) {
-      throw new MemryError("VALIDATION_ERROR", { field: "rule", reason: "required" });
+      throw new FatHippoError("VALIDATION_ERROR", { field: "rule", reason: "required" });
     }
     
     const rule = String(body.rule).trim();
