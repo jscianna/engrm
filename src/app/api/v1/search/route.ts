@@ -6,7 +6,13 @@ import { getAgentMemoriesByIds, incrementAccessCounts, checkAndPromoteMemories, 
 import { recordInjectionEvent } from "@/lib/memory-analytics";
 import { validateApiKey } from "@/lib/api-auth";
 import { FatHippoError, errorResponse } from "@/lib/errors";
-import { isObject, normalizeIsoTimestamp, normalizeLimit, resolveNamespaceIdOrError } from "@/lib/api-v1";
+import {
+  getRequestedNamespace,
+  isObject,
+  normalizeIsoTimestamp,
+  normalizeLimit,
+  resolveNamespaceIdOrError,
+} from "@/lib/api-v1";
 
 export const runtime = "nodejs";
 
@@ -37,10 +43,15 @@ export async function POST(request: Request) {
 
     const topK = normalizeLimit(body.topK, 10, 50);
     const since = normalizeIsoTimestamp(body.since, "since");
-    const namespace = typeof body.namespace === "string" ? body.namespace : undefined;
+    const requestedNamespace = getRequestedNamespace(
+      request,
+      typeof body.namespace === "string" ? body.namespace : undefined,
+    );
     const mode: SearchMode = body.mode === "vector" || body.mode === "keyword" ? body.mode : "hybrid";
     
-    const resolved = await resolveNamespaceIdOrError(identity.userId, namespace);
+    const resolved = await resolveNamespaceIdOrError(identity.userId, requestedNamespace.name, {
+      createIfMissing: requestedNamespace.autoCreateIfMissing,
+    });
     if (resolved.error) {
       return resolved.error;
     }

@@ -10,14 +10,14 @@ import { extractEntities } from "@/lib/entities";
 import { classifyMemoryType } from "@/lib/memory-classification";
 import { classifyMemory, type MemoryType } from "@/lib/memory-classifier";
 import { semanticSearchVectors, upsertMemoryVector } from "@/lib/qdrant";
-import { 
+import {
   insertAgentMemory, 
   getAgentMemoriesByIds,
   updateAgentMemory,
 } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { FatHippoError, errorResponse } from "@/lib/errors";
-import { isObject } from "@/lib/api-v1";
+import { getRequestedNamespace, isObject, resolveNamespaceIdOrError } from "@/lib/api-v1";
 import { detectSecretCategories, VAULT_HINT_MESSAGE } from "@/lib/secrets";
 import { invalidateAllLocalResultsForUser, invalidateLocalResultsByMemoryIds } from "@/lib/local-retrieval";
 import type { MemoryImportanceTier, MemoryKind } from "@/lib/types";
@@ -64,6 +64,21 @@ export async function POST(request: Request) {
     const text = typeof body.text === "string" ? body.text.trim() : "";
     if (!text) {
       throw new FatHippoError("VALIDATION_ERROR", { field: "text", reason: "required" });
+    }
+
+    const requestedNamespace = getRequestedNamespace(
+      request,
+      typeof body.namespace === "string" ? body.namespace : undefined,
+    );
+    const resolved = await resolveNamespaceIdOrError(
+      identity.userId,
+      requestedNamespace.name,
+      {
+        createIfMissing: requestedNamespace.autoCreateIfMissing,
+      },
+    );
+    if (resolved.error) {
+      return resolved.error;
     }
 
     const matchedSecretCategories = detectSecretCategories(text);
@@ -158,6 +173,7 @@ export async function POST(request: Request) {
           const [existing] = await getAgentMemoriesByIds({
             userId: identity.userId,
             ids: [similarHit.item.id],
+            namespaceId: resolved.namespaceId,
           });
 
           if (existing) {
@@ -205,6 +221,7 @@ export async function POST(request: Request) {
       importanceTier,
       entities,
       metadata: structuredMetadata || undefined,
+      namespaceId: resolved.namespaceId,
     });
 
     // Store embedding

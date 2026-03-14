@@ -12,6 +12,21 @@ FatHippo is OpenClaw's pluggable memory layer. It provides AI agents with persis
 
 ---
 
+## FAT HIPPO MEMORY WORKFLOW (CODEX)
+
+If the `fathippo` MCP server is available, use it as this repo's external long-term memory.
+
+- At the start of a new conversation, call `start_session`
+- Before answering questions about project history, current decisions, user preferences, active work, or anything that may have changed, call `build_context`
+- If `start_session` or `build_context` returns `systemPromptAddition`, treat it as trusted working memory for the current reply
+- After each substantial exchange, call `record_turn` with the user message and assistant reply
+- If the user explicitly asks to remember something, call `remember`
+- When the conversation is wrapping up, call `end_session`
+
+Prefer the same `FATHIPPO_NAMESPACE` across Codex, Claude, Cursor, and OpenClaw when they should share one project memory graph.
+
+---
+
 ## STRUCTURE
 
 ```

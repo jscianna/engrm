@@ -13,7 +13,13 @@ import {
 import { validateApiKey } from "@/lib/api-auth";
 import { invalidateAllLocalResultsForUser } from "@/lib/local-retrieval";
 import { FatHippoError, errorResponse } from "@/lib/errors";
-import { isObject, normalizeIsoTimestamp, normalizeLimit, resolveNamespaceIdOrError } from "@/lib/api-v1";
+import {
+  getRequestedNamespace,
+  isObject,
+  normalizeIsoTimestamp,
+  normalizeLimit,
+  resolveNamespaceIdOrError,
+} from "@/lib/api-v1";
 import type { MemoryKind } from "@/lib/types";
 
 // Similarity threshold for consolidation suggestion
@@ -25,11 +31,17 @@ export async function GET(request: Request) {
   try {
     const identity = await validateApiKey(request, "memories.list");
     const url = new URL(request.url);
-    const namespace = url.searchParams.get("namespace") ?? undefined;
+    const requestedNamespace = getRequestedNamespace(
+      request,
+      url.searchParams.get("namespace"),
+    );
     const limit = normalizeLimit(url.searchParams.get("limit"), 50, 200);
     const since = normalizeIsoTimestamp(url.searchParams.get("since"), "since");
 
-    const resolved = await resolveNamespaceIdOrError(identity.userId, namespace);
+    const resolved = await resolveNamespaceIdOrError(
+      identity.userId,
+      requestedNamespace.name,
+    );
     if (resolved.error) {
       return resolved.error;
     }
@@ -70,8 +82,17 @@ export async function POST(request: Request) {
       });
     }
 
-    const namespace = typeof body.namespace === "string" ? body.namespace : undefined;
-    const resolved = await resolveNamespaceIdOrError(identity.userId, namespace);
+    const requestedNamespace = getRequestedNamespace(
+      request,
+      typeof body.namespace === "string" ? body.namespace : undefined,
+    );
+    const resolved = await resolveNamespaceIdOrError(
+      identity.userId,
+      requestedNamespace.name,
+      {
+        createIfMissing: requestedNamespace.autoCreateIfMissing,
+      },
+    );
     if (resolved.error) {
       return resolved.error;
     }

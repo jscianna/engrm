@@ -20,7 +20,11 @@ import { recordInjectionEvent } from "@/lib/memory-analytics";
 import { validateApiKey } from "@/lib/api-auth";
 import { assertEntitlement, EntitlementFeature, hasEntitlement } from "@/lib/entitlements";
 import { FatHippoError, errorResponse } from "@/lib/errors";
-import { isObject } from "@/lib/api-v1";
+import {
+  getRequestedNamespace,
+  isObject,
+  resolveNamespaceIdOrError,
+} from "@/lib/api-v1";
 import { detectSecretQueryIntent, VAULT_HINT_MESSAGE } from "@/lib/secrets";
 import { expandQuery, detectQueryIntent, mergeExpandedResults } from "@/lib/query-expansion";
 import { calculateTypeBoost, type MemoryType } from "@/lib/memory-classifier";
@@ -110,6 +114,21 @@ export async function POST(request: Request) {
 
     const message = typeof body.message === "string" ? body.message.trim() : "";
     const conversationId = typeof body.conversationId === "string" ? body.conversationId : null;
+    const requestedNamespace = getRequestedNamespace(
+      request,
+      typeof body.namespace === "string" ? body.namespace : undefined,
+    );
+    const resolvedNamespace = await resolveNamespaceIdOrError(
+      identity.userId,
+      requestedNamespace.name,
+      {
+        createIfMissing: requestedNamespace.autoCreateIfMissing,
+      },
+    );
+    if (resolvedNamespace.error) {
+      return resolvedNamespace.error;
+    }
+    const namespaceId = resolvedNamespace.namespaceId;
     const trivialQuery = isTrivialQuery(message);
 
     if (!message || trivialQuery) {
@@ -463,6 +482,7 @@ export async function POST(request: Request) {
         const memories = filterSensitiveMemories(await getAgentMemoriesByIds({
           userId: identity.userId,
           ids: memoryIds,
+          namespaceId,
           excludeAbsorbed: true,
         }));
 
@@ -535,6 +555,7 @@ export async function POST(request: Request) {
               const newMemories = filterSensitiveMemories(await getAgentMemoriesByIds({
                 userId: identity.userId,
                 ids: newIds,
+                namespaceId,
                 excludeAbsorbed: true,
               }));
               relevantMemories = [...relevantMemories, ...newMemories.filter(
@@ -670,6 +691,7 @@ export async function POST(request: Request) {
       userId: identity.userId,
       query: message,
       endpoint: "/api/v1/simple/context",
+      namespaceId,
       sessionId: conversationId ?? null,
       candidateIds: allInjectedIds,
     });

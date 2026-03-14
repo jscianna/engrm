@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "fathippo": {
+      "command": "npx",
+      "args": ["@fathippo/mcp-server"],
+      "env": {
+        "FATHIPPO_API_KEY": "mem_xxx",
+        "FATHIPPO_RUNTIME": "claude",
+        "FATHIPPO_NAMESPACE": "my-project"
+      }
+    }
+  }
+}

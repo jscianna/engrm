@@ -12,6 +12,7 @@
     "dist"
   ],
   "scripts": {
+    "prebuild": "npm --prefix ../hosted run build",
     "build": "tsc",
     "dev": "tsc --watch",
     "prepublishOnly": "npm run build"
@@ -32,6 +33,7 @@
     "directory": "packages/mcp-server"
   },
   "dependencies": {
+    "@fathippo/hosted": "^0.1.0",
     "@modelcontextprotocol/sdk": "^1.0.0"
   },
   "devDependencies": {
