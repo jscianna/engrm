@@ -351,7 +351,7 @@ function PricingSection() {
   ];
 
   return (
-    <section className="relative z-10 px-6 py-24 bg-[#FAFAFA]" id="pricing">
+    <section className="relative z-10 px-4 sm:px-6 py-24 bg-[#FAFAFA] overflow-hidden" id="pricing">
       <div className="mx-auto max-w-5xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -398,7 +398,7 @@ function PricingSection() {
           </div>
         </motion.div>
 
-        <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto px-1">
+        <div className="grid md:grid-cols-2 gap-4 sm:gap-6 max-w-3xl mx-auto">
           {/* Free Card */}
           <motion.div
             initial={{ opacity: 0, y: 24 }}
@@ -407,7 +407,7 @@ function PricingSection() {
             transition={{ duration: 0.5, ease: [0.21, 0.47, 0.32, 0.98] }}
             className="relative"
           >
-            <div className="rounded-2xl bg-white p-6 sm:p-8 border border-[#E5E7EB] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.04)] h-full flex flex-col overflow-hidden">
+            <div className="rounded-2xl bg-white p-4 sm:p-6 md:p-8 border border-[#E5E7EB] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.04)] h-full flex flex-col overflow-hidden">
               <div className="flex items-center gap-3 mb-6">
                 <div className="inline-flex items-center justify-center rounded-xl bg-[#F3F4F6] p-3 shrink-0">
                   <HardDrive className="h-5 w-5 text-[#6B7280]" />
@@ -452,7 +452,7 @@ function PricingSection() {
           >
             {/* Gradient border effect */}
             <div className="absolute -inset-[1px] rounded-2xl bg-gradient-to-br from-[#0070F3] via-[#00B8D9] to-[#8B5CF6] opacity-100" />
-            <div className="relative rounded-2xl bg-white p-6 sm:p-8 h-full flex flex-col overflow-hidden">
+            <div className="relative rounded-2xl bg-white p-4 sm:p-6 md:p-8 h-full flex flex-col overflow-hidden">
               <div className="flex items-center justify-between gap-2 mb-6">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="inline-flex items-center justify-center rounded-xl bg-[#0070F3]/[0.08] p-3 shrink-0">
