@@ -333,9 +333,9 @@ function PricingSection() {
   const [annual, setAnnual] = useState(false);
 
   const freeFeatures = [
-    "On-device memory (private, no cloud)",
+    "On-device memory, fully private",
     "Cross-session context recall",
-    "Lightweight fix/workflow reuse",
+    "Fix & workflow reuse",
     "Works offline",
     "No account required",
   ];
@@ -398,7 +398,7 @@ function PricingSection() {
           </div>
         </motion.div>
 
-        <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+        <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto px-1">
           {/* Free Card */}
           <motion.div
             initial={{ opacity: 0, y: 24 }}
@@ -407,12 +407,12 @@ function PricingSection() {
             transition={{ duration: 0.5, ease: [0.21, 0.47, 0.32, 0.98] }}
             className="relative"
           >
-            <div className="rounded-2xl bg-white p-8 border border-[#E5E7EB] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.04)] h-full flex flex-col">
+            <div className="rounded-2xl bg-white p-6 sm:p-8 border border-[#E5E7EB] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.04)] h-full flex flex-col overflow-hidden">
               <div className="flex items-center gap-3 mb-6">
-                <div className="inline-flex items-center justify-center rounded-xl bg-[#F3F4F6] p-3">
+                <div className="inline-flex items-center justify-center rounded-xl bg-[#F3F4F6] p-3 shrink-0">
                   <HardDrive className="h-5 w-5 text-[#6B7280]" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h3 className="text-lg font-semibold text-[#111827] tracking-tight">Free</h3>
                   <p className="text-sm text-[#6B7280]">Local-Only</p>
                 </div>
@@ -427,7 +427,7 @@ function PricingSection() {
                 {freeFeatures.map((feature) => (
                   <li key={feature} className="flex items-start gap-3 text-sm text-[#4B5563]">
                     <Check className="h-4 w-4 text-[#9CA3AF] mt-0.5 shrink-0" />
-                    {feature}
+                    <span className="break-words">{feature}</span>
                   </li>
                 ))}
               </ul>
@@ -452,18 +452,18 @@ function PricingSection() {
           >
             {/* Gradient border effect */}
             <div className="absolute -inset-[1px] rounded-2xl bg-gradient-to-br from-[#0070F3] via-[#00B8D9] to-[#8B5CF6] opacity-100" />
-            <div className="relative rounded-2xl bg-white p-8 h-full flex flex-col">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="inline-flex items-center justify-center rounded-xl bg-[#0070F3]/[0.08] p-3">
+            <div className="relative rounded-2xl bg-white p-6 sm:p-8 h-full flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between gap-2 mb-6">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="inline-flex items-center justify-center rounded-xl bg-[#0070F3]/[0.08] p-3 shrink-0">
                     <Cloud className="h-5 w-5 text-[#0070F3]" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <h3 className="text-lg font-semibold text-[#111827] tracking-tight">Hosted</h3>
                     <p className="text-sm text-[#6B7280]">Full cognitive stack</p>
                   </div>
                 </div>
-                <Badge className="bg-[#0070F3]/[0.08] text-[#0070F3] border-[#0070F3]/20 font-medium">
+                <Badge className="bg-[#0070F3]/[0.08] text-[#0070F3] border-[#0070F3]/20 font-medium shrink-0">
                   <Star className="h-3 w-3 mr-1" />
                   Popular
                 </Badge>
@@ -488,7 +488,7 @@ function PricingSection() {
                     }`}
                   >
                     <Check className={`h-4 w-4 mt-0.5 shrink-0 ${i === 0 ? "text-[#0070F3]" : "text-[#0070F3]"}`} />
-                    {feature}
+                    <span className="break-words">{feature}</span>
                   </li>
                 ))}
               </ul>
