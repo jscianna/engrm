@@ -1,8 +1,10 @@
 {
   "name": "@fathippo/fathippo-context-engine",
-  "version": "0.1.1",
+  "version": "0.1.4",
   "openclaw": {
-    "extensions": ["./dist/index.js"]
+    "extensions": [
+      "./dist/index.js"
+    ]
   },
   "description": "FatHippo context engine for OpenClaw - encrypted agent memory",
   "main": "dist/index.js",
