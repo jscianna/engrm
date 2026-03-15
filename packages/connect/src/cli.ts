@@ -185,7 +185,8 @@ async function profileRepo(repoInput: string): Promise<void> {
       execSync(`git clone --depth 50 "${repoInput}" "${tempDir}/repo"`, { stdio: "pipe" });
       workDir = path.join(tempDir, "repo");
     } catch (err) {
-      console.error("Failed to clone repository. Check the URL and try again.");
+      console.error("⚠ Clone failed — the repo may be private or the URL is incorrect.");
+      console.error("  If it's a private repo, use a local path instead: ~/path/to/repo");
       if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
       return;
     }
