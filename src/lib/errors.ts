@@ -15,9 +15,9 @@ export type ErrorCode =
   | "QUOTA_MEMORIES"
   | "QUOTA_STORAGE"
   | "MEMORY_NOT_FOUND"
-  | "CHATBOT_NOT_FOUND"
-  | "SOURCE_NOT_FOUND"
-  | "CONVERSATION_NOT_FOUND"
+  | "CHATBOT_NOT_FOUND" // deprecated — chatbot feature removed
+  | "SOURCE_NOT_FOUND" // deprecated — chatbot feature removed
+  | "CONVERSATION_NOT_FOUND" // deprecated — chatbot feature removed
   | "NAMESPACE_NOT_FOUND"
   | "SESSION_NOT_FOUND"
   | "SYNTHESIS_NOT_FOUND"

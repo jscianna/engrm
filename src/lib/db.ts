@@ -657,7 +657,8 @@ export type UserEntitlement = {
 
 export const DEFAULT_AGENT_API_KEY_SCOPES = [
   "analytics",
-  "chatbots.*",
+  // chatbot tables deprecated — see migration notes
+  // "chatbots.*",
   "compact.create",
   "context",
   "context.refresh",
