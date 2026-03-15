@@ -15,7 +15,8 @@ export { deriveWorkspaceId } from "./workspace-id.js";
 export { formatCodebaseProfileForInjection } from "./serializer.js";
 /**
  * Profile a codebase. If a cached profile exists on disk and `force` is false,
- * returns the cached version.
+ * returns the cached version. Only profiles git repositories — skips home dirs
+ * and non-project paths for security.
  */
 export declare function profileCodebase(workspaceRoot: string, options?: ProfileConfig): Promise<CodebaseProfile>;
 /**
