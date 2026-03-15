@@ -49,6 +49,8 @@ import {
   matchesCapturePatterns,
   sanitizeContent,
 } from "./utils/filtering.js";
+import type { CodebaseProfile } from "./profiler/types.js";
+import { profileCodebase, loadCodebaseProfile, formatCodebaseProfileForInjection } from "./profiler/index.js";
 
 type RuntimeMode = "hosted" | "local";
 
@@ -80,6 +82,10 @@ export class FatHippoContextEngine implements ContextEngine {
   private sessionLocalProfiles: Map<string, string> = new Map();
   private sessionHippoNodState: Map<string, { lastOfferedAt: number; lastMessageCount: number }> = new Map();
   private cognitiveEnabled: boolean;
+  
+  // Codebase profiling state
+  private sessionCodebaseProfiles: Map<string, CodebaseProfile | null> = new Map();
+  private codebaseProfilingEnabled: boolean;
   
   private static readonly TRIVIAL_ACKS = new Set([
     "ok",
@@ -122,6 +128,8 @@ export class FatHippoContextEngine implements ContextEngine {
         : null;
     // Enable cognitive features if configured (default: true)
     this.cognitiveEnabled = this.mode === "hosted" && config.cognitiveEnabled !== false;
+    // Enable codebase profiling (default: true)
+    this.codebaseProfilingEnabled = config.codebaseProfilingEnabled !== false;
   }
 
   /**
@@ -134,6 +142,13 @@ export class FatHippoContextEngine implements ContextEngine {
     try {
       this.sessionStartTimes.set(params.sessionId, Date.now());
       const workspaceRoot = this.detectWorkspaceRoot(params.sessionFile);
+
+      // Trigger codebase profiling in background
+      if (this.codebaseProfilingEnabled && workspaceRoot) {
+        this.profileCodebaseAsync(workspaceRoot).catch((err) => {
+          console.error("[FatHippo] Background codebase profiling error:", err);
+        });
+      }
 
       if (this.mode === "local") {
         this.sessionLocalProfiles.set(
@@ -380,16 +395,21 @@ export class FatHippoContextEngine implements ContextEngine {
       cue,
     });
 
+    const profileBlock = await this.getCodebaseProfileBlock(
+      hostedSession.workspaceRoot,
+    );
+
     const fullContext = typeof params.tokenBudget === "number" && params.tokenBudget > 0
       ? this.fitContextToBudget({
           sections: [
             runtimeAwareness,
+            profileBlock,
             hostedContext,
             hippoNodInstruction,
           ],
           contextBudget: Math.max(0, params.tokenBudget - baseMessageTokens),
         })
-      : runtimeAwareness + hostedContext + hippoNodInstruction;
+      : runtimeAwareness + profileBlock + hostedContext + hippoNodInstruction;
     const tokens = estimateTokens(fullContext) + baseMessageTokens;
 
     return {
@@ -497,10 +517,16 @@ export class FatHippoContextEngine implements ContextEngine {
         : null,
     });
 
+    const localProfileId = this.getLocalProfileId(params.sessionId);
+    const profileBlock = await this.getCodebaseProfileBlock(
+      localProfileId !== "openclaw-local-default" ? localProfileId : undefined,
+    );
+
     const fullContext = typeof params.tokenBudget === "number" && params.tokenBudget > 0
         ? this.fitContextToBudget({
           sections: [
             runtimeAwareness,
+            profileBlock,
             workflowBlock,
             patternBlock,
             memoryBlock ? `${memoryBlock}\n` : "",
@@ -509,7 +535,7 @@ export class FatHippoContextEngine implements ContextEngine {
           ],
           contextBudget: Math.max(0, params.tokenBudget - baseTokens),
         })
-      : runtimeAwareness + workflowBlock + patternBlock + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + hippoNodInstruction;
+      : runtimeAwareness + profileBlock + workflowBlock + patternBlock + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + hippoNodInstruction;
 
     return {
       messages: params.messages,
@@ -847,6 +873,50 @@ export class FatHippoContextEngine implements ContextEngine {
     this.sessionLocalProfiles.clear();
     this.sessionStartTimes.clear();
     this.sessionHippoNodState.clear();
+    this.sessionCodebaseProfiles.clear();
+  }
+
+  // --- Codebase profiling methods ---
+
+  private async profileCodebaseAsync(workspaceRoot: string): Promise<void> {
+    if (!this.codebaseProfilingEnabled) return;
+    if (this.sessionCodebaseProfiles.has(workspaceRoot)) return;
+
+    // Check for existing profile on disk first
+    const existing = await loadCodebaseProfile(workspaceRoot);
+    if (existing) {
+      this.sessionCodebaseProfiles.set(workspaceRoot, existing);
+      return;
+    }
+
+    // Profile in background
+    try {
+      const profile = await profileCodebase(workspaceRoot, { force: true });
+      this.sessionCodebaseProfiles.set(workspaceRoot, profile);
+    } catch (error) {
+      console.error("[FatHippo] Codebase profiling failed:", error);
+      this.sessionCodebaseProfiles.set(workspaceRoot, null);
+    }
+  }
+
+  private async getCodebaseProfileBlock(workspaceRoot?: string): Promise<string> {
+    if (!this.codebaseProfilingEnabled || !workspaceRoot) return "";
+
+    // Check cache
+    if (this.sessionCodebaseProfiles.has(workspaceRoot)) {
+      const cached = this.sessionCodebaseProfiles.get(workspaceRoot);
+      if (!cached) return "";
+      return formatCodebaseProfileForInjection(cached);
+    }
+
+    // Try loading from disk
+    const profile = await loadCodebaseProfile(workspaceRoot);
+    if (profile) {
+      this.sessionCodebaseProfiles.set(workspaceRoot, profile);
+      return formatCodebaseProfileForInjection(profile);
+    }
+
+    return "";
   }
 
   // --- Helper methods ---

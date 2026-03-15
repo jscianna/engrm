@@ -33,6 +33,10 @@ export interface FatHippoConfig {
   pluginId?: string;
   /** Internal: runtime attached to hosted requests for namespace-aware routing. */
   runtime?: string;
+  /** Enable codebase profiling. Default: true */
+  codebaseProfilingEnabled?: boolean;
+  /** Max token budget for profile in context. Default: 1400 */
+  codebaseProfileTokenBudget?: number;
 }
 
 export interface Memory {
