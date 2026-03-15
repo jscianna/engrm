@@ -63,6 +63,10 @@ export interface CodingTrace {
   traceHash: string;
   embeddingJson: string | null;
   explicitFeedbackNotes: string | null;
+  modelId: string | null;
+  tokenCostCents: number | null;
+  retryCount: number;
+  userInterrupted: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -260,6 +264,10 @@ export interface CreateTraceInput {
   sanitizedAt?: string;
   shareEligible?: boolean;
   explicitFeedbackNotes?: string | null;
+  modelId?: string | null;
+  tokenCostCents?: number | null;
+  retryCount?: number;
+  userInterrupted?: boolean;
   applicationId?: string | null;
 }
 
@@ -499,7 +507,11 @@ async function ensureInitialized(): Promise<void> {
       automated_signals_json TEXT NOT NULL DEFAULT '{}',
       share_eligible INTEGER NOT NULL DEFAULT 0,
       shared_signature TEXT,
-      explicit_feedback_notes TEXT
+      explicit_feedback_notes TEXT,
+      model_id TEXT,
+      token_cost_cents REAL,
+      retry_count INTEGER DEFAULT 0,
+      user_interrupted INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS cognitive_patterns (
@@ -667,7 +679,7 @@ async function ensureInitialized(): Promise<void> {
       user_id TEXT PRIMARY KEY,
       shared_learning_enabled INTEGER NOT NULL DEFAULT 0,
       benchmark_inclusion_enabled INTEGER NOT NULL DEFAULT 0,
-      trace_retention_days INTEGER NOT NULL DEFAULT 30,
+      trace_retention_days INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL
     );
   `);
@@ -729,7 +741,16 @@ async function ensureInitialized(): Promise<void> {
   await client.execute(`ALTER TABLE cognitive_applications ADD COLUMN baseline_snapshot_json TEXT`).catch(() => {});
   await client.execute(`ALTER TABLE cognitive_user_settings ADD COLUMN shared_learning_enabled INTEGER DEFAULT 0`).catch(() => {});
   await client.execute(`ALTER TABLE cognitive_user_settings ADD COLUMN benchmark_inclusion_enabled INTEGER DEFAULT 0`).catch(() => {});
-  await client.execute(`ALTER TABLE cognitive_user_settings ADD COLUMN trace_retention_days INTEGER DEFAULT 30`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_user_settings ADD COLUMN trace_retention_days INTEGER DEFAULT 0`).catch(() => {});
+
+  // Migrate existing users from 30-day default to unlimited (0)
+  await client.execute(`UPDATE cognitive_user_settings SET trace_retention_days = 0 WHERE trace_retention_days = 30`).catch(() => {});
+
+  // Add eval trace fields
+  await client.execute(`ALTER TABLE coding_traces ADD COLUMN model_id TEXT`).catch(() => {});
+  await client.execute(`ALTER TABLE coding_traces ADD COLUMN token_cost_cents REAL`).catch(() => {});
+  await client.execute(`ALTER TABLE coding_traces ADD COLUMN retry_count INTEGER DEFAULT 0`).catch(() => {});
+  await client.execute(`ALTER TABLE coding_traces ADD COLUMN user_interrupted INTEGER DEFAULT 0`).catch(() => {});
 
   // Shared/global learning derives cluster keys in memory from sanitized content.
   // Persisted reusable signatures are cleared to reduce cross-session linkability.
@@ -745,7 +766,7 @@ function rowToCognitiveUserSettings(row: Record<string, unknown>): CognitiveUser
     userId: row.user_id as string,
     sharedLearningEnabled: Number(row.shared_learning_enabled ?? 0) === 1,
     benchmarkInclusionEnabled: Number(row.benchmark_inclusion_enabled ?? 0) === 1,
-    traceRetentionDays: Math.max(1, Math.min(365, Number(row.trace_retention_days ?? 30))),
+    traceRetentionDays: Number(row.trace_retention_days ?? 0) === 0 ? 0 : Math.max(1, Math.min(9999, Number(row.trace_retention_days ?? 0))),
     updatedAt: (row.updated_at as string) ?? new Date(0).toISOString(),
   };
 }
@@ -851,6 +872,10 @@ function rowToTrace(row: Record<string, unknown>): CodingTrace {
     traceHash: (row.trace_hash as string) ?? "",
     embeddingJson: (row.embedding_json as string | null) ?? null,
     explicitFeedbackNotes: (row.explicit_feedback_notes as string | null) ?? null,
+    modelId: (row.model_id as string | null) ?? null,
+    tokenCostCents: row.token_cost_cents == null ? null : Number(row.token_cost_cents),
+    retryCount: Number(row.retry_count ?? 0),
+    userInterrupted: Number(row.user_interrupted ?? 0) === 1,
     createdAt: row.created_at as string,
     updatedAt: (row.updated_at as string | null) ?? (row.created_at as string),
   };
@@ -995,7 +1020,7 @@ export async function getCognitiveUserSettings(userId: string): Promise<Cognitiv
     user_id: userId,
     shared_learning_enabled: 0,
     benchmark_inclusion_enabled: 0,
-    trace_retention_days: 30,
+    trace_retention_days: 0,
     updated_at: now,
   });
 }
@@ -1184,7 +1209,7 @@ export async function updateCognitiveUserSettings(params: {
   const next = {
     sharedLearningEnabled: params.sharedLearningEnabled ?? existing.sharedLearningEnabled,
     benchmarkInclusionEnabled: params.benchmarkInclusionEnabled ?? existing.benchmarkInclusionEnabled,
-    traceRetentionDays: Math.max(1, Math.min(365, params.traceRetentionDays ?? existing.traceRetentionDays)),
+    traceRetentionDays: (params.traceRetentionDays ?? existing.traceRetentionDays) === 0 ? 0 : Math.max(1, Math.min(9999, params.traceRetentionDays ?? existing.traceRetentionDays)),
   };
   await client.execute({
     sql: `
@@ -1632,6 +1657,19 @@ export async function cleanupExpiredCognitiveData(params?: {
 
   for (const userId of userIds) {
     const settings = await getCognitiveUserSettings(userId);
+
+    // traceRetentionDays === 0 means unlimited retention; skip trace cleanup for this user
+    if (settings.traceRetentionDays === 0) {
+      benchmarkRunsDeleted += (await client.execute({
+        sql: `
+          DELETE FROM cognitive_benchmark_runs
+          WHERE user_id = ? AND created_at < ?
+        `,
+        args: [userId, benchmarkCutoff],
+      })).rowsAffected ?? 0;
+      continue;
+    }
+
     const traceCutoff = new Date(Date.now() - settings.traceRetentionDays * 24 * 60 * 60 * 1000).toISOString();
     const expiredTraceRows = await client.execute({
       sql: `
@@ -2245,8 +2283,18 @@ export async function createTrace(input: CreateTraceInput): Promise<CodingTrace>
     "share_eligible",
     "shared_signature",
     "explicit_feedback_notes",
+    "model_id",
+    "token_cost_cents",
+    "retry_count",
+    "user_interrupted",
   );
-  insertPlaceholders.push("?", "?", "?", "?", "?", "?");
+  insertPlaceholders.push("?", "?", "?", "?", "?", "?", "?", "?", "?", "?");
+  trailingArgs.push(
+    input.modelId ?? null,
+    input.tokenCostCents ?? null,
+    input.retryCount ?? 0,
+    input.userInterrupted ? 1 : 0,
+  );
   const insertArgs = [...baseInsertArgs, ...trailingArgs];
 
   await client.execute({

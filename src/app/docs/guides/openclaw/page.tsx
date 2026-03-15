@@ -30,14 +30,14 @@ export default function OpenClawGuidePage() {
       <CodeBlock language="text">{`How do you want to use FatHippo?
 
   [1] Free (local-only) — memories stay on your machine, no account needed
-  [2] Hosted ($9.99/mo) — cloud sync, cognitive features, cross-device memory
+  [2] Hosted ($4.99/mo) — cloud sync, cognitive features, cross-device memory
 
 Choose [1/2]:`}</CodeBlock>
 
       <H3>Plans</H3>
       <ul className="mb-4 list-inside list-disc space-y-2 text-zinc-400">
         <li><strong>Free (Local-Only) — $0/month:</strong> on-device memory, cross-session context recall, lightweight fix/workflow reuse, works offline, no account required.</li>
-        <li><strong>Hosted — $9.99/month or $99.99/year (save 17%):</strong> everything in Free, plus cloud sync across devices, cognitive traces &amp; pattern extraction, skill synthesis, dashboard with receipts &amp; analytics, plugin version management, and priority support.</li>
+        <li><strong>Hosted — $4.99/month or $49.99/year (save 17%):</strong> everything in Free, plus cloud sync across devices, cognitive traces &amp; pattern extraction, skill synthesis, dashboard with receipts &amp; analytics, plugin version management, and priority support.</li>
       </ul>
 
       <Note type="tip">

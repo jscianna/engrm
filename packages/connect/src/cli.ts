@@ -159,7 +159,7 @@ async function promptForMode(): Promise<"local" | "hosted"> {
     console.log("How do you want to use FatHippo?");
     console.log("");
     console.log("  [1] Free (local-only) — memories stay on your machine, no account needed");
-    console.log("  [2] Hosted ($9.99/mo) — cloud sync, cognitive features, cross-device memory");
+    console.log("  [2] Hosted ($4.99/mo) — cloud sync, cognitive features, cross-device memory");
     console.log("");
     iface.question("Choose [1/2]: ", (answer) => {
       iface.close();

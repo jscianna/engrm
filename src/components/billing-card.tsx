@@ -124,7 +124,7 @@ export function BillingCard({
               >
                 <span className="text-sm font-medium text-zinc-200">Monthly</span>
                 <span className="text-2xl font-bold text-zinc-100">
-                  $9.99<span className="text-sm font-normal text-zinc-500">/mo</span>
+                  $4.99<span className="text-sm font-normal text-zinc-500">/mo</span>
                 </span>
                 {loading === "monthly" && (
                   <span className="text-xs text-cyan-400">Redirecting…</span>
@@ -144,7 +144,7 @@ export function BillingCard({
                 </span>
                 <span className="text-sm font-medium text-zinc-200">Annual</span>
                 <span className="text-2xl font-bold text-zinc-100">
-                  $99.99<span className="text-sm font-normal text-zinc-500">/yr</span>
+                  $49.99<span className="text-sm font-normal text-zinc-500">/yr</span>
                 </span>
                 {loading === "annual" && (
                   <span className="text-xs text-cyan-400">Redirecting…</span>

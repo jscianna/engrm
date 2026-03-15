@@ -47,7 +47,7 @@ The goal is simple: install it once, then let your agent become more useful ever
 FatHippo currently has two customer-facing offers:
 
 - **Free (Local-Only) - $0/month**: private on-device memory plus lightweight local workflow/fix reuse, without hosted sync/imports or account-backed cognition. No account required.
-- **Hosted - $9.99/month or $99.99/year (save 17%)**: the full FatHippo experience with cloud sync across devices, cognitive traces & pattern extraction, skill synthesis, dashboard with receipts & analytics, plugin version management, and priority support.
+- **Hosted - $4.99/month or $49.99/year (save 17%)**: the full FatHippo experience with cloud sync across devices, cognitive traces & pattern extraction, skill synthesis, dashboard with receipts & analytics, plugin version management, and priority support.
 
 OpenClaw users only install one package: `@fathippo/fathippo-context-engine`.
 
@@ -67,7 +67,7 @@ The installer prompts you to choose your plan:
 How do you want to use FatHippo?
 
   [1] Free (local-only) — memories stay on your machine, no account needed
-  [2] Hosted ($9.99/mo) — cloud sync, cognitive features, cross-device memory
+  [2] Hosted ($4.99/mo) — cloud sync, cognitive features, cross-device memory
 
 Choose [1/2]:
 ```

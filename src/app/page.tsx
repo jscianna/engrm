@@ -231,7 +231,7 @@ function OpenClawCodePreview() {
           <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.7 }}>
             <span className={colors.comment}>{"  "}</span>
             <span className={colors.key}>[2]</span>{" "}
-            <span className={colors.value}>Hosted ($9.99/mo)</span>
+            <span className={colors.value}>Hosted ($4.99/mo)</span>
           </motion.div>
           
           {/* Empty line */}
@@ -471,11 +471,11 @@ function PricingSection() {
 
               <div className="mb-6">
                 <span className="text-4xl font-bold text-[#111827] tracking-tight">
-                  {annual ? "$99.99" : "$9.99"}
+                  {annual ? "$49.99" : "$4.99"}
                 </span>
                 <span className="text-[#6B7280] ml-1">/{annual ? "year" : "month"}</span>
                 {annual && (
-                  <span className="ml-2 text-sm text-[#059669] font-medium">$8.33/mo</span>
+                  <span className="ml-2 text-sm text-[#059669] font-medium">$4.17/mo</span>
                 )}
               </div>
 
