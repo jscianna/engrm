@@ -1,11 +1,12 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiKeysCard } from "@/components/api-keys-card";
+import { BillingCard } from "@/components/billing-card";
 import { OpenClawConnectCard } from "@/components/openclaw-connect-card";
 import { UsageCard } from "@/components/usage-card";
 import { hasClerkAdminAccess } from "@/lib/admin-auth";
 import { isOpenClawAgentName } from "@/lib/cognitive-receipts";
-import { listApiKeys } from "@/lib/db";
+import { getUserEntitlementPlan, listApiKeys } from "@/lib/db";
 import { getOpenClawPluginStatus, pickPreferredOpenClawKey } from "@/lib/openclaw-plugin";
 
 export default async function SettingsPage() {
@@ -14,7 +15,10 @@ export default async function SettingsPage() {
     return null;
   }
 
-  const apiKeys = await listApiKeys(userId);
+  const [apiKeys, currentPlan] = await Promise.all([
+    listApiKeys(userId),
+    getUserEntitlementPlan(userId),
+  ]);
   const openClawKey = pickPreferredOpenClawKey(
     apiKeys.filter((key) => isOpenClawAgentName(key.agentName)),
   );
@@ -32,6 +36,13 @@ export default async function SettingsPage() {
     <div className="mx-auto w-full max-w-3xl space-y-4">
       {/* Usage Stats */}
       <UsageCard />
+
+      {/* Billing */}
+      <BillingCard
+        plan={currentPlan}
+        priceMonthly={process.env.STRIPE_PRICE_MONTHLY ?? ""}
+        priceAnnual={process.env.STRIPE_PRICE_ANNUAL ?? ""}
+      />
 
       <OpenClawConnectCard
         hasExistingOpenClawKey={Boolean(openClawKey)}

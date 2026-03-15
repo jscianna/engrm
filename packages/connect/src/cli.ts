@@ -150,6 +150,29 @@ function parseArgs(argv: string[]): OpenClawConnectOptions {
   return options;
 }
 
+async function promptForMode(): Promise<"local" | "hosted"> {
+  const rl = await import("node:readline");
+  const iface = rl.createInterface({ input: process.stdin, output: process.stdout });
+
+  return new Promise((resolve) => {
+    console.log("");
+    console.log("How do you want to use FatHippo?");
+    console.log("");
+    console.log("  [1] Free (local-only) — memories stay on your machine, no account needed");
+    console.log("  [2] Hosted ($9.99/mo) — cloud sync, cognitive features, cross-device memory");
+    console.log("");
+    iface.question("Choose [1/2]: ", (answer) => {
+      iface.close();
+      const trimmed = answer.trim();
+      if (trimmed === "1" || trimmed.toLowerCase() === "local" || trimmed.toLowerCase() === "free") {
+        resolve("local");
+      } else {
+        resolve("hosted");
+      }
+    });
+  });
+}
+
 async function postJson<T>(url: URL, body: Record<string, unknown>): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
@@ -251,6 +274,14 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   const options = parseArgs(argv);
 
   await ensureOpenClawAvailable();
+
+  // If no mode specified, ask the user
+  if (!options.local && !options.apiKey) {
+    const mode = await promptForMode();
+    if (mode === "local") {
+      options.local = true;
+    }
+  }
 
   if (options.local) {
     await installOpenClawContextEngine({

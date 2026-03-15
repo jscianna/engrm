@@ -235,6 +235,12 @@ async function ensureInitialized(): Promise<void> {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS stripe_customers (
+      user_id TEXT PRIMARY KEY,
+      stripe_customer_id TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS user_entitlements (
       user_id TEXT PRIMARY KEY,
       plan TEXT NOT NULL DEFAULT 'free',
