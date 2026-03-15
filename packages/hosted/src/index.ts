@@ -50,6 +50,7 @@ export {
   type FatHippoSessionEndOutput,
   type FatHippoSessionStartInput,
   type FatHippoSessionStartOutput,
+  type FatHippoTurnCaptureSummary,
 } from "./runtime-adapter.js";
 export {
   forceSyncCycle,

@@ -10,6 +10,10 @@ export interface FatHippoClientOptions {
     mode?: "auto" | "hosted" | "local";
     pluginVersion?: string;
     pluginId?: string;
+    runtime?: string;
+    namespace?: string;
+    installationId?: string;
+    workspaceId?: string;
     additionalHeaders?: Record<string, string>;
 }
 export interface Memory {

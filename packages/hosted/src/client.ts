@@ -13,6 +13,10 @@ export interface FatHippoClientOptions {
   mode?: "auto" | "hosted" | "local";
   pluginVersion?: string;
   pluginId?: string;
+  runtime?: string;
+  namespace?: string;
+  installationId?: string;
+  workspaceId?: string;
   additionalHeaders?: Record<string, string>;
 }
 
@@ -302,10 +306,25 @@ export class FatHippoClient {
   constructor(options: FatHippoClientOptions) {
     this.apiKey = options.apiKey ?? "";
     this.baseUrl = options.baseUrl || DEFAULT_BASE_URL;
+    const runtimeHeaders: Record<string, string> = {};
+    if (options.runtime) {
+      runtimeHeaders["X-Fathippo-Runtime"] = options.runtime;
+    }
+    if (options.namespace) {
+      runtimeHeaders["X-Fathippo-Namespace"] = options.namespace;
+    }
+    if (options.installationId) {
+      runtimeHeaders["X-Fathippo-Installation-Id"] = options.installationId;
+    }
+    if (options.workspaceId) {
+      runtimeHeaders["X-Fathippo-Workspace-Id"] = options.workspaceId;
+    }
+
     this.headers = {
       "X-Fathippo-Plugin-Id": options.pluginId ?? "fathippo-context-engine",
       "X-Fathippo-Plugin-Version": options.pluginVersion ?? "unknown",
       "X-Fathippo-Plugin-Mode": options.mode === "local" ? "local" : "hosted",
+      ...runtimeHeaders,
       ...(options.additionalHeaders ?? {}),
     };
   }

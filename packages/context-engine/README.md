@@ -1,61 +1,24 @@
 # @fathippo/fathippo-context-engine
 
-FatHippo Context Engine for OpenClaw — persistent agent memory with full hosted features or private local mode.
+FatHippo Context Engine for OpenClaw.
 
-## Installation
+## Install
+
+Hosted:
 
 ```bash
-openclaw plugins install @fathippo/fathippo-context-engine
+npx @fathippo/connect openclaw
 ```
 
-## Configuration
+Local:
 
-```yaml
-# ~/.openclaw/config.yaml
-plugins:
-  slots:
-    contextEngine: "fathippo-context-engine"
-  entries:
-    fathippo-context-engine:
-      enabled: true
-      config:
-        mode: hosted                # hosted or local
-        apiKey: "${FATHIPPO_API_KEY}" # Hosted mode only
-        baseUrl: "https://fathippo.ai/api"
-        # Optional settings
-        injectCritical: true        # Auto-inject critical memories (default: true)
-        injectLimit: 20             # Max memories per turn (default: 20)
-        captureUserOnly: true       # Only capture user messages (default: true)
-        dreamCycleOnCompact: true   # Run Dream Cycle on /compact in hosted mode
+```bash
+npx @fathippo/connect openclaw --local
 ```
 
-## What It Does
+The one-command installer installs the plugin, configures OpenClaw, and uses a browser-link login flow for hosted mode.
 
-Instead of bolting memory onto OpenClaw, this makes FatHippo the **entire context layer**:
-
-| Hook | What Happens |
-|------|-------------|
-| **bootstrap** | Loads hosted critical context or initializes local workspace memory |
-| **ingest** | Captures user messages, filters noise, stores hosted or local memory |
-| **assemble** | Queries hosted FatHippo or local store and injects relevant context per turn |
-| **compact** | Runs hosted Dream Cycle or skips hosted compaction in local mode |
-| **afterTurn** | Invalidates caches and captures hosted or local learning signals |
-| **prepareSubagentSpawn** | Scopes memories for spawned agents |
-| **onSubagentEnded** | Absorbs learnings from completed subagents |
-
-## Features
-
-- **Hosted mode** — Full FatHippo retrieval, cognition, sync, and receipts
-- **Local mode** — Private on-device memory plus lightweight local workflow/fix learning
-- **Semantic search** — Hosted hybrid search or local memory ranking
-- **Dream Cycle** — Automatic synthesis, decay, and cleanup in hosted mode
-- **Cross-device** — Hosted mode follows your account across devices
-
-## API Key
-
-Get your API key at [fathippo.ai](https://fathippo.ai)
-
-## OpenClaw CLI Setup
+## Manual fallback
 
 ```bash
 openclaw plugins install @fathippo/fathippo-context-engine
@@ -63,14 +26,50 @@ openclaw config set plugins.slots.contextEngine fathippo-context-engine
 openclaw config set plugins.entries.fathippo-context-engine.config.mode hosted
 openclaw config set plugins.entries.fathippo-context-engine.config.apiKey mem_xxx
 openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl https://fathippo.ai/api
-openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical true
 openclaw gateway restart
 ```
 
-If you previously installed `@fathippo/context-engine`, reinstall from `@fathippo/fathippo-context-engine` so OpenClaw discovers a matching package name and plugin id.
+## Configuration
 
-## Links
+```yaml
+plugins:
+  slots:
+    contextEngine: "fathippo-context-engine"
+  entries:
+    fathippo-context-engine:
+      enabled: true
+      config:
+        mode: hosted
+        apiKey: "${FATHIPPO_API_KEY}"
+        baseUrl: "https://fathippo.ai/api"
+        namespace: "my-project"
+        installationId: "oc_machine_01"
+        injectCritical: true
+        injectLimit: 20
+        dreamCycleOnCompact: true
+```
 
-- [FatHippo Docs](https://fathippo.ai/docs)
-- [OpenClaw Plugins](https://docs.openclaw.ai/tools/plugin)
-- [GitHub](https://github.com/jscianna/fathippo)
+`captureUserOnly: true` is still supported as a legacy escape hatch, but full-turn capture is now the default.
+
+## Runtime behavior
+
+| Hook | Behavior |
+| --- | --- |
+| `bootstrap` | Starts a hosted FatHippo session or initializes local workspace memory |
+| `assemble` | Builds memory context before every non-trivial reply |
+| `afterTurn` | Records the completed exchange, stores durable memories, and captures learning signals |
+| `compact` | Runs Dream Cycle in hosted mode when enabled |
+| `prepareSubagentSpawn` | Reuses the same memory scope for spawned agents |
+| `onSubagentEnded` | Best-effort closes hosted child sessions |
+
+Hosted mode uses the runtime session APIs (`startSession`, `buildContext`, `recordTurn`, `endSession`) instead of direct one-off memory calls.
+
+## Features
+
+- Hosted mode with account-backed retrieval, cognition, and dashboard receipts
+- Local mode with on-device memory and lightweight local workflow learning
+- Per-turn context recall before replies
+- Full-turn capture after replies
+- Dream Cycle compaction in hosted mode
+
+If you previously installed `@fathippo/context-engine`, reinstall from `@fathippo/fathippo-context-engine` so OpenClaw discovers the matching package name and plugin id cleanly.

@@ -23,6 +23,14 @@
         "description": "FatHippo API base URL",
         "default": "https://fathippo.ai/api"
       },
+      "namespace": {
+        "type": "string",
+        "description": "Shared FatHippo namespace for cross-runtime memory"
+      },
+      "installationId": {
+        "type": "string",
+        "description": "Stable installation identifier for this OpenClaw machine"
+      },
       "injectCritical": {
         "type": "boolean",
         "description": "Auto-inject critical memories",
@@ -35,8 +43,8 @@
       },
       "captureUserOnly": {
         "type": "boolean",
-        "description": "Only capture user messages (avoid self-poisoning)",
-        "default": true
+        "description": "Legacy escape hatch: capture only user messages instead of the full exchange",
+        "default": false
       },
       "dreamCycleOnCompact": {
         "type": "boolean",
@@ -86,6 +94,14 @@
       "label": "API Base URL",
       "advanced": true
     },
+    "namespace": {
+      "label": "Namespace",
+      "advanced": true
+    },
+    "installationId": {
+      "label": "Installation ID",
+      "advanced": true
+    },
     "injectCritical": {
       "label": "Inject Critical Memories"
     },
@@ -93,7 +109,8 @@
       "label": "Injection Limit"
     },
     "captureUserOnly": {
-      "label": "Capture User Messages Only"
+      "label": "Capture User Messages Only (Legacy)",
+      "advanced": true
     },
     "dreamCycleOnCompact": {
       "label": "Dream Cycle on Compact"

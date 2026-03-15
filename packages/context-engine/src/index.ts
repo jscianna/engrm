@@ -50,6 +50,7 @@ export default function register(api: OpenClawPluginApi): void {
     const config: FatHippoConfig = {
       ...rawConfig,
       mode,
+      runtime: "openclaw",
       pluginId: CONTEXT_ENGINE_ID,
       pluginVersion: CONTEXT_ENGINE_VERSION,
     };

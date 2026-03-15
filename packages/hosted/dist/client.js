@@ -29,10 +29,24 @@ export class FatHippoClient {
     constructor(options) {
         this.apiKey = options.apiKey ?? "";
         this.baseUrl = options.baseUrl || DEFAULT_BASE_URL;
+        const runtimeHeaders = {};
+        if (options.runtime) {
+            runtimeHeaders["X-Fathippo-Runtime"] = options.runtime;
+        }
+        if (options.namespace) {
+            runtimeHeaders["X-Fathippo-Namespace"] = options.namespace;
+        }
+        if (options.installationId) {
+            runtimeHeaders["X-Fathippo-Installation-Id"] = options.installationId;
+        }
+        if (options.workspaceId) {
+            runtimeHeaders["X-Fathippo-Workspace-Id"] = options.workspaceId;
+        }
         this.headers = {
             "X-Fathippo-Plugin-Id": options.pluginId ?? "fathippo-context-engine",
             "X-Fathippo-Plugin-Version": options.pluginVersion ?? "unknown",
             "X-Fathippo-Plugin-Mode": options.mode === "local" ? "local" : "hosted",
+            ...runtimeHeaders,
             ...(options.additionalHeaders ?? {}),
         };
     }

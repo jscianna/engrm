@@ -1,27 +1,27 @@
 /**
  * Session Turn Endpoint
- * 
+ *
  * Record a turn in an ongoing session.
- * Returns whether context refresh is needed and tracks memory usage.
+ * This is the canonical per-turn persistence path.
  */
 
-import { embedQuery } from "@/lib/embeddings";
-import { semanticSearchVectors } from "@/lib/qdrant";
-import { 
-  recordSessionTurn, 
+import {
+  recordSessionTurn,
   getExtendedSessionById,
-  getCriticalMemories,
-  getAgentMemoriesByIds,
   incrementAccessCounts,
-  listCriticalSynthesizedMemories,
 } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { FatHippoError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 import {
+  captureCodingTraceFromTurn,
+  captureTurnMemories,
+  type TurnCaptureMessage,
+} from "@/lib/turn-capture";
+import { storeDetectedConstraints } from "@/lib/constraint-detection";
+import {
   createAnalyticsConversationId,
   detectQualitySignals,
-  recordInjectionEvent,
   recordQualitySignals,
 } from "@/lib/memory-analytics";
 
@@ -30,6 +30,40 @@ export const runtime = "nodejs";
 type Props = {
   params: Promise<{ id: string }>;
 };
+
+function normalizeMessageRole(rawRole: unknown): string {
+  if (typeof rawRole !== "string") {
+    return "assistant";
+  }
+  const role = rawRole.toLowerCase();
+  if (role === "toolresult") {
+    return "tool";
+  }
+  return role;
+}
+
+function normalizeMessage(input: unknown): TurnCaptureMessage | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return null;
+  }
+
+  const record = input as Record<string, unknown>;
+  const content =
+    typeof record.content === "string"
+      ? record.content.trim()
+      : typeof record.text === "string"
+        ? record.text.trim()
+        : "";
+  if (!content) {
+    return null;
+  }
+
+  return {
+    role: normalizeMessageRole(record.role ?? record.type),
+    content,
+    toolName: typeof record.toolName === "string" ? record.toolName : null,
+  };
+}
 
 export async function POST(request: Request, props: Props) {
   try {
@@ -56,7 +90,9 @@ export async function POST(request: Request, props: Props) {
     }
 
     // Parse messages
-    const messages = Array.isArray(body.messages) ? body.messages : [];
+    const messages = Array.isArray(body.messages)
+      ? body.messages.map(normalizeMessage).filter((message): message is TurnCaptureMessage => Boolean(message))
+      : [];
     if (messages.length === 0) {
       throw new FatHippoError("VALIDATION_ERROR", { field: "messages", reason: "required" });
     }
@@ -67,8 +103,12 @@ export async function POST(request: Request, props: Props) {
 
     const lastUserMessage = [...messages]
       .reverse()
-      .find((m: { role?: string; content?: string }) => m.role === "user" && typeof m.content === "string")
+      .find((m) => m.role === "user" && typeof m.content === "string")
       ?.content?.trim() ?? "";
+
+    const captureUserOnly = body.captureUserOnly === true;
+    const captureConstraints = body.captureConstraints !== false;
+    const captureTrace = body.captureTrace !== false;
 
     // Track which memories are being used this turn
     const memoriesUsed = Array.isArray(body.memoriesUsed) 
@@ -80,7 +120,10 @@ export async function POST(request: Request, props: Props) {
       userId: identity.userId,
       sessionId,
       turnNumber,
-      messages,
+      messages: messages.map((message) => ({
+        role: message.role ?? "assistant",
+        content: message.content ?? "",
+      })),
       memoriesUsed,
     });
 
@@ -100,97 +143,43 @@ export async function POST(request: Request, props: Props) {
       }
     }
 
-    // Determine if refresh is needed (every 5 turns or topic drift)
-    const refreshNeeded = turnNumber % 5 === 0;
+    const memoryCapture = await captureTurnMemories({
+      userId: identity.userId,
+      namespaceId: session.namespaceId,
+      sessionId,
+      messages,
+      captureUserOnly,
+    });
 
-    // Get new context if refresh needed
-    let newContext = null;
-    if (refreshNeeded) {
-      // Get most recent user message for context search
-      if (lastUserMessage) {
-        try {
-          const criticalMemories = await getCriticalMemories(identity.userId, {
-            excludeCompleted: true,
-            excludeAbsorbed: true,
-            excludeSensitive: true,
-          });
-          const criticalSyntheses = await listCriticalSynthesizedMemories(identity.userId, 5);
-          const criticalForInjection = [
-            ...criticalSyntheses.map((synthesis) => ({
-              id: synthesis.id,
-              title: synthesis.title,
-              text: synthesis.synthesis,
-              memoryType: "semantic",
-            })),
-            ...criticalMemories,
-          ];
-          const vector = await embedQuery(lastUserMessage);
-          const hits = await semanticSearchVectors({
-            userId: identity.userId,
-            query: lastUserMessage,
-            vector,
-            topK: 10,
-          });
+    const constraintMessages = messages
+      .filter((message) => message.role === "user" && typeof message.content === "string")
+      .map((message) => message.content as string);
+    const constraintCapture = captureConstraints
+      ? await storeDetectedConstraints({
+          userId: identity.userId,
+          messages: constraintMessages,
+        })
+      : { constraints: [], created: 0 };
 
-          const relevantMemories = hits.length > 0 
-            ? await getAgentMemoriesByIds({
-                userId: identity.userId,
-                ids: hits.map((h) => h.item.id),
-                namespaceId: session.namespaceId,
-                excludeAbsorbed: true,
-                excludeSensitive: true,
-              })
-            : [];
-
-          const highMemories = relevantMemories.filter(
-            (m) => m.importanceTier === "high" || m.importanceTier === "critical"
-          );
-
-          const criticalIds = new Set(criticalForInjection.map((m) => m.id));
-          const dedupedHigh = highMemories.filter((m) => !criticalIds.has(m.id)).slice(0, 5);
-
-          newContext = {
-            critical: criticalForInjection.map((m) => ({
-              id: m.id,
-              title: m.title,
-              text: m.text,
-              type: m.memoryType,
-            })),
-            high: dedupedHigh.map((m) => ({
-              id: m.id,
-              title: m.title,
-              text: m.text,
-              type: m.memoryType,
-            })),
-          };
-
-          const refreshedMemoryIds = Array.from(
-            new Set([
-              ...criticalMemories.map((memory) => memory.id),
-              ...criticalSyntheses.map((memory) => memory.id),
-              ...dedupedHigh.map((memory) => memory.id),
-            ]),
-          );
-
-          if (refreshedMemoryIds.length > 0) {
-            recordInjectionEvent({
-              userId: identity.userId,
-              memoryIds: refreshedMemoryIds,
-              resultCount: refreshedMemoryIds.length,
-              conversationId: analyticsConversationId,
-            }).catch(() => {});
-          }
-        } catch {
-          // Refresh failed, continue without new context
-        }
-      }
-    }
+    const traceCaptured = captureTrace
+      ? await captureCodingTraceFromTurn({
+          userId: identity.userId,
+          sessionId,
+          messages,
+        })
+      : false;
 
     return Response.json({
       turnNumber,
-      refreshNeeded,
-      ...(newContext ? { newContext } : {}),
+      refreshNeeded: false,
       memoriesUsed,
+      captureSummary: {
+        stored: memoryCapture.stored,
+        updated: memoryCapture.updated,
+        merged: memoryCapture.merged,
+        constraintsDetected: constraintCapture.created,
+        traceCaptured,
+      },
     });
   } catch (error) {
     return errorResponse(error);

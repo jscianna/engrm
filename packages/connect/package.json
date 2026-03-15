@@ -1,0 +1,37 @@
+{
+  "name": "@fathippo/connect",
+  "version": "0.1.0",
+  "description": "One-command installers for FatHippo integrations",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "fathippo-connect": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "fathippo",
+    "openclaw",
+    "installer",
+    "connect"
+  ],
+  "author": "FatHippo",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/node": "^20.19.17",
+    "typescript": "^5.9.2"
+  }
+}
