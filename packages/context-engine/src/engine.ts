@@ -64,7 +64,7 @@ import {
   sanitizeContent,
 } from "./utils/filtering.js";
 import type { CodebaseProfile } from "./profiler/types.js";
-import { profileCodebase, loadCodebaseProfile, formatCodebaseProfileForInjection } from "./profiler/index.js";
+import { loadCodebaseProfile, formatCodebaseProfileForInjection, isProfileStale, formatStalenessHint } from "./profiler/index.js";
 
 type RuntimeMode = "hosted" | "local";
 
@@ -168,11 +168,15 @@ export class FatHippoContextEngine implements ContextEngine {
       this.sessionStartTimes.set(params.sessionId, Date.now());
       const workspaceRoot = this.detectWorkspaceRoot(params.sessionFile);
 
-      // Trigger codebase profiling in background
+      // Load existing codebase profile (read-only, no generation)
       if (this.codebaseProfilingEnabled && workspaceRoot) {
-        this.profileCodebaseAsync(workspaceRoot).catch((err) => {
-          console.error("[FatHippo] Background codebase profiling error:", err);
-        });
+        loadCodebaseProfile(workspaceRoot)
+          .then((profile) => {
+            this.sessionCodebaseProfiles.set(workspaceRoot, profile);
+          })
+          .catch((err) => {
+            console.error("[FatHippo] Failed to load codebase profile:", err);
+          });
       }
 
       if (this.mode === "local") {
@@ -945,45 +949,43 @@ export class FatHippoContextEngine implements ContextEngine {
 
   // --- Codebase profiling methods ---
 
-  private async profileCodebaseAsync(workspaceRoot: string): Promise<void> {
-    if (!this.codebaseProfilingEnabled) return;
-    if (this.sessionCodebaseProfiles.has(workspaceRoot)) return;
-
-    // Check for existing profile on disk first
-    const existing = await loadCodebaseProfile(workspaceRoot);
-    if (existing) {
-      this.sessionCodebaseProfiles.set(workspaceRoot, existing);
-      return;
-    }
-
-    // Profile in background
-    try {
-      const profile = await profileCodebase(workspaceRoot, { force: true });
-      this.sessionCodebaseProfiles.set(workspaceRoot, profile);
-    } catch (error) {
-      console.error("[FatHippo] Codebase profiling failed:", error);
-      this.sessionCodebaseProfiles.set(workspaceRoot, null);
-    }
-  }
+  // Staleness tracking: only inject the hint once per session
+  private staleHintInjected = new Set<string>();
 
   private async getCodebaseProfileBlock(workspaceRoot?: string): Promise<string> {
     if (!this.codebaseProfilingEnabled || !workspaceRoot) return "";
 
     // Check cache
+    let profile: CodebaseProfile | null = null;
     if (this.sessionCodebaseProfiles.has(workspaceRoot)) {
-      const cached = this.sessionCodebaseProfiles.get(workspaceRoot);
-      if (!cached) return "";
-      return formatCodebaseProfileForInjection(cached);
-    }
-
-    // Try loading from disk
-    const profile = await loadCodebaseProfile(workspaceRoot);
-    if (profile) {
+      profile = this.sessionCodebaseProfiles.get(workspaceRoot) ?? null;
+    } else {
+      // Try loading from disk
+      profile = await loadCodebaseProfile(workspaceRoot);
       this.sessionCodebaseProfiles.set(workspaceRoot, profile);
-      return formatCodebaseProfileForInjection(profile);
     }
 
-    return "";
+    if (!profile) {
+      // No profile exists — inject a one-time hint
+      if (!this.staleHintInjected.has(workspaceRoot)) {
+        this.staleHintInjected.add(workspaceRoot);
+        return "\n[FatHippo] No codebase profile found. Run `npx @fathippo/connect profile .` in the project root to generate one.\n";
+      }
+      return "";
+    }
+
+    let block = formatCodebaseProfileForInjection(profile);
+
+    // Staleness check — inject hint once per session
+    if (!this.staleHintInjected.has(workspaceRoot) && isProfileStale(profile)) {
+      const hint = formatStalenessHint(profile);
+      if (hint) {
+        block += `\n${hint}\n`;
+      }
+      this.staleHintInjected.add(workspaceRoot);
+    }
+
+    return block;
   }
 
   // --- User DNA methods ---

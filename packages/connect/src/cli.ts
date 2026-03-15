@@ -15,12 +15,16 @@ const DEFAULT_POLL_TIMEOUT_MS = 15 * 60 * 1000;
 type OpenClawConnectOptions = {
   apiKey?: string;
   baseUrl: string;
-  command: "openclaw";
+  command: "openclaw" | "profile";
   installationName: string;
   json: boolean;
   local: boolean;
   noRestart: boolean;
   namespace?: string;
+  // Profile command options
+  profilePath?: string;
+  force?: boolean;
+  quiet?: boolean;
 };
 
 type StartConnectResponse = {
@@ -53,9 +57,13 @@ type PollTerminalResponse = {
 type PollResponse = PollPendingResponse | PollAuthorizedResponse | PollTerminalResponse;
 
 function printHelp(): void {
-  console.log(`Usage: npx @fathippo/connect openclaw [options]
+  console.log(`Usage: npx @fathippo/connect <command> [options]
 
-Options:
+Commands:
+  openclaw                Connect FatHippo to OpenClaw
+  profile [path-or-url]   Profile a codebase and generate .fathippo/codebase-profile.json
+
+openclaw options:
   --local                 Configure local-only mode
   --api-key <key>         Use an existing hosted API key
   --namespace <name>      Shared FatHippo namespace to attach
@@ -64,6 +72,12 @@ Options:
                           Override the OpenClaw installation label
   --no-restart            Skip 'openclaw gateway restart'
   --json                  Print the final result as JSON
+
+profile options:
+  --force                 Regenerate even if a fresh profile exists
+  --quiet                 Suppress output (for background usage)
+  --json                  Print the profile as JSON
+
   --help                  Show this help`);
 }
 
@@ -81,22 +95,26 @@ function expectValue(
 
 function parseArgs(argv: string[]): OpenClawConnectOptions {
   const command = argv[0];
-  if (command !== "openclaw") {
+  if (command !== "openclaw" && command !== "profile") {
     if (command === "--help" || command === "-h" || typeof command === "undefined") {
       printHelp();
       process.exit(0);
     }
-    throw new Error(`Unknown command '${command}'. Only 'openclaw' is supported right now.`);
+    throw new Error(`Unknown command '${command}'. Supported: openclaw, profile. Use --help for usage.`);
   }
 
   const options: OpenClawConnectOptions = {
     baseUrl: DEFAULT_BASE_URL,
-    command: "openclaw",
+    command: command as "openclaw" | "profile",
     installationName: defaultInstallationName(),
     json: false,
     local: false,
     noRestart: false,
   };
+
+  if (command === "profile") {
+    return parseProfileArgs(argv, options);
+  }
 
   for (let index = 1; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -150,6 +168,41 @@ function parseArgs(argv: string[]): OpenClawConnectOptions {
   return options;
 }
 
+function parseProfileArgs(argv: string[], options: OpenClawConnectOptions): OpenClawConnectOptions {
+  for (let index = 1; index < argv.length; index += 1) {
+    const arg = argv[index]!;
+    switch (arg) {
+      case "--help":
+      case "-h":
+        printHelp();
+        process.exit(0);
+      case "--force":
+        options.force = true;
+        break;
+      case "--quiet":
+        options.quiet = true;
+        break;
+      case "--json":
+        options.json = true;
+        break;
+      default:
+        if (arg.startsWith("--")) {
+          throw new Error(`Unknown flag '${arg}' for profile command. Use --help for usage.`);
+        }
+        // Positional argument: path or URL
+        options.profilePath = arg;
+        break;
+    }
+  }
+
+  // Default to current directory
+  if (!options.profilePath) {
+    options.profilePath = ".";
+  }
+
+  return options;
+}
+
 async function promptForRepo(): Promise<string | null> {
   const rl = await import("node:readline");
   const iface = rl.createInterface({ input: process.stdin, output: process.stdout });
@@ -167,11 +220,14 @@ async function promptForRepo(): Promise<string | null> {
   });
 }
 
-async function profileRepo(repoInput: string): Promise<void> {
+async function profileRepo(repoInput: string, options?: { force?: boolean; quiet?: boolean; json?: boolean }): Promise<void> {
   const { execSync } = await import("node:child_process");
   const fs = await import("node:fs");
   const path = await import("node:path");
   const os = await import("node:os");
+  const { profileCodebase } = await import("./profiler/index.js");
+
+  const log = options?.quiet ? (() => {}) : console.log.bind(console);
 
   let workDir = repoInput;
   let tempDir: string | null = null;
@@ -180,7 +236,7 @@ async function profileRepo(repoInput: string): Promise<void> {
   const isUrl = repoInput.startsWith("http://") || repoInput.startsWith("https://") || repoInput.startsWith("git@");
   if (isUrl) {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "fathippo-profile-"));
-    console.log("Cloning repository...");
+    log("Cloning repository...");
     try {
       execSync(`git clone --depth 50 "${repoInput}" "${tempDir}/repo"`, { stdio: "pipe" });
       workDir = path.join(tempDir, "repo");
@@ -202,56 +258,31 @@ async function profileRepo(repoInput: string): Promise<void> {
     return;
   }
 
-  console.log("Profiling codebase...");
+  log("Profiling codebase...");
   try {
-    // Try to use the installed context engine's profiler
-    let profileFn: ((root: string, opts?: { force?: boolean }) => Promise<Record<string, unknown>>) | null = null;
-    
-    // Look for the installed extension
-    const extensionPaths = [
-      path.join(process.env.HOME || "~", ".openclaw/extensions/fathippo-context-engine/dist/profiler/index.js"),
-    ];
-    
-    for (const extPath of extensionPaths) {
-      if (fs.existsSync(extPath)) {
-        const mod = await import(extPath);
-        profileFn = mod.profileCodebase || mod.default?.profileCodebase;
-        break;
-      }
-    }
+    const profile = await profileCodebase(workDir, { force: options?.force });
 
-    if (profileFn) {
-      const profile = await profileFn(workDir, { force: true }) as Record<string, unknown>;
-      const techStack = profile.techStack as Record<string, unknown> | undefined;
-      const structure = profile.structure as Record<string, unknown> | undefined;
-      const languages = (techStack?.languages as Array<{ name: string; percentage: number }>) || [];
-      const frameworks = (techStack?.frameworks as string[]) || [];
-      const totalFiles = (structure?.totalFiles as number) || 0;
-      
-      const langStr = languages.slice(0, 3).map(l => `${l.name} ${l.percentage}%`).join(", ");
-      const fwStr = frameworks.length > 0 ? `, ${frameworks.join(", ")}` : "";
-      
-      console.log(`✅ Profiled: ${langStr}${fwStr} · ${totalFiles} files`);
+    if (options?.json) {
+      console.log(JSON.stringify(profile, null, 2));
     } else {
-      // Fallback: basic profile without the full engine
-      const pkgJsonPath = path.join(workDir, "package.json");
-      if (fs.existsSync(pkgJsonPath)) {
-        const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, "utf-8"));
-        const deps = Object.keys(pkg.dependencies || {}).slice(0, 5).join(", ");
-        console.log(`✅ Detected project with deps: ${deps}`);
-      } else {
-        console.log("✅ Repo registered. Profile will be generated on first agent session.");
-      }
+      const languages = profile.techStack.languages || [];
+      const frameworks = profile.techStack.frameworks || [];
+      const totalFiles = profile.structure?.totalFiles || 0;
+
+      const langStr = languages.slice(0, 3).map((l: { name: string; percentage: number }) => `${l.name} ${l.percentage}%`).join(", ");
+      const fwStr = frameworks.length > 0 ? `, ${frameworks.join(", ")}` : "";
+
+      log(`✅ Profiled: ${langStr}${fwStr} · ${totalFiles} files`);
+      log(`   Saved to ${workDir}/.fathippo/codebase-profile.json`);
     }
   } catch (err) {
-    // Profile failed but install still succeeded
-    console.log("⚠ Profiling skipped — profile will be generated on first agent session.");
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`⚠ Profiling failed: ${message}`);
   }
 
   // Clean up temp clone
   if (tempDir) {
-    const fs2 = await import("node:fs");
-    fs2.rmSync(tempDir, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
@@ -377,6 +408,16 @@ function printJson(payload: Record<string, unknown>): void {
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
   const options = parseArgs(argv);
+
+  // Handle profile command separately
+  if (options.command === "profile") {
+    await profileRepo(options.profilePath || ".", {
+      force: options.force,
+      quiet: options.quiet,
+      json: options.json,
+    });
+    return;
+  }
 
   await ensureOpenClawAvailable();
 

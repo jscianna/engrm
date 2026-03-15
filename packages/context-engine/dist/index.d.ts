@@ -27,4 +27,6 @@ export default function register(api: OpenClawPluginApi): void;
 export { FatHippoContextEngine } from "./engine.js";
 export type { FatHippoConfig, Memory, SearchResult } from "./types.js";
 export { CONTEXT_ENGINE_ID, CONTEXT_ENGINE_VERSION } from "./version.js";
+export type { UserDNA, SessionAnalysisInput, SessionSignals } from "./user-dna/types.js";
+export type { CollectivePattern, SharedSignal } from "./collective/types.js";
 //# sourceMappingURL=index.d.ts.map

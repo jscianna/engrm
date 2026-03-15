@@ -1,30 +1,27 @@
 /**
- * Codebase Profiler — Main orchestrator.
+ * Codebase Profiler — Reader-only module.
  *
- * Profiles a workspace by scanning file tree, detecting frameworks,
- * analyzing git history, and computing import frequency. Stores the
- * result to `.fathippo/codebase-profile.json`.
+ * This module provides read-only access to codebase profiles.
+ * It does NOT use child_process or run any shell commands.
+ * Profile generation is handled by @fathippo/connect CLI.
+ *
+ * To generate a profile: `npx @fathippo/connect profile .`
  */
-import type { CodebaseProfile, ProfileConfig } from "./types.js";
+import type { CodebaseProfile } from "./types.js";
 export type { CodebaseProfile, ProfileConfig, TechStack, ScanResult, GitAnalysis, ImportAnalysis, ScanOptions } from "./types.js";
-export { scanFileTree } from "./scanner.js";
-export { detectTechStack } from "./framework-detection.js";
-export { analyzeGitHistory } from "./git-analysis.js";
-export { analyzeImports } from "./import-analysis.js";
-export { deriveWorkspaceId } from "./workspace-id.js";
 export { formatCodebaseProfileForInjection } from "./serializer.js";
 /**
- * Profile a codebase. If a cached profile exists on disk and `force` is false,
- * returns the cached version. Only profiles git repositories — skips home dirs
- * and non-project paths for security.
- */
-export declare function profileCodebase(workspaceRoot: string, options?: ProfileConfig): Promise<CodebaseProfile>;
-/**
- * Load a cached profile from disk.
+ * Load a cached profile from disk. Returns null if no profile exists.
+ * This is the only function the context engine needs at runtime.
  */
 export declare function loadCodebaseProfile(workspaceRoot: string): Promise<CodebaseProfile | null>;
 /**
- * Save a profile to disk at `.fathippo/codebase-profile.json`.
+ * Check whether a profile is stale based on its generatedAt timestamp.
+ * Returns true if the profile is older than the given threshold (default: 48 hours).
  */
-export declare function saveCodebaseProfile(workspaceRoot: string, profile: CodebaseProfile): Promise<void>;
+export declare function isProfileStale(profile: CodebaseProfile, thresholdMs?: number): boolean;
+/**
+ * Format a human-readable staleness message for context injection.
+ */
+export declare function formatStalenessHint(profile: CodebaseProfile): string | null;
 //# sourceMappingURL=index.d.ts.map

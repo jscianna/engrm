@@ -1,168 +1,24 @@
 /**
- * Codebase Profiler — Main orchestrator.
+ * Codebase Profiler — Reader-only module.
  *
- * Profiles a workspace by scanning file tree, detecting frameworks,
- * analyzing git history, and computing import frequency. Stores the
- * result to `.fathippo/codebase-profile.json`.
+ * This module provides read-only access to codebase profiles.
+ * It does NOT use child_process or run any shell commands.
+ * Profile generation is handled by @fathippo/connect CLI.
+ *
+ * To generate a profile: `npx @fathippo/connect profile .`
  */
 import { existsSync } from "node:fs";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { scanFileTree } from "./scanner.js";
-import { detectTechStack } from "./framework-detection.js";
-import { analyzeGitHistory, getHeadCommit } from "./git-analysis.js";
-import { analyzeImports } from "./import-analysis.js";
-export { scanFileTree } from "./scanner.js";
-export { detectTechStack } from "./framework-detection.js";
-export { analyzeGitHistory } from "./git-analysis.js";
-export { analyzeImports } from "./import-analysis.js";
-export { deriveWorkspaceId } from "./workspace-id.js";
 export { formatCodebaseProfileForInjection } from "./serializer.js";
 const PROFILE_DIR = ".fathippo";
 const PROFILE_FILE = "codebase-profile.json";
 /**
- * Check whether a directory is safe and useful to profile.
- * Only profile git repos — skip home dirs, system dirs, and non-project paths.
- */
-function isSafeToProfile(dir) {
-    // Must have a .git directory (it's a real project)
-    if (!existsSync(path.join(dir, ".git")))
-        return false;
-    // Reject home directory itself (even if it has .git)
-    const home = process.env.HOME || process.env.USERPROFILE || "";
-    if (home && path.resolve(dir) === path.resolve(home))
-        return false;
-    // Reject root or system directories
-    if (dir === "/" || dir === "C:\\" || dir === "C:/")
-        return false;
-    return true;
-}
-/**
- * Profile a codebase. If a cached profile exists on disk and `force` is false,
- * returns the cached version. Only profiles git repositories — skips home dirs
- * and non-project paths for security.
- */
-export async function profileCodebase(workspaceRoot, options) {
-    // Safety check: only profile actual git projects
-    if (!isSafeToProfile(workspaceRoot)) {
-        throw new Error(`Skipping profile: ${workspaceRoot} is not a git repository or is a protected directory`);
-    }
-    // Check for cached profile unless force
-    if (!options?.force) {
-        const cached = await loadCodebaseProfile(workspaceRoot);
-        if (cached)
-            return cached;
-    }
-    // Run all analyses in parallel
-    const [scanResult, techStack, gitResult, headCommit] = await Promise.all([
-        scanFileTree(workspaceRoot, {
-            maxFiles: options?.maxFiles ?? 5000,
-            maxDepth: options?.maxDepth ?? 4,
-            extraIgnorePatterns: options?.extraIgnorePatterns,
-        }),
-        detectTechStack(workspaceRoot),
-        analyzeGitHistory(workspaceRoot).catch(() => ({
-            totalCommits: 0,
-            activeContributors: 0,
-            mostActiveDirectories: [],
-            branchingModel: "unknown",
-            hotspots: [],
-        })),
-        Promise.resolve(getHeadCommit(workspaceRoot)),
-    ]);
-    // Import analysis depends on scan result
-    const importResult = await analyzeImports(workspaceRoot, scanResult.allFiles).catch(() => ({
-        topImports: [],
-        mostImportedFiles: [],
-    }));
-    // Merge language breakdown into tech stack
-    techStack.languages = [...scanResult.languageBreakdown.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .filter(([, pct]) => pct >= 1)
-        .map(([name, percentage]) => ({ name, percentage }));
-    // Build hotspots
-    const hotspots = [];
-    // Git hotspots (most changed)
-    for (const hs of gitResult.hotspots.slice(0, 8)) {
-        hotspots.push({
-            path: hs.path,
-            reason: "most-changed",
-            metric: hs.commits,
-        });
-    }
-    // Size hotspots (largest files not already listed)
-    const hotspotPaths = new Set(hotspots.map((h) => h.path));
-    for (const file of scanResult.largestFiles.slice(0, 5)) {
-        if (!hotspotPaths.has(file.path)) {
-            hotspots.push({
-                path: file.path,
-                reason: "largest",
-                metric: file.loc,
-            });
-            hotspotPaths.add(file.path);
-        }
-    }
-    // Import hotspots (most imported local files)
-    for (const file of importResult.mostImportedFiles.slice(0, 3)) {
-        if (!hotspotPaths.has(file.path)) {
-            hotspots.push({
-                path: file.path,
-                reason: "most-imported",
-                metric: file.importCount,
-            });
-            hotspotPaths.add(file.path);
-        }
-    }
-    // Top direct dependencies by actual import usage
-    const topDirect = importResult.topImports
-        .filter((imp) => !imp.module.startsWith(".") && !imp.module.startsWith("@/") && !imp.module.startsWith("node:"))
-        .slice(0, 10)
-        .map((imp) => imp.module);
-    // Peer projects (monorepo cross-package deps)
-    const peerProjects = importResult.topImports
-        .filter((imp) => imp.module.startsWith("@") && scanResult.workspaces.some((ws) => imp.module.includes(path.basename(ws))))
-        .map((imp) => imp.module);
-    // Assemble profile
-    const profile = {
-        version: 1,
-        generatedAt: new Date().toISOString(),
-        generatedFromCommit: headCommit,
-        workspaceRoot,
-        techStack,
-        structure: {
-            type: scanResult.structureType,
-            entryPoints: scanResult.entryPoints,
-            workspaces: scanResult.workspaces.length > 0 ? scanResult.workspaces : undefined,
-            totalFiles: scanResult.totalFiles,
-            totalDirectories: scanResult.totalDirectories,
-            fileTreeSummary: scanResult.fileTreeSummary,
-        },
-        hotspots: hotspots.slice(0, 15),
-        dependencies: {
-            topDirect,
-            peerProjects: peerProjects.length > 0 ? peerProjects : undefined,
-        },
-        git: {
-            totalCommits: gitResult.totalCommits,
-            activeContributors: gitResult.activeContributors,
-            mostActiveDirectories: gitResult.mostActiveDirectories,
-            branchingModel: gitResult.branchingModel,
-        },
-        architecture: {
-            summary: "Profile generated with free-data analysis. Run with LLM summarization for architectural insights.",
-            patterns: [],
-            conventions: [],
-        },
-    };
-    // Save to disk
-    await saveCodebaseProfile(workspaceRoot, profile);
-    return profile;
-}
-/**
- * Load a cached profile from disk.
+ * Load a cached profile from disk. Returns null if no profile exists.
+ * This is the only function the context engine needs at runtime.
  */
 export async function loadCodebaseProfile(workspaceRoot) {
-    const profilePath = getProfilePath(workspaceRoot);
+    const profilePath = path.join(workspaceRoot, PROFILE_DIR, PROFILE_FILE);
     if (!existsSync(profilePath))
         return null;
     try {
@@ -177,22 +33,26 @@ export async function loadCodebaseProfile(workspaceRoot) {
     }
 }
 /**
- * Save a profile to disk at `.fathippo/codebase-profile.json`.
+ * Check whether a profile is stale based on its generatedAt timestamp.
+ * Returns true if the profile is older than the given threshold (default: 48 hours).
  */
-export async function saveCodebaseProfile(workspaceRoot, profile) {
-    const dir = path.join(workspaceRoot, PROFILE_DIR);
-    try {
-        if (!existsSync(dir)) {
-            await mkdir(dir, { recursive: true });
-        }
-        const profilePath = path.join(dir, PROFILE_FILE);
-        await writeFile(profilePath, JSON.stringify(profile, null, 2), "utf-8");
-    }
-    catch (error) {
-        console.error("[FatHippo Profiler] Failed to save profile:", error);
-    }
+export function isProfileStale(profile, thresholdMs) {
+    if (!profile.generatedAt)
+        return true;
+    const ageMs = Date.now() - new Date(profile.generatedAt).getTime();
+    const threshold = thresholdMs ?? 48 * 60 * 60 * 1000; // 48 hours default
+    return ageMs > threshold;
 }
-function getProfilePath(workspaceRoot) {
-    return path.join(workspaceRoot, PROFILE_DIR, PROFILE_FILE);
+/**
+ * Format a human-readable staleness message for context injection.
+ */
+export function formatStalenessHint(profile) {
+    if (!isProfileStale(profile))
+        return null;
+    const ageMs = Date.now() - new Date(profile.generatedAt).getTime();
+    const ageHours = Math.floor(ageMs / (60 * 60 * 1000));
+    const ageDays = Math.floor(ageHours / 24);
+    const ageStr = ageDays > 0 ? `${ageDays} day${ageDays > 1 ? "s" : ""} ago` : `${ageHours} hour${ageHours > 1 ? "s" : ""} ago`;
+    return `[FatHippo] Codebase profile was last updated ${ageStr}. Run \`npx @fathippo/connect profile .\` in your project to refresh it.`;
 }
 //# sourceMappingURL=index.js.map
