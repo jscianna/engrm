@@ -396,7 +396,17 @@ export class FatHippoContextEngine implements ContextEngine {
     sessionId: string;
     messages: AgentMessage[];
     tokenBudget?: number;
+    model?: string;  // Override model for subagent sessions using different models
   }): Promise<AssembleResult> {
+    // Re-detect model adapter if a different model is specified (e.g. subagent on different model)
+    if (params.model && this.config.modelAdaptersEnabled !== false) {
+      const { detectModelFamily } = await import("./model-adapters/index.js");
+      const detected = detectModelFamily(params.model);
+      if (!this.modelAdapter || detected.family !== this.modelAdapter.family) {
+        this.modelAdapter = detected;
+      }
+    }
+
     const lastUserMessage = this.findLastUserMessage(params.messages)?.trim() ?? "";
     const runtimeAwareness = this.buildRuntimeAwarenessInstruction();
 
