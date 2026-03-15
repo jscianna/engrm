@@ -12,18 +12,16 @@ import type { FatHippoConfig } from "./types.js";
 export declare class FatHippoContextEngine implements ContextEngine {
     readonly info: ContextEngineInfo;
     private client;
+    private runtimeClient;
     private config;
     private mode;
     private localStore;
-    private cachedCritical;
+    private hostedSessions;
     private sessionStartTimes;
-    private sessionApplicationIds;
     private sessionLocalProfiles;
     private sessionHippoNodState;
     private cognitiveEnabled;
     private static readonly TRIVIAL_ACKS;
-    private static readonly MIN_VECTOR_SIMILARITY;
-    private static readonly MIN_CRITICAL_RELEVANCE;
     private static readonly HIPPO_NOD_COOLDOWN_MS;
     private static readonly HIPPO_NOD_MIN_MESSAGE_GAP;
     constructor(config: FatHippoConfig);
@@ -74,23 +72,6 @@ export declare class FatHippoContextEngine implements ContextEngine {
     }): Promise<AssembleResult>;
     private assembleLocalContext;
     private buildRuntimeAwarenessInstruction;
-    /**
-     * Check if query looks like a coding task
-     */
-    private looksLikeCodingQuery;
-    /**
-     * Fetch active constraints (always injected)
-     */
-    private fetchConstraints;
-    /**
-     * Auto-detect and store constraints from user message
-     */
-    private maybeStoreConstraint;
-    /**
-     * Fetch relevant traces and patterns from cognitive API
-     */
-    private fetchCognitiveContext;
-    private captureStructuredTrace;
     private runCognitiveHeartbeat;
     private detectFilesModified;
     private detectWorkspaceRoot;
@@ -126,7 +107,7 @@ export declare class FatHippoContextEngine implements ContextEngine {
     /**
      * Handle subagent completion
      */
-    onSubagentEnded(_params: {
+    onSubagentEnded(params: {
         childSessionKey: string;
         reason: SubagentEndReason;
     }): Promise<void>;
@@ -135,6 +116,12 @@ export declare class FatHippoContextEngine implements ContextEngine {
      */
     dispose(): Promise<void>;
     private extractContent;
+    private buildHostedRuntimeMetadata;
+    private toRuntimeMessages;
+    private extractTurnMessages;
+    private captureLocalTurnMemories;
+    private mapHostedOutcomeFromReason;
+    private endHostedSession;
     private findLastUserMessage;
     private isTrivialQuery;
     private isRoleMessage;

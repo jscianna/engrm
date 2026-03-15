@@ -1,0 +1,2 @@
+export declare function main(argv?: string[]): Promise<void>;
+//# sourceMappingURL=cli.d.ts.map

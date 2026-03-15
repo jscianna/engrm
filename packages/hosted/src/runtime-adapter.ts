@@ -1,3 +1,9 @@
+import type {
+  CognitiveContextResponse,
+  ConstraintListResponse,
+  IndexedMemoriesResponse,
+} from "./client.js";
+
 type FatHippoFetch = typeof fetch;
 
 export type FatHippoRuntimeName =
@@ -58,9 +64,13 @@ export interface FatHippoSessionStartOutput {
 export interface FatHippoBuildContextInput {
   messages: FatHippoConversationMessage[];
   lastUserMessage?: string;
+  sessionId?: string;
   conversationId?: string;
   maxCritical?: number;
   maxRelevant?: number;
+  includeIndexed?: boolean;
+  includeConstraints?: boolean;
+  includeCognitive?: boolean;
   runtime?: Partial<FatHippoRuntimeMetadata>;
 }
 
@@ -77,7 +87,18 @@ export interface FatHippoRecordTurnInput {
   messages: FatHippoConversationMessage[];
   turnNumber?: number;
   memoriesUsed?: string[];
+  captureUserOnly?: boolean;
+  captureConstraints?: boolean;
+  captureTrace?: boolean;
   runtime?: Partial<FatHippoRuntimeMetadata>;
+}
+
+export interface FatHippoTurnCaptureSummary {
+  stored: number;
+  updated: number;
+  merged: number;
+  constraintsDetected: number;
+  traceCaptured: boolean;
 }
 
 export interface FatHippoRecordTurnOutput {
@@ -86,6 +107,7 @@ export interface FatHippoRecordTurnOutput {
   systemPromptAddition?: string;
   injectedMemories: FatHippoInjectedMemoryRef[];
   memoriesUsed: string[];
+  captureSummary?: FatHippoTurnCaptureSummary;
 }
 
 export interface FatHippoRememberInput {
@@ -192,6 +214,7 @@ type SessionTurnApiResponse = {
     high?: ApiTierMemory[];
   };
   memoriesUsed?: string[];
+  captureSummary?: FatHippoTurnCaptureSummary;
 };
 
 type SessionEndApiResponse = FatHippoSessionEndOutput;
@@ -284,6 +307,127 @@ function mapInjectedMemories(
   }));
 }
 
+function looksLikeCodingQuery(query: string): boolean {
+  const codingKeywords = [
+    "bug",
+    "error",
+    "fix",
+    "debug",
+    "implement",
+    "build",
+    "create",
+    "refactor",
+    "function",
+    "class",
+    "api",
+    "endpoint",
+    "database",
+    "query",
+    "test",
+    "deploy",
+    "config",
+    "install",
+    "code",
+    "script",
+    "migration",
+  ];
+  const normalized = query.toLowerCase();
+  return codingKeywords.some((keyword) => normalized.includes(keyword));
+}
+
+function formatIndexedContext(indexed: IndexedMemoriesResponse | null): string {
+  if (!indexed || indexed.count <= 0 || !indexed.contextFormat.trim()) {
+    return "";
+  }
+  return `## Indexed Memory\n${indexed.contextFormat}`;
+}
+
+function formatConstraintContext(constraints: ConstraintListResponse | null): string {
+  return constraints?.contextFormat?.trim() ?? "";
+}
+
+function formatCognitiveContext(data: CognitiveContextResponse | null): string {
+  if (!data) {
+    return "";
+  }
+
+  const sections = new Map<string, string>();
+  if (data.workflow && data.workflow.steps.length > 0) {
+    const stepLines = data.workflow.steps.map((step) => `- ${step}`).join("\n");
+    const explorationNote = data.workflow.exploration ? " exploratory" : "";
+    sections.set(
+      "workflow",
+      `## Recommended Workflow\n${stepLines}\n\nStrategy: ${data.workflow.title} (${data.workflow.rationale}${explorationNote})`,
+    );
+  }
+
+  const localPatterns = (data.patterns ?? []).filter((pattern) => pattern.scope !== "global");
+  const globalPatterns = (data.patterns ?? []).filter((pattern) => pattern.scope === "global");
+
+  if (localPatterns.length > 0) {
+    sections.set(
+      "local_patterns",
+      `## Learned Coding Patterns\n${localPatterns
+        .map((pattern) => {
+          const score = typeof pattern.score === "number" ? `, score ${pattern.score.toFixed(1)}` : "";
+          return `- [${pattern.domain}] ${pattern.approach.slice(0, 200)} (${Math.round(pattern.confidence * 100)}% confidence${score})`;
+        })
+        .join("\n")}`,
+    );
+  }
+
+  if (globalPatterns.length > 0) {
+    sections.set(
+      "global_patterns",
+      `## Shared Global Patterns\n${globalPatterns
+        .map((pattern) => {
+          const score = typeof pattern.score === "number" ? `, score ${pattern.score.toFixed(1)}` : "";
+          return `- [${pattern.domain}] ${pattern.approach.slice(0, 200)} (${Math.round(pattern.confidence * 100)}% confidence${score})`;
+        })
+        .join("\n")}`,
+    );
+  }
+
+  if ((data.traces?.length ?? 0) > 0) {
+    sections.set(
+      "traces",
+      `## Past Similar Problems\n${data.traces
+        .map((trace) => {
+          const icon = trace.outcome === "success" ? "✓" : trace.outcome === "failed" ? "✗" : "~";
+          const solution = trace.solution ? ` -> ${trace.solution.slice(0, 80)}...` : "";
+          return `- ${icon} ${trace.problem.slice(0, 80)}${solution}`;
+        })
+        .join("\n")}`,
+    );
+  }
+
+  if ((data.skills?.length ?? 0) > 0) {
+    sections.set(
+      "skills",
+      `## Synthesized Skills\n${(data.skills ?? [])
+        .map((skill) => `- [${skill.scope}] ${skill.name}: ${skill.description} (${Math.round(skill.successRate * 100)}% success)`)
+        .join("\n")}`,
+    );
+  }
+
+  const orderedSections = [
+    sections.get("workflow"),
+    ...(data.policy?.sectionOrder ?? ["local_patterns", "global_patterns", "traces", "skills"]).map((key) =>
+      sections.get(key),
+    ),
+  ].filter((section): section is string => Boolean(section?.trim()));
+
+  return orderedSections.join("\n\n");
+}
+
+function joinContextSections(sections: Array<string | null | undefined>): string {
+  return sections
+    .map((section) => section?.trim() ?? "")
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+}
+
 function parseNumberHeader(headers: Headers, name: string): number | undefined {
   const value = headers.get(name);
   if (!value) {
@@ -338,20 +482,67 @@ export class FatHippoHostedRuntimeClient implements FatHippoHostedRuntimeClientC
   async buildContext(input: FatHippoBuildContextInput): Promise<FatHippoBuildContextOutput> {
     const runtime = this.resolveRuntime(input.runtime);
     const message = input.lastUserMessage?.trim() || pickLastUserMessage(input.messages);
-
-    const response = await this.requestText("/v1/simple/context", {
+    const simpleContextPromise = this.requestText("/v1/simple/context", {
       method: "POST",
       runtime: input.runtime,
       body: JSON.stringify({
         message,
         conversationId: input.conversationId ?? runtime.conversationId,
+        namespace: runtime.namespace,
         maxCritical: input.maxCritical,
         maxRelevant: input.maxRelevant,
       }),
     });
 
+    const indexedPromise =
+      input.includeIndexed === false
+        ? Promise.resolve<IndexedMemoriesResponse | null>(null)
+        : this.requestJson<IndexedMemoriesResponse>("/v1/indexed", {
+            method: "GET",
+            runtime: input.runtime,
+          }).catch(() => null);
+
+    const constraintsPromise =
+      input.includeConstraints === false
+        ? Promise.resolve<ConstraintListResponse | null>(null)
+        : this.requestJson<ConstraintListResponse>("/v1/cognitive/constraints", {
+            method: "GET",
+            runtime: input.runtime,
+          }).catch(() => null);
+
+    const cognitivePromise =
+      input.includeCognitive === false || !message || !looksLikeCodingQuery(message)
+        ? Promise.resolve<CognitiveContextResponse | null>(null)
+        : this.requestJson<CognitiveContextResponse>("/v1/cognitive/traces/relevant", {
+            method: "POST",
+            runtime: input.runtime,
+            body: JSON.stringify({
+              sessionId:
+                input.sessionId ??
+                input.conversationId ??
+                runtime.conversationId ??
+                "runtime-build-context",
+              endpoint: "runtime-adapter.buildContext",
+              problem: message,
+              limit: 3,
+              adaptivePolicy: true,
+            }),
+          }).catch(() => null);
+
+    const [response, indexed, constraints, cognitive] = await Promise.all([
+      simpleContextPromise,
+      indexedPromise,
+      constraintsPromise,
+      cognitivePromise,
+    ]);
+
     return {
-      systemPromptAddition: response.text,
+      systemPromptAddition: joinContextSections([
+        response.text,
+        formatConstraintContext(constraints),
+        formatIndexedContext(indexed),
+        formatCognitiveContext(cognitive),
+      ]),
       injectedMemories: [],
       sensitiveOmitted: parseNumberHeader(response.headers, "X-FatHippo-Sensitive-Omitted"),
       evaluationId: response.headers.get("X-FatHippo-Eval-Id") ?? undefined,
@@ -369,6 +560,9 @@ export class FatHippoHostedRuntimeClient implements FatHippoHostedRuntimeClientC
           turnNumber: input.turnNumber,
           messages: input.messages,
           memoriesUsed: input.memoriesUsed ?? [],
+          captureUserOnly: input.captureUserOnly,
+          captureConstraints: input.captureConstraints,
+          captureTrace: input.captureTrace,
         }),
       },
     );
@@ -387,6 +581,7 @@ export class FatHippoHostedRuntimeClient implements FatHippoHostedRuntimeClientC
       systemPromptAddition: systemPromptAddition || undefined,
       injectedMemories,
       memoriesUsed: response.memoriesUsed ?? input.memoriesUsed ?? [],
+      captureSummary: response.captureSummary,
     };
   }
 

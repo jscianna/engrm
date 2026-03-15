@@ -6,7 +6,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { createLocalMemoryStore, invalidateAllLocalResultsForUser, localRetrieve, localStoreResult, } from "@fathippo/local";
-import { FatHippoClient, } from "@fathippo/hosted";
+import { FatHippoClient, createFatHippoHostedRuntimeClient, } from "@fathippo/hosted";
 import { buildStructuredTrace, getMessageText, shouldCaptureCodingTrace } from "./cognitive/trace-capture.js";
 import { CONTEXT_ENGINE_ID, CONTEXT_ENGINE_VERSION } from "./version.js";
 import { formatMemoriesForInjection, dedupeMemories, estimateTokens, } from "./utils/formatting.js";
@@ -22,13 +22,13 @@ export class FatHippoContextEngine {
         ownsCompaction: true, // We handle compaction via Dream Cycle
     };
     client;
+    runtimeClient;
     config;
     mode;
     localStore;
-    cachedCritical = null;
+    hostedSessions = new Map();
     // Cognitive engine state
     sessionStartTimes = new Map();
-    sessionApplicationIds = new Map();
     sessionLocalProfiles = new Map();
     sessionHippoNodState = new Map();
     cognitiveEnabled;
@@ -45,8 +45,6 @@ export class FatHippoContextEngine {
         "ty",
         "thx",
     ]);
-    static MIN_VECTOR_SIMILARITY = 0.75;
-    static MIN_CRITICAL_RELEVANCE = 0.7;
     static HIPPO_NOD_COOLDOWN_MS = 15 * 60 * 1000;
     static HIPPO_NOD_MIN_MESSAGE_GAP = 6;
     constructor(config) {
@@ -56,6 +54,14 @@ export class FatHippoContextEngine {
             throw new Error("FatHippo hosted mode requires an API key. Pass apiKey or switch mode to local/auto.");
         }
         this.client = this.mode === "hosted" ? new FatHippoClient(config) : null;
+        this.runtimeClient =
+            this.mode === "hosted" && config.apiKey
+                ? createFatHippoHostedRuntimeClient({
+                    apiKey: config.apiKey,
+                    baseUrl: config.baseUrl || "https://fathippo.ai/api",
+                    runtime: this.buildHostedRuntimeMetadata(),
+                })
+                : null;
         this.localStore =
             this.mode === "local"
                 ? createLocalMemoryStore({
@@ -71,6 +77,7 @@ export class FatHippoContextEngine {
     async bootstrap(params) {
         try {
             this.sessionStartTimes.set(params.sessionId, Date.now());
+            const workspaceRoot = this.detectWorkspaceRoot(params.sessionFile);
             if (this.mode === "local") {
                 this.sessionLocalProfiles.set(params.sessionId, this.deriveLocalProfileId(params.sessionId, params.sessionFile));
                 return {
@@ -78,25 +85,37 @@ export class FatHippoContextEngine {
                     importedMessages: 0,
                 };
             }
-            // Prefetch critical memories for this session
-            const critical = await this.client?.getCriticalMemories({
-                limit: 30,
-                excludeAbsorbed: true,
-            });
-            if (!critical) {
+            const runtimeClient = this.runtimeClient;
+            if (!runtimeClient) {
                 return {
                     bootstrapped: true,
                     importedMessages: 0,
                 };
             }
-            this.cachedCritical = {
-                memories: critical.memories,
-                syntheses: critical.syntheses,
-                fetchedAt: Date.now(),
-            };
+            if (!this.hostedSessions.has(params.sessionId)) {
+                const session = await runtimeClient.startSession({
+                    firstMessage: "",
+                    namespace: this.config.namespace,
+                    metadata: {
+                        openclawSessionId: params.sessionId,
+                    },
+                    runtime: this.buildHostedRuntimeMetadata({
+                        sessionId: params.sessionId,
+                        sessionFile: params.sessionFile,
+                    }),
+                });
+                this.hostedSessions.set(params.sessionId, {
+                    hostedSessionId: session.sessionId,
+                    workspaceRoot,
+                });
+                return {
+                    bootstrapped: true,
+                    importedMessages: session.injectedMemories.length,
+                };
+            }
             return {
                 bootstrapped: true,
-                importedMessages: critical.memories.length + critical.syntheses.length,
+                importedMessages: 0,
             };
         }
         catch (error) {
@@ -111,73 +130,22 @@ export class FatHippoContextEngine {
      * Ingest a single message into FatHippo
      */
     async ingest(params) {
-        // Skip heartbeat messages
+        void params;
         if (params.isHeartbeat) {
             return { ingested: false };
         }
-        // Only capture user messages (configurable)
-        if (this.config.captureUserOnly !== false &&
-            (!this.isRoleMessage(params.message) || params.message.role !== "user")) {
-            return { ingested: false };
-        }
-        const content = this.extractContent(params.message);
-        if (!content) {
-            return { ingested: false };
-        }
-        // Auto-detect constraints from user messages
-        if (this.cognitiveEnabled && this.isRoleMessage(params.message) && params.message.role === "user") {
-            this.maybeStoreConstraint(content).catch(() => { }); // Fire and forget
-        }
-        // Filter prompt injection attempts
-        if (detectPromptInjection(content)) {
-            console.warn("[FatHippo] Blocked prompt injection attempt");
-            return { ingested: false };
-        }
-        // Check if content matches capture patterns
-        if (!matchesCapturePatterns(content)) {
-            return { ingested: false };
-        }
-        try {
-            if (this.mode === "local") {
-                const profileId = this.getLocalProfileId(params.sessionId);
-                await this.localStore?.remember({
-                    profileId,
-                    content: sanitizeContent(content),
-                    title: this.buildLocalTitle(content),
-                });
-                invalidateAllLocalResultsForUser(profileId);
-            }
-            else {
-                await this.client?.remember({
-                    content: sanitizeContent(content),
-                    conversationId: this.config.conversationId || params.sessionId,
-                });
-            }
-            return { ingested: true };
-        }
-        catch (error) {
-            console.error("[FatHippo] Ingest error:", error);
-            return { ingested: false };
-        }
+        // Full-turn capture happens in afterTurn for both hosted and local modes.
+        return { ingested: false };
     }
     /**
      * Ingest a batch of messages
      */
     async ingestBatch(params) {
+        void params;
         if (params.isHeartbeat) {
             return { ingestedCount: 0 };
         }
-        let ingestedCount = 0;
-        for (const message of params.messages) {
-            const result = await this.ingest({
-                sessionId: params.sessionId,
-                message,
-                isHeartbeat: params.isHeartbeat,
-            });
-            if (result.ingested)
-                ingestedCount++;
-        }
-        return { ingestedCount };
+        return { ingestedCount: 0 };
     }
     /**
      * Post-turn lifecycle processing
@@ -189,28 +157,41 @@ export class FatHippoContextEngine {
             }
             return;
         }
-        // Invalidate critical cache after turns (may have new memories)
-        const cacheAge = this.cachedCritical
-            ? Date.now() - this.cachedCritical.fetchedAt
-            : Infinity;
-        if (cacheAge > 5 * 60 * 1000) {
-            // 5 minute cache
-            this.cachedCritical = null;
-        }
-        // Capture cognitive trace for coding sessions
+        const turnMessages = this.extractTurnMessages(params.messages, params.prePromptMessageCount);
         if (this.mode === "local") {
+            await this.captureLocalTurnMemories({
+                sessionId: params.sessionId,
+                sessionFile: params.sessionFile,
+                messages: turnMessages,
+            });
             await this.captureLocalTrace({
                 sessionId: params.sessionId,
                 sessionFile: params.sessionFile,
                 messages: params.messages,
             });
+            return;
         }
-        else if (this.cognitiveEnabled) {
-            await this.captureStructuredTrace({
-                sessionId: params.sessionId,
-                sessionFile: params.sessionFile,
-                messages: params.messages,
+        const runtimeClient = this.runtimeClient;
+        const hostedSessionId = this.hostedSessions.get(params.sessionId)?.hostedSessionId;
+        if (!runtimeClient || !hostedSessionId) {
+            return;
+        }
+        try {
+            await runtimeClient.recordTurn({
+                sessionId: hostedSessionId,
+                messages: turnMessages,
+                memoriesUsed: [],
+                captureUserOnly: this.config.captureUserOnly === true,
+                captureConstraints: this.cognitiveEnabled,
+                captureTrace: this.cognitiveEnabled,
+                runtime: this.buildHostedRuntimeMetadata({
+                    sessionId: params.sessionId,
+                    sessionFile: params.sessionFile,
+                }),
             });
+        }
+        catch (error) {
+            console.error("[FatHippo] Record turn error:", error);
         }
     }
     detectToolsUsed(messages) {
@@ -235,78 +216,54 @@ export class FatHippoContextEngine {
         if (this.mode === "local") {
             return this.assembleLocalContext(params, lastUserMessage, runtimeAwareness);
         }
-        const client = this.client;
-        if (!client) {
+        const runtimeClient = this.runtimeClient;
+        const hostedSession = this.hostedSessions.get(params.sessionId);
+        if (!runtimeClient || !hostedSession) {
             return {
                 messages: params.messages,
                 estimatedTokens: this.estimateMessageTokens(params.messages),
             };
         }
-        // Always fetch indexed summaries (they're compact)
-        let indexedContext = "";
-        try {
-            const indexed = await client.getIndexedSummaries();
-            if (indexed.count > 0) {
-                indexedContext = `\n## Indexed Memory (use GET /indexed/:key for full content)\n${indexed.contextFormat}\n`;
-            }
-        }
-        catch {
-            // Indexed memories are optional, don't fail on error
-        }
         if (!lastUserMessage || this.isTrivialQuery(lastUserMessage)) {
-            // Still include indexed summaries even for trivial queries
             const baseTokens = this.estimateMessageTokens(params.messages);
-            const systemPromptAddition = runtimeAwareness + indexedContext;
             return {
                 messages: params.messages,
-                estimatedTokens: baseTokens + estimateTokens(systemPromptAddition),
-                systemPromptAddition: systemPromptAddition.trim() || undefined,
+                estimatedTokens: baseTokens + estimateTokens(runtimeAwareness),
+                systemPromptAddition: runtimeAwareness.trim() || undefined,
             };
         }
-        // Fetch relevant memories based on last user message
-        let memories = [];
-        let syntheses = [];
-        let memoryHippoCue = null;
-        let hasRelevantCriticalMatch = false;
+        let hostedContext = "";
+        let cue = null;
         try {
-            // Search for relevant memories based on query
-            const results = await client.search({
-                query: lastUserMessage,
-                limit: this.config.injectLimit || 20,
-                excludeAbsorbed: true,
+            const context = await runtimeClient.buildContext({
+                sessionId: hostedSession.hostedSessionId,
+                messages: this.toRuntimeMessages(params.messages),
+                lastUserMessage,
+                conversationId: this.config.conversationId || params.sessionId,
+                includeIndexed: true,
+                includeConstraints: this.cognitiveEnabled,
+                includeCognitive: this.cognitiveEnabled,
+                runtime: this.buildHostedRuntimeMetadata({
+                    sessionId: params.sessionId,
+                }),
             });
-            const qualifyingResults = results.filter((r) => r.score >= FatHippoContextEngine.MIN_VECTOR_SIMILARITY);
-            const searchedMemories = qualifyingResults.map((r) => r.memory);
-            memories = dedupeMemories(searchedMemories);
-            // Inject critical only for non-trivial queries with critical relevance.
-            hasRelevantCriticalMatch = results.some((r) => r.memory.importanceTier === "critical" &&
-                r.score > FatHippoContextEngine.MIN_CRITICAL_RELEVANCE);
-            if (this.config.injectCritical !== false && hasRelevantCriticalMatch) {
-                let criticalMemories;
-                let criticalSyntheses;
-                if (this.cachedCritical &&
-                    Date.now() - this.cachedCritical.fetchedAt < 5 * 60 * 1000) {
-                    criticalMemories = this.cachedCritical.memories;
-                    criticalSyntheses = this.cachedCritical.syntheses;
-                }
-                else {
-                    const critical = await client.getCriticalMemories({
-                        limit: 15,
-                        excludeAbsorbed: true,
-                    });
-                    criticalMemories = critical.memories;
-                    criticalSyntheses = critical.syntheses;
-                    this.cachedCritical = {
-                        memories: criticalMemories,
-                        syntheses: criticalSyntheses,
-                        fetchedAt: Date.now(),
-                    };
-                }
-                memories = dedupeMemories([...criticalMemories, ...memories]);
-                syntheses = criticalSyntheses;
+            hostedContext = context.systemPromptAddition ?? "";
+            if (hostedContext.includes("## Recommended Workflow")) {
+                cue = {
+                    kind: "workflow",
+                    reason: "Fathippo surfaced a learned workflow for this task.",
+                };
             }
-            if (hasRelevantCriticalMatch || syntheses.length > 0) {
-                memoryHippoCue = {
+            else if (hostedContext.includes("## Learned Coding Patterns") ||
+                hostedContext.includes("## Shared Global Patterns") ||
+                hostedContext.includes("## Past Similar Problems")) {
+                cue = {
+                    kind: "learned_fix",
+                    reason: "Fathippo surfaced learned fixes and similar past problems for this task.",
+                };
+            }
+            else if (hostedContext.trim()) {
+                cue = {
                     kind: "memory",
                     reason: "Fathippo recalled relevant memory for this reply.",
                 };
@@ -316,58 +273,22 @@ export class FatHippoContextEngine {
             console.error("[FatHippo] Assemble error:", error);
         }
         const baseMessageTokens = this.estimateMessageTokens(params.messages);
-        if (typeof params.tokenBudget === "number" && params.tokenBudget > 0) {
-            const contextBudget = Math.max(0, params.tokenBudget - baseMessageTokens);
-            const constrained = this.constrainContextToBudget(memories, syntheses, contextBudget);
-            memories = constrained.memories;
-            syntheses = constrained.syntheses;
-        }
-        // Format memories for injection, include indexed summaries
-        const memoryBlock = formatMemoriesForInjection(memories, syntheses);
-        // Fetch constraints (always inject - these are critical rules)
-        let constraintsContext = "";
-        if (this.cognitiveEnabled) {
-            try {
-                constraintsContext = await this.fetchConstraints();
-            }
-            catch (error) {
-                console.error("[FatHippo] Constraints fetch error:", error);
-            }
-        }
-        // Fetch cognitive context (traces + patterns) for coding sessions
-        let cognitiveContext = "";
-        let cognitiveHippoCue = null;
-        if (this.cognitiveEnabled && this.looksLikeCodingQuery(lastUserMessage)) {
-            try {
-                const cognitive = await this.fetchCognitiveContext(params.sessionId, lastUserMessage);
-                if (cognitive.context) {
-                    cognitiveContext = cognitive.context;
-                    cognitiveHippoCue = cognitive.hippoCue;
-                }
-            }
-            catch (error) {
-                console.error("[FatHippo] Cognitive context error:", error);
-            }
-        }
         const hippoNodInstruction = this.buildHippoNodInstruction({
             sessionId: params.sessionId,
             messageCount: params.messages.length,
             lastUserMessage,
-            cue: cognitiveHippoCue ?? memoryHippoCue,
+            cue,
         });
         const fullContext = typeof params.tokenBudget === "number" && params.tokenBudget > 0
             ? this.fitContextToBudget({
                 sections: [
                     runtimeAwareness,
-                    constraintsContext,
-                    memoryBlock ? `${memoryBlock}\n` : "",
-                    indexedContext,
-                    cognitiveContext,
+                    hostedContext,
                     hippoNodInstruction,
                 ],
                 contextBudget: Math.max(0, params.tokenBudget - baseMessageTokens),
             })
-            : runtimeAwareness + constraintsContext + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + cognitiveContext + hippoNodInstruction;
+            : runtimeAwareness + hostedContext + hippoNodInstruction;
         const tokens = estimateTokens(fullContext) + baseMessageTokens;
         return {
             messages: params.messages,
@@ -488,182 +409,6 @@ export class FatHippoContextEngine {
             "Do not claim access to runtime traces, logs, dashboards, or hook internals unless they are provided in the conversation.",
             "",
         ].join("\n");
-    }
-    /**
-     * Check if query looks like a coding task
-     */
-    looksLikeCodingQuery(query) {
-        const codingKeywords = [
-            'bug', 'error', 'fix', 'debug', 'implement', 'build', 'create', 'refactor',
-            'function', 'class', 'api', 'endpoint', 'database', 'query', 'test',
-            'deploy', 'config', 'install', 'code', 'script', 'compile', 'run'
-        ];
-        const queryLower = query.toLowerCase();
-        return codingKeywords.some(kw => queryLower.includes(kw));
-    }
-    /**
-     * Fetch active constraints (always injected)
-     */
-    async fetchConstraints() {
-        if (!this.client) {
-            return "";
-        }
-        try {
-            const data = await this.client.getConstraints();
-            return data.contextFormat || "";
-        }
-        catch {
-            return "";
-        }
-    }
-    /**
-     * Auto-detect and store constraints from user message
-     */
-    async maybeStoreConstraint(message) {
-        if (!this.client) {
-            return;
-        }
-        try {
-            await this.client.storeConstraint({ message });
-        }
-        catch {
-            // Constraint detection is best-effort
-        }
-    }
-    /**
-     * Fetch relevant traces and patterns from cognitive API
-     */
-    async fetchCognitiveContext(sessionId, problem) {
-        if (!this.client) {
-            return { context: null, hippoCue: null };
-        }
-        let data;
-        try {
-            data = await this.client.getRelevantCognitiveContext({
-                sessionId,
-                endpoint: "context-engine.assemble",
-                problem,
-                limit: 3,
-                adaptivePolicy: this.config.adaptivePolicyEnabled !== false,
-            });
-        }
-        catch {
-            return { context: null, hippoCue: null };
-        }
-        if (data.applicationId) {
-            this.sessionApplicationIds.set(sessionId, data.applicationId);
-        }
-        const sections = new Map();
-        if (data.workflow && data.workflow.steps.length > 0) {
-            const stepLines = data.workflow.steps.map((step) => `- ${step}`).join("\n");
-            const explorationNote = data.workflow.exploration ? " exploratory" : "";
-            sections.set("workflow", `## Recommended Workflow\n${stepLines}\n\nStrategy: ${data.workflow.title} (${data.workflow.rationale}${explorationNote})`);
-        }
-        const localPatterns = (data.patterns ?? []).filter((pattern) => pattern.scope !== "global");
-        const globalPatterns = (data.patterns ?? []).filter((pattern) => pattern.scope === "global");
-        if (localPatterns.length > 0) {
-            const patternLines = localPatterns
-                .map((pattern) => {
-                const score = typeof pattern.score === "number" ? `, score ${pattern.score.toFixed(1)}` : "";
-                return `- [${pattern.domain}] ${pattern.approach.slice(0, 200)} (${Math.round(pattern.confidence * 100)}% confidence${score})`;
-            })
-                .join("\n");
-            sections.set("local_patterns", `## Learned Coding Patterns\n${patternLines}`);
-        }
-        if (globalPatterns.length > 0) {
-            const patternLines = globalPatterns
-                .map((pattern) => {
-                const score = typeof pattern.score === "number" ? `, score ${pattern.score.toFixed(1)}` : "";
-                return `- [${pattern.domain}] ${pattern.approach.slice(0, 200)} (${Math.round(pattern.confidence * 100)}% confidence${score})`;
-            })
-                .join("\n");
-            sections.set("global_patterns", `## Shared Global Patterns\n${patternLines}`);
-        }
-        if (data.traces && data.traces.length > 0) {
-            const traceLines = data.traces.map(t => {
-                const icon = t.outcome === 'success' ? '✓' : t.outcome === 'failed' ? '✗' : '~';
-                const solution = t.solution ? ` → ${t.solution.slice(0, 80)}...` : '';
-                return `- ${icon} ${t.problem.slice(0, 80)}${solution}`;
-            }).join('\n');
-            sections.set("traces", `## Past Similar Problems\n${traceLines}`);
-        }
-        if (data.skills && data.skills.length > 0) {
-            const skillLines = data.skills
-                .map((skill) => `- [${skill.scope}] ${skill.name}: ${skill.description} (${Math.round(skill.successRate * 100)}% success)`)
-                .join("\n");
-            sections.set("skills", `## Synthesized Skills\n${skillLines}`);
-        }
-        let hippoCue = null;
-        if (data.workflow && data.workflow.steps.length > 0) {
-            hippoCue = {
-                kind: "workflow",
-                reason: "Fathippo surfaced a learned workflow for this task.",
-            };
-        }
-        else if ((data.skills?.length ?? 0) > 0) {
-            hippoCue = {
-                kind: "learned_fix",
-                reason: "Fathippo surfaced a synthesized skill for this task.",
-            };
-        }
-        else if ((localPatterns.length + globalPatterns.length + (data.traces?.length ?? 0)) >= 2) {
-            hippoCue = {
-                kind: "learned_fix",
-                reason: "Fathippo surfaced learned fixes and similar past problems for this task.",
-            };
-        }
-        if (sections.size === 0) {
-            return { context: null, hippoCue: null };
-        }
-        const orderedSections = [
-            sections.get("workflow"),
-            ...(data.policy?.sectionOrder ?? ["local_patterns", "global_patterns", "traces", "skills"]).map((key) => sections.get(key)),
-        ]
-            .filter((section) => typeof section === "string" && section.length > 0);
-        if (orderedSections.length === 0) {
-            return { context: null, hippoCue: null };
-        }
-        return {
-            context: '\n' + orderedSections.join('\n\n') + '\n',
-            hippoCue,
-        };
-    }
-    async captureStructuredTrace(params) {
-        if (!shouldCaptureCodingTrace(params.messages)) {
-            return;
-        }
-        if (!this.sessionStartTimes.has(params.sessionId)) {
-            this.sessionStartTimes.set(params.sessionId, Date.now() - 60_000);
-        }
-        const payload = buildStructuredTrace({
-            sessionId: params.sessionId,
-            messages: params.messages,
-            toolsUsed: this.detectToolsUsed(params.messages),
-            filesModified: this.detectFilesModified(params.sessionFile, params.messages),
-            workspaceRoot: this.detectWorkspaceRoot(params.sessionFile),
-            startTime: this.sessionStartTimes.get(params.sessionId) ?? Date.now() - 60_000,
-            endTime: Math.min(Date.now(), (this.sessionStartTimes.get(params.sessionId) ?? Date.now()) + 30 * 60 * 1000),
-        });
-        if (!payload) {
-            this.sessionStartTimes.set(params.sessionId, Date.now());
-            return;
-        }
-        try {
-            if (!this.client) {
-                return;
-            }
-            await this.client.captureCognitiveTrace({
-                ...payload,
-                applicationId: this.sessionApplicationIds.get(params.sessionId) ?? null,
-                shareEligible: this.config.shareEligibleByDefault !== false && payload.shareEligible,
-            });
-            this.sessionStartTimes.delete(params.sessionId);
-            this.sessionApplicationIds.delete(params.sessionId);
-        }
-        catch (error) {
-            console.error("[FatHippo] Trace capture error:", error);
-            this.sessionStartTimes.set(params.sessionId, Date.now());
-        }
     }
     async runCognitiveHeartbeat() {
         if (!this.client) {
@@ -879,8 +624,6 @@ export class FatHippoContextEngine {
             if (!result) {
                 return { ok: false, compacted: false, reason: "hosted client unavailable" };
             }
-            // Invalidate cache after dream cycle
-            this.cachedCritical = null;
             return {
                 ok: result.ok,
                 compacted: true,
@@ -912,17 +655,15 @@ export class FatHippoContextEngine {
     /**
      * Handle subagent completion
      */
-    async onSubagentEnded(_params) {
-        void _params;
-        // Future: extract learnings from subagent session
-        // and store them in parent's memory
+    async onSubagentEnded(params) {
+        await this.endHostedSession(params.childSessionKey, this.mapHostedOutcomeFromReason(params.reason));
     }
     /**
      * Cleanup resources
      */
     async dispose() {
-        this.cachedCritical = null;
-        this.sessionApplicationIds.clear();
+        await Promise.allSettled([...this.hostedSessions.keys()].map((sessionId) => this.endHostedSession(sessionId, "abandoned")));
+        this.hostedSessions.clear();
         this.sessionLocalProfiles.clear();
         this.sessionStartTimes.clear();
         this.sessionHippoNodState.clear();
@@ -944,6 +685,130 @@ export class FatHippoContextEngine {
             return textParts.join("\n") || null;
         }
         return null;
+    }
+    buildHostedRuntimeMetadata(params) {
+        const workspaceRoot = params?.sessionFile
+            ? this.detectWorkspaceRoot(params.sessionFile)
+            : params?.sessionId
+                ? this.hostedSessions.get(params.sessionId)?.workspaceRoot
+                : undefined;
+        return {
+            runtime: "openclaw",
+            runtimeVersion: CONTEXT_ENGINE_VERSION,
+            adapterVersion: CONTEXT_ENGINE_VERSION,
+            namespace: this.config.namespace,
+            installationId: this.config.installationId,
+            workspaceId: this.config.workspaceId ?? workspaceRoot,
+            workspaceRoot,
+            conversationId: this.config.conversationId ?? params?.sessionId,
+        };
+    }
+    toRuntimeMessages(messages) {
+        return messages
+            .map((message) => {
+            const content = getMessageText(message).trim();
+            if (!content) {
+                return null;
+            }
+            const raw = message;
+            const rawRole = typeof raw.role === "string"
+                ? raw.role.toLowerCase()
+                : typeof raw.type === "string"
+                    ? raw.type.toLowerCase()
+                    : "assistant";
+            const role = rawRole === "system"
+                ? "system"
+                : rawRole === "user"
+                    ? "user"
+                    : rawRole === "tool" || rawRole === "toolresult"
+                        ? "tool"
+                        : "assistant";
+            return {
+                role,
+                content,
+                toolName: typeof raw.toolName === "string" ? raw.toolName : undefined,
+            };
+        })
+            .filter((message) => message !== null);
+    }
+    extractTurnMessages(messages, prePromptMessageCount) {
+        const sliced = Number.isFinite(prePromptMessageCount) && prePromptMessageCount >= 0
+            ? messages.slice(prePromptMessageCount)
+            : messages;
+        const turnMessages = this.toRuntimeMessages(sliced);
+        return turnMessages.length > 0 ? turnMessages : this.toRuntimeMessages(messages);
+    }
+    async captureLocalTurnMemories(params) {
+        const profileId = this.deriveLocalProfileId(params.sessionId, params.sessionFile);
+        this.sessionLocalProfiles.set(params.sessionId, profileId);
+        const candidates = new Set();
+        const durablePattern = /\b(decide|decided|decision|prefer|preference|always|never|must|remember|rule|workflow|process|plan|configured|set to|resolved|fixed|installed|created|updated)\b/i;
+        const toolPattern = /\b(namespace|workspace|project|plugin|database|schema|endpoint|config|mode|version)\b/i;
+        for (const message of params.messages) {
+            if (this.config.captureUserOnly === true && message.role !== "user") {
+                continue;
+            }
+            const segments = message.content
+                .split(/\n{2,}|(?<=[.!?])\s+/)
+                .map((segment) => segment.trim())
+                .filter(Boolean);
+            for (const segment of segments) {
+                if (!segment || detectPromptInjection(segment) || !matchesCapturePatterns(segment)) {
+                    continue;
+                }
+                if (message.role === "tool" &&
+                    !(durablePattern.test(segment) && toolPattern.test(segment))) {
+                    continue;
+                }
+                if (message.role === "assistant" && !durablePattern.test(segment)) {
+                    continue;
+                }
+                candidates.add(sanitizeContent(segment));
+            }
+        }
+        if (candidates.size === 0) {
+            return;
+        }
+        for (const candidate of candidates) {
+            await this.localStore?.remember({
+                profileId,
+                content: candidate,
+                title: this.buildLocalTitle(candidate),
+            });
+        }
+        invalidateAllLocalResultsForUser(profileId);
+    }
+    mapHostedOutcomeFromReason(reason) {
+        const normalized = reason.toLowerCase();
+        if (/success|completed|done|finished/.test(normalized)) {
+            return "success";
+        }
+        if (/fail|error|crash/.test(normalized)) {
+            return "failure";
+        }
+        return "abandoned";
+    }
+    async endHostedSession(sessionId, outcome) {
+        const runtimeClient = this.runtimeClient;
+        const hostedSession = this.hostedSessions.get(sessionId);
+        if (!runtimeClient || !hostedSession) {
+            return;
+        }
+        try {
+            await runtimeClient.endSession({
+                sessionId: hostedSession.hostedSessionId,
+                outcome,
+                runtime: this.buildHostedRuntimeMetadata({ sessionId }),
+            });
+        }
+        catch (error) {
+            console.error("[FatHippo] End session error:", error);
+        }
+        finally {
+            this.hostedSessions.delete(sessionId);
+            this.sessionStartTimes.delete(sessionId);
+            this.sessionHippoNodState.delete(sessionId);
+        }
     }
     findLastUserMessage(messages) {
         for (let i = messages.length - 1; i >= 0; i--) {

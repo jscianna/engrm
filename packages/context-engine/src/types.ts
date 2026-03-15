@@ -6,8 +6,12 @@ export interface FatHippoConfig {
   apiKey?: string;
   baseUrl?: string;
   mode?: "auto" | "hosted" | "local";
+  namespace?: string;
+  installationId?: string;
+  workspaceId?: string;
   injectCritical?: boolean;
   injectLimit?: number;
+  /** Legacy escape hatch: when true, only user messages are persisted after each turn. */
   captureUserOnly?: boolean;
   dreamCycleOnCompact?: boolean;
   conversationId?: string | null;
@@ -27,6 +31,8 @@ export interface FatHippoConfig {
   pluginVersion?: string;
   /** Internal: plugin id attached to hosted requests for dashboard visibility. */
   pluginId?: string;
+  /** Internal: runtime attached to hosted requests for namespace-aware routing. */
+  runtime?: string;
 }
 
 export interface Memory {

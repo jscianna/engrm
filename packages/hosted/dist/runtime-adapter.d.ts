@@ -45,9 +45,13 @@ export interface FatHippoSessionStartOutput {
 export interface FatHippoBuildContextInput {
     messages: FatHippoConversationMessage[];
     lastUserMessage?: string;
+    sessionId?: string;
     conversationId?: string;
     maxCritical?: number;
     maxRelevant?: number;
+    includeIndexed?: boolean;
+    includeConstraints?: boolean;
+    includeCognitive?: boolean;
     runtime?: Partial<FatHippoRuntimeMetadata>;
 }
 export interface FatHippoBuildContextOutput {
@@ -62,7 +66,17 @@ export interface FatHippoRecordTurnInput {
     messages: FatHippoConversationMessage[];
     turnNumber?: number;
     memoriesUsed?: string[];
+    captureUserOnly?: boolean;
+    captureConstraints?: boolean;
+    captureTrace?: boolean;
     runtime?: Partial<FatHippoRuntimeMetadata>;
+}
+export interface FatHippoTurnCaptureSummary {
+    stored: number;
+    updated: number;
+    merged: number;
+    constraintsDetected: number;
+    traceCaptured: boolean;
 }
 export interface FatHippoRecordTurnOutput {
     turnNumber: number;
@@ -70,6 +84,7 @@ export interface FatHippoRecordTurnOutput {
     systemPromptAddition?: string;
     injectedMemories: FatHippoInjectedMemoryRef[];
     memoriesUsed: string[];
+    captureSummary?: FatHippoTurnCaptureSummary;
 }
 export interface FatHippoRememberInput {
     text: string;

@@ -41,6 +41,7 @@ export default function register(api) {
         const config = {
             ...rawConfig,
             mode,
+            runtime: "openclaw",
             pluginId: CONTEXT_ENGINE_ID,
             pluginVersion: CONTEXT_ENGINE_VERSION,
         };

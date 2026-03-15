@@ -12,10 +12,9 @@ import {
   getActiveConstraints, 
   checkConstraintExists 
 } from "@/lib/constraints-db";
+import { detectConstraint } from "@/lib/constraint-detection";
 
 export const runtime = "nodejs";
-
-import { CONSTRAINT_PATTERNS, TRIGGER_KEYWORDS } from "@/lib/constraint-patterns";
 
 /**
  * GET /api/v1/cognitive/constraints
@@ -150,60 +149,4 @@ export async function POST(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
-
-// Helper: Detect constraint from message using MoA-generated patterns
-function detectConstraint(message: string): {
-  isConstraint: boolean;
-  rule?: string;
-  triggers?: string[];
-  severity?: 'critical' | 'warning';
-  category?: string;
-} {
-  for (const { pattern, category, severity } of CONSTRAINT_PATTERNS) {
-    // Reset lastIndex for global patterns
-    pattern.lastIndex = 0;
-    
-    if (pattern.test(message)) {
-      // Find the matching sentence
-      const sentences = message.split(/[.!?\n]+/).filter(s => s.trim());
-      pattern.lastIndex = 0;
-      const matchingSentence = sentences.find(s => {
-        pattern.lastIndex = 0;
-        return pattern.test(s);
-      });
-      
-      if (matchingSentence) {
-        const rule = matchingSentence.trim();
-        const triggers = extractTriggers(message.toLowerCase());
-        
-        return { 
-          isConstraint: true, 
-          rule, 
-          triggers, 
-          severity,
-          category,
-        };
-      }
-    }
-  }
-  
-  return { isConstraint: false };
-}
-
-function extractTriggers(message: string): string[] {
-  const triggers: string[] = [];
-  
-  for (const [category, keywords] of Object.entries(TRIGGER_KEYWORDS)) {
-    for (const keyword of keywords) {
-      if (message.includes(keyword)) {
-        triggers.push(keyword);
-        if (!triggers.includes(category)) {
-          triggers.push(category);
-        }
-      }
-    }
-  }
-  
-  return [...new Set(triggers)];
 }
