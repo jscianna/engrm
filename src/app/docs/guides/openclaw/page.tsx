@@ -17,20 +17,32 @@ export default function OpenClawGuidePage() {
 
       <H2 id="recommended">Recommended Install</H2>
       <P>
-        The default path is the one-command installer. It installs the plugin, opens a browser approval flow for hosted
-        mode, writes config, and restarts OpenClaw for you.
+        The default path is the interactive one-command installer. It installs the plugin, lets you choose your plan,
+        handles configuration, and restarts OpenClaw for you.
       </P>
 
-      <H3>Hosted</H3>
       <CodeBlock language="bash">{`npx @fathippo/connect openclaw`}</CodeBlock>
 
-      <H3>Local</H3>
-      <CodeBlock language="bash">{`npx @fathippo/connect openclaw --local`}</CodeBlock>
+      <P>
+        The installer prompts you to choose how you want to use FatHippo:
+      </P>
+
+      <CodeBlock language="text">{`How do you want to use FatHippo?
+
+  [1] Free (local-only) — memories stay on your machine, no account needed
+  [2] Hosted ($9.99/mo) — cloud sync, cognitive features, cross-device memory
+
+Choose [1/2]:`}</CodeBlock>
+
+      <H3>Plans</H3>
+      <ul className="mb-4 list-inside list-disc space-y-2 text-zinc-400">
+        <li><strong>Free (Local-Only) — $0/month:</strong> on-device memory, cross-session context recall, lightweight fix/workflow reuse, works offline, no account required.</li>
+        <li><strong>Hosted — $9.99/month or $99.99/year (save 17%):</strong> everything in Free, plus cloud sync across devices, cognitive traces &amp; pattern extraction, skill synthesis, dashboard with receipts &amp; analytics, plugin version management, and priority support.</li>
+      </ul>
 
       <Note type="tip">
-        Hosted mode is the paid account-backed offer. It unlocks browser-link auth, dashboard receipts, hosted retrieval,
-        cognitive context, and account-backed sync. Local mode keeps memory private on the machine running OpenClaw and
-        skips hosted account features.
+        You can also pass <InlineCode>--local</InlineCode> or <InlineCode>--hosted</InlineCode> to skip the interactive
+        prompt: <InlineCode>npx @fathippo/connect openclaw --local</InlineCode>
       </Note>
 
       <H2 id="manual">Manual Fallback</H2>

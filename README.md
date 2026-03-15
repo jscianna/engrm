@@ -46,16 +46,39 @@ The goal is simple: install it once, then let your agent become more useful ever
 
 FatHippo currently has two customer-facing offers:
 
-- `Hosted`: the full FatHippo experience with hosted retrieval, cognition features, sync/imports, dashboard receipts, and plugin version visibility
-- `Local-only`: private on-device memory plus lightweight local workflow/fix reuse, without hosted sync/imports or account-backed cognition
+- **Free (Local-Only) - $0/month**: private on-device memory plus lightweight local workflow/fix reuse, without hosted sync/imports or account-backed cognition. No account required.
+- **Hosted - $9.99/month or $99.99/year (save 17%)**: the full FatHippo experience with cloud sync across devices, cognitive traces & pattern extraction, skill synthesis, dashboard with receipts & analytics, plugin version management, and priority support.
 
 OpenClaw users only install one package: `@fathippo/fathippo-context-engine`.
 
 ---
 
-## Quick Start: Hosted OpenClaw
+## Quick Start: Interactive Installer (Recommended)
 
-If you already use OpenClaw, this is the primary setup path.
+The fastest way to connect FatHippo to OpenClaw:
+
+```bash
+npx @fathippo/connect openclaw
+```
+
+The installer prompts you to choose your plan:
+
+```
+How do you want to use FatHippo?
+
+  [1] Free (local-only) — memories stay on your machine, no account needed
+  [2] Hosted ($9.99/mo) — cloud sync, cognitive features, cross-device memory
+
+Choose [1/2]:
+```
+
+It handles plugin installation, configuration, and gateway restart automatically.
+
+---
+
+## Quick Start: Hosted OpenClaw (Manual)
+
+If you prefer manual setup or need a locked-down environment:
 
 ```bash
 # 1. Install the plugin
@@ -82,11 +105,11 @@ After that, FatHippo starts working automatically:
 - coding traces are captured after meaningful work
 - patterns and skills are promoted from verified outcomes
 - retrieval and workflow strategy adapt privately over time
-- users see small “FatHippo helped” receipts when it materially contributed
+- users see small "FatHippo helped" receipts when it materially contributed
 
 ---
 
-## Quick Start: Local-Only OpenClaw
+## Quick Start: Local-Only OpenClaw (Manual)
 
 If you want a fully private setup on the machine running OpenClaw:
 
@@ -221,7 +244,7 @@ They should mainly notice:
 - OpenClaw already knows what to try on repeated issues
 - the suggested workflow is better than before
 - fewer retries are needed on familiar bug classes
-- the dashboard shows short “FatHippo helped” receipts
+- the dashboard shows short "FatHippo helped" receipts
 
 That means the product stays low-friction while still making the value legible.
 

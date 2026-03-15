@@ -21,6 +21,10 @@ import {
   Terminal,
   Menu,
   X,
+  Check,
+  Star,
+  Cloud,
+  HardDrive,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -198,51 +202,44 @@ function OpenClawCodePreview() {
         <div className="p-6 font-mono text-base leading-8 bg-[#0D1117]">
           {/* Line 1: Comment */}
           <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.4 }}>
-            <span className={colors.comment}># Install</span>
+            <span className={colors.comment}># One command to connect</span>
           </motion.div>
           
-          {/* Line 2: Install command */}
+          {/* Line 2: npx command */}
           <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.46 }}>
-            <span className={colors.command}>openclaw</span>{" "}
-            <span className={colors.subcommand}>plugins</span>{" "}
-            <span className={colors.action}>install</span>{" "}
-            <span className={colors.package}>@fathippo/fathippo-context-engine</span>
+            <span className={colors.command}>npx</span>{" "}
+            <span className={colors.package}>@fathippo/connect</span>{" "}
+            <span className={colors.action}>openclaw</span>
           </motion.div>
           
           {/* Empty line */}
           <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ delay: 0.52 }}>&nbsp;</motion.div>
           
-          {/* Line 3: Comment */}
+          {/* Line 3: Prompt output */}
           <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.58 }}>
-            <span className={colors.comment}># Configure</span>
+            <span className={colors.comment}>How do you want to use FatHippo?</span>
           </motion.div>
           
-          {/* Line 4: Config slot */}
+          {/* Line 4: Option 1 */}
           <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.64 }}>
-            <span className={colors.command}>openclaw</span>{" "}
-            <span className={colors.subcommand}>config</span>{" "}
-            <span className={colors.action}>set</span>{" "}
-            <span className={colors.key}>plugins.slots.contextEngine</span>
-            <span className={colors.equals}> </span>
-            <span className={colors.value}>fathippo-context-engine</span>
+            <span className={colors.comment}>{"  "}</span>
+            <span className={colors.key}>[1]</span>{" "}
+            <span className={colors.value}>Free (local-only)</span>
           </motion.div>
           
-          {/* Line 5: Config apiKey */}
+          {/* Line 5: Option 2 */}
           <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.7 }}>
-            <span className={colors.command}>openclaw</span>{" "}
-            <span className={colors.subcommand}>config</span>{" "}
-            <span className={colors.action}>set</span>{" "}
-            <span className={colors.key}>plugins.entries.fathippo-context-engine.config.apiKey</span>
-            <span className={colors.equals}> </span>
-            <span className={colors.value}>mem_xxx</span>
+            <span className={colors.comment}>{"  "}</span>
+            <span className={colors.key}>[2]</span>{" "}
+            <span className={colors.value}>Hosted ($9.99/mo)</span>
           </motion.div>
           
           {/* Empty line */}
           <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ delay: 0.76 }}>&nbsp;</motion.div>
           
-          {/* Line 6: Done comment */}
+          {/* Line 6: Done */}
           <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.82 }}>
-            <span className={colors.comment}># Done.</span>
+            <span className={colors.comment}># That&apos;s it. Your agent remembers now.</span>
           </motion.div>
         </div>
       </div>
@@ -330,6 +327,187 @@ function BentoGrid() {
 }
 
 // ============================================================================
+// Pricing Section
+// ============================================================================
+function PricingSection() {
+  const [annual, setAnnual] = useState(false);
+
+  const freeFeatures = [
+    "On-device memory (private, no cloud)",
+    "Cross-session context recall",
+    "Lightweight fix/workflow reuse",
+    "Works offline",
+    "No account required",
+  ];
+
+  const hostedFeatures = [
+    "Everything in Free, plus:",
+    "Cloud sync across devices",
+    "Cognitive traces & pattern extraction",
+    "Skill synthesis from coding patterns",
+    "Dashboard with receipts & analytics",
+    "Plugin version management",
+    "Priority support",
+  ];
+
+  return (
+    <section className="relative z-10 px-6 py-24 bg-[#FAFAFA]" id="pricing">
+      <div className="mx-auto max-w-5xl">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="text-center mb-16"
+        >
+          <Badge
+            variant="outline"
+            className="mb-4 border-[#8B5CF6]/20 bg-[#8B5CF6]/[0.04] text-[#7C3AED] font-medium"
+          >
+            Simple Pricing
+          </Badge>
+          <h2 className="text-4xl font-semibold text-[#111827] mb-4 tracking-tight">
+            Start free. Scale when ready.
+          </h2>
+          <p className="text-lg text-[#6B7280] max-w-lg mx-auto mb-8">
+            Local-only is free forever. Go hosted when you need sync, cognition, and cross-device memory.
+          </p>
+
+          {/* Monthly / Annual toggle */}
+          <div className="inline-flex items-center gap-3 rounded-full bg-white border border-[#E5E7EB] p-1 shadow-sm">
+            <button
+              onClick={() => setAnnual(false)}
+              className={`rounded-full px-4 py-1.5 text-sm font-medium transition-all ${
+                !annual
+                  ? "bg-[#111827] text-white shadow-sm"
+                  : "text-[#6B7280] hover:text-[#111827]"
+              }`}
+            >
+              Monthly
+            </button>
+            <button
+              onClick={() => setAnnual(true)}
+              className={`rounded-full px-4 py-1.5 text-sm font-medium transition-all ${
+                annual
+                  ? "bg-[#111827] text-white shadow-sm"
+                  : "text-[#6B7280] hover:text-[#111827]"
+              }`}
+            >
+              Annual
+              <span className="ml-1.5 text-xs text-[#059669] font-semibold">save 17%</span>
+            </button>
+          </div>
+        </motion.div>
+
+        <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+          {/* Free Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-50px" }}
+            transition={{ duration: 0.5, ease: [0.21, 0.47, 0.32, 0.98] }}
+            className="relative"
+          >
+            <div className="rounded-2xl bg-white p-8 border border-[#E5E7EB] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.04)] h-full flex flex-col">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="inline-flex items-center justify-center rounded-xl bg-[#F3F4F6] p-3">
+                  <HardDrive className="h-5 w-5 text-[#6B7280]" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-[#111827] tracking-tight">Free</h3>
+                  <p className="text-sm text-[#6B7280]">Local-Only</p>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <span className="text-4xl font-bold text-[#111827] tracking-tight">$0</span>
+                <span className="text-[#6B7280] ml-1">/month</span>
+              </div>
+
+              <ul className="space-y-3 mb-8 flex-1">
+                {freeFeatures.map((feature) => (
+                  <li key={feature} className="flex items-start gap-3 text-sm text-[#4B5563]">
+                    <Check className="h-4 w-4 text-[#9CA3AF] mt-0.5 shrink-0" />
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+
+              <Button
+                asChild
+                variant="outline"
+                className="w-full border-[#E5E7EB] text-[#111827] hover:bg-[#F9FAFB] font-medium h-11"
+              >
+                <Link href="/docs">Install Free</Link>
+              </Button>
+            </div>
+          </motion.div>
+
+          {/* Hosted Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-50px" }}
+            transition={{ duration: 0.5, delay: 0.1, ease: [0.21, 0.47, 0.32, 0.98] }}
+            className="relative"
+          >
+            {/* Gradient border effect */}
+            <div className="absolute -inset-[1px] rounded-2xl bg-gradient-to-br from-[#0070F3] via-[#00B8D9] to-[#8B5CF6] opacity-100" />
+            <div className="relative rounded-2xl bg-white p-8 h-full flex flex-col">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="inline-flex items-center justify-center rounded-xl bg-[#0070F3]/[0.08] p-3">
+                    <Cloud className="h-5 w-5 text-[#0070F3]" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-[#111827] tracking-tight">Hosted</h3>
+                    <p className="text-sm text-[#6B7280]">Full cognitive stack</p>
+                  </div>
+                </div>
+                <Badge className="bg-[#0070F3]/[0.08] text-[#0070F3] border-[#0070F3]/20 font-medium">
+                  <Star className="h-3 w-3 mr-1" />
+                  Popular
+                </Badge>
+              </div>
+
+              <div className="mb-6">
+                <span className="text-4xl font-bold text-[#111827] tracking-tight">
+                  {annual ? "$99.99" : "$9.99"}
+                </span>
+                <span className="text-[#6B7280] ml-1">/{annual ? "year" : "month"}</span>
+                {annual && (
+                  <span className="ml-2 text-sm text-[#059669] font-medium">$8.33/mo</span>
+                )}
+              </div>
+
+              <ul className="space-y-3 mb-8 flex-1">
+                {hostedFeatures.map((feature, i) => (
+                  <li
+                    key={feature}
+                    className={`flex items-start gap-3 text-sm ${
+                      i === 0 ? "text-[#111827] font-medium" : "text-[#4B5563]"
+                    }`}
+                  >
+                    <Check className={`h-4 w-4 mt-0.5 shrink-0 ${i === 0 ? "text-[#0070F3]" : "text-[#0070F3]"}`} />
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+
+              <GradientButton asChild className="w-full h-11">
+                <Link href="/dashboard/settings">
+                  Get Started
+                  <ArrowRight className="h-4 w-4 ml-1" />
+                </Link>
+              </GradientButton>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ============================================================================
 // Main Page Component
 // ============================================================================
 export default function Home() {
@@ -363,6 +541,12 @@ export default function Home() {
             FatHippo
           </Link>
           <nav className="hidden md:flex items-center gap-6">
+            <a
+              href="#pricing"
+              className="text-sm text-[#6B7280] hover:text-[#111827] transition-colors font-medium"
+            >
+              Pricing
+            </a>
             <Link
               href="/docs"
               className="text-sm text-[#6B7280] hover:text-[#111827] transition-colors font-medium"
@@ -433,6 +617,12 @@ export default function Home() {
           
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-6">
+            <a
+              href="#pricing"
+              className="text-sm text-[#6B7280] hover:text-[#111827] transition-colors font-medium"
+            >
+              Pricing
+            </a>
             <Link
               href="/docs"
               className="text-sm text-[#6B7280] hover:text-[#111827] transition-colors font-medium"
@@ -495,6 +685,13 @@ export default function Home() {
         {mobileMenuOpen && (
           <div className="md:hidden absolute top-full left-0 right-0 bg-white border-b border-[#F3F4F6] shadow-lg z-50">
             <nav className="flex flex-col px-6 py-4 gap-4">
+              <a
+                href="#pricing"
+                className="text-base text-[#6B7280] hover:text-[#111827] transition-colors font-medium py-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Pricing
+              </a>
               <Link
                 href="/docs"
                 className="text-base text-[#6B7280] hover:text-[#111827] transition-colors font-medium py-2"
@@ -765,6 +962,9 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Pricing */}
+      <PricingSection />
+
       {/* Final CTA */}
       <section className="relative z-10 px-6 py-32">
         <div className="mx-auto max-w-2xl text-center">
@@ -831,6 +1031,12 @@ export default function Home() {
           
           {/* Nav links - wrap on mobile */}
           <div className="flex items-center gap-4 md:gap-6">
+            <a
+              href="#pricing"
+              className="text-sm text-[#6B7280] hover:text-[#111827] font-medium"
+            >
+              Pricing
+            </a>
             <Link
               href="/docs"
               className="text-sm text-[#6B7280] hover:text-[#111827] font-medium"
