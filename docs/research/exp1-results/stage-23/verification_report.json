@@ -1,0 +1,39 @@
+{
+  "summary": {
+    "total": 3,
+    "verified": 3,
+    "suspicious": 0,
+    "hallucinated": 0,
+    "skipped": 0,
+    "integrity_score": 1.0
+  },
+  "results": [
+    {
+      "cite_key": "borg2026code",
+      "title": "Code for Machines, Not Just Humans: Quantifying AI-Friendliness with Code Health Metrics",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "arxiv_id",
+      "details": "Confirmed via arXiv: 'Code for Machines, Not Just Humans: Quantifying AI-Friendliness with Code Health Metrics'",
+      "relevance_score": 0.7
+    },
+    {
+      "cite_key": "ahmed2026limits",
+      "title": "Limits of n-gram Style Control for LLMs via Logit-Space Injection",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "arxiv_id",
+      "details": "Confirmed via arXiv: 'Limits of n-gram Style Control for LLMs via Logit-Space Injection'",
+      "relevance_score": 0.3
+    },
+    {
+      "cite_key": "dissanayake2025navigating",
+      "title": "Navigating the State of Cognitive Flow: Context-Aware AI Interventions for Effective Reasoning Support",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "arxiv_id",
+      "details": "Confirmed via arXiv: 'Navigating the State of Cognitive Flow: Context-Aware AI Interventions for Effective Reasoning Support'",
+      "relevance_score": 0.8
+    }
+  ]
+}

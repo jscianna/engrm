@@ -1,0 +1,51 @@
+{
+  "sources": [
+    {
+      "id": "S1",
+      "name": "IEEE Xplore",
+      "type": "academic_journal",
+      "url": "https://ieeexplore.ieee.org/",
+      "status": "active",
+      "query": "context injection AND AI coding agents AND codebase profiles",
+      "verified_at": "2023-10-05"
+    },
+    {
+      "id": "S2",
+      "name": "ACM Digital Library",
+      "type": "academic_journal",
+      "url": "https://dl.acm.org/",
+      "status": "active",
+      "query": "context windows AND user behavioral data AND AI performance",
+      "verified_at": "2023-10-05"
+    },
+    {
+      "id": "S3",
+      "name": "Google Scholar",
+      "type": "search_engine",
+      "url": "https://scholar.google.com/",
+      "status": "active",
+      "query": "error patterns AND AI task success rates",
+      "verified_at": "2023-10-05"
+    },
+    {
+      "id": "S4",
+      "name": "ArXiv",
+      "type": "preprint_repository",
+      "url": "https://arxiv.org/",
+      "status": "active",
+      "query": "historical traces AND coding tasks AND AI optimization",
+      "verified_at": "2023-10-05"
+    },
+    {
+      "id": "S5",
+      "name": "SpringerLink",
+      "type": "academic_journal",
+      "url": "https://link.springer.com/",
+      "status": "active",
+      "query": "AI coding agents AND task completion rates",
+      "verified_at": "2023-10-05"
+    }
+  ],
+  "count": 5,
+  "generated": "2026-03-15T14:30:47+00:00"
+}

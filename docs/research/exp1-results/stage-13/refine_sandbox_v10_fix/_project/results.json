@@ -1,0 +1,18 @@
+{
+  "metrics": {
+    "DynamicTaskAwareContextInjection seed=1 primary_metric": 0.5,
+    "DynamicTaskAwareContextInjection seed=2 primary_metric": 0.5,
+    "DynamicTaskAwareContextInjection seed=3 primary_metric": 0.5,
+    "DynamicTaskAwareContextInjection seed=4 primary_metric": 0.5,
+    "DynamicTaskAwareContextInjection seed=5 primary_metric": 0.5,
+    "NoContextPrioritization seed=1 primary_metric": 0.5,
+    "NoContextPrioritization seed=2 primary_metric": 0.5,
+    "NoContextPrioritization seed=3 primary_metric": 0.5,
+    "NoContextPrioritization seed=4 primary_metric": 0.5,
+    "NoContextPrioritization seed=5 primary_metric": 0.5
+  },
+  "elapsed_sec": 0.01,
+  "time_budget_sec": 600,
+  "steps_completed": 0,
+  "nan_count": 0
+}

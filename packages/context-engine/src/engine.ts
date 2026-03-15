@@ -65,6 +65,9 @@ import {
 } from "./utils/filtering.js";
 import type { CodebaseProfile } from "./profiler/types.js";
 import { loadCodebaseProfile, formatCodebaseProfileForInjection, isProfileStale, formatStalenessHint } from "./profiler/index.js";
+import { detectModelFamily, formatContextForModel, type ModelDetectionResult } from "./model-adapters/index.js";
+import { detectTaskType, type TaskDetectionResult } from "./task-detection.js";
+import { prioritizeForTask, type ContextPriority } from "./context-prioritizer.js";
 
 type RuntimeMode = "hosted" | "local";
 
@@ -107,6 +110,13 @@ export class FatHippoContextEngine implements ContextEngine {
 
   // Collective intelligence state
   private collectiveEnabled: boolean;
+
+  // Model adapter state
+  private modelAdapter: ModelDetectionResult | null = null;
+  private modelAdaptersEnabled: boolean;
+
+  // Dynamic prioritization state
+  private dynamicPrioritizationEnabled: boolean;
   
   private static readonly TRIVIAL_ACKS = new Set([
     "ok",
@@ -155,6 +165,10 @@ export class FatHippoContextEngine implements ContextEngine {
     this.userDNAEnabled = config.userDNAEnabled !== false;
     // Enable collective intelligence (default: true for hosted)
     this.collectiveEnabled = this.mode === "hosted" && config.collectiveEnabled !== false;
+    // Enable model adapters (default: true)
+    this.modelAdaptersEnabled = config.modelAdaptersEnabled !== false;
+    // Enable dynamic task-aware prioritization (default: true)
+    this.dynamicPrioritizationEnabled = config.dynamicPrioritizationEnabled !== false;
   }
 
   /**
@@ -163,9 +177,19 @@ export class FatHippoContextEngine implements ContextEngine {
   async bootstrap(params: {
     sessionId: string;
     sessionFile: string;
+    model?: string;
   }): Promise<BootstrapResult> {
     try {
       this.sessionStartTimes.set(params.sessionId, Date.now());
+
+      // Detect model adapter from bootstrap params or config
+      if (this.modelAdaptersEnabled && !this.modelAdapter) {
+        const modelId = params.model ?? this.config.runtime ?? undefined;
+        if (modelId) {
+          this.modelAdapter = detectModelFamily(modelId);
+        }
+      }
+
       const workspaceRoot = this.detectWorkspaceRoot(params.sessionFile);
 
       // Load existing codebase profile (read-only, no generation)
@@ -461,19 +485,46 @@ export class FatHippoContextEngine implements ContextEngine {
       ? await this.getCollectiveWisdomBlock(lastUserMessage, params.messages)
       : "";
 
-    const fullContext = typeof params.tokenBudget === "number" && params.tokenBudget > 0
-      ? this.fitContextToBudget({
-          sections: [
-            runtimeAwareness,
-            profileBlock,
-            userDNABlock,
-            hostedContext,
-            collectiveBlock,
-            hippoNodInstruction,
-          ],
-          contextBudget: Math.max(0, params.tokenBudget - baseMessageTokens),
-        })
-      : runtimeAwareness + profileBlock + userDNABlock + hostedContext + collectiveBlock + hippoNodInstruction;
+    // Map section IDs to their content blocks
+    const sectionMap: Record<string, string> = {
+      runtime: runtimeAwareness,
+      codebaseProfile: profileBlock,
+      userDNA: userDNABlock,
+      traces: hostedContext,
+      collective: collectiveBlock,
+    };
+
+    // Use model adapter budget if available and no explicit budget
+    const adapterBudget = this.modelAdaptersEnabled && this.modelAdapter
+      ? this.modelAdapter.adapter.optimalContextBudget
+      : undefined;
+    const effectiveBudget = typeof params.tokenBudget === "number" && params.tokenBudget > 0
+      ? params.tokenBudget
+      : adapterBudget;
+
+    // Dynamic task-aware prioritization
+    const contextSections = this.buildDynamicSections({
+      messages: params.messages,
+      sectionMap,
+      totalBudget: effectiveBudget
+        ? Math.max(0, effectiveBudget - baseMessageTokens)
+        : undefined,
+      suffix: hippoNodInstruction,
+    });
+
+    let fullContext: string;
+    if (effectiveBudget && effectiveBudget > 0) {
+      fullContext = this.fitContextToBudget({
+        sections: contextSections,
+        contextBudget: Math.max(0, effectiveBudget - baseMessageTokens),
+      });
+    } else {
+      fullContext = contextSections.join("");
+    }
+
+    // Apply model-aware wrapping if adapter detected and prefers XML
+    fullContext = this.applyModelFormatting(fullContext);
+
     const tokens = estimateTokens(fullContext) + baseMessageTokens;
 
     return {
@@ -591,21 +642,33 @@ export class FatHippoContextEngine implements ContextEngine {
       localProfileId !== "openclaw-local-default" ? localProfileId : undefined,
     );
 
-    const fullContext = typeof params.tokenBudget === "number" && params.tokenBudget > 0
+    // Map section IDs to their content blocks (local mode)
+    // traces = workflow + pattern blocks; memories = memoryBlock + indexedContext
+    const localSectionMap: Record<string, string> = {
+      runtime: runtimeAwareness,
+      codebaseProfile: profileBlock,
+      userDNA: userDNABlock,
+      traces: workflowBlock + patternBlock,
+      memories: (memoryBlock ? `${memoryBlock}\n` : "") + indexedContext,
+    };
+
+    const localBudget = typeof params.tokenBudget === "number" && params.tokenBudget > 0
+      ? Math.max(0, params.tokenBudget - baseTokens)
+      : undefined;
+
+    const localSections = this.buildDynamicSections({
+      messages: params.messages,
+      sectionMap: localSectionMap,
+      totalBudget: localBudget,
+      suffix: hippoNodInstruction,
+    });
+
+    const fullContext = localBudget !== undefined
         ? this.fitContextToBudget({
-          sections: [
-            runtimeAwareness,
-            profileBlock,
-            userDNABlock,
-            workflowBlock,
-            patternBlock,
-            memoryBlock ? `${memoryBlock}\n` : "",
-            indexedContext,
-            hippoNodInstruction,
-          ],
-          contextBudget: Math.max(0, params.tokenBudget - baseTokens),
+          sections: localSections,
+          contextBudget: localBudget,
         })
-      : runtimeAwareness + profileBlock + userDNABlock + workflowBlock + patternBlock + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + hippoNodInstruction;
+      : localSections.join("");
 
     return {
       messages: params.messages,
@@ -1444,6 +1507,80 @@ export class FatHippoContextEngine implements ContextEngine {
     };
   }
 
+  /**
+   * Build dynamically-ordered context sections based on task detection.
+   *
+   * When dynamic prioritization is enabled and task confidence is >= 0.3,
+   * reorders sections by task-adjusted priority. Otherwise, preserves
+   * the default static ordering (existing behavior).
+   *
+   * @param params.messages - conversation messages for task detection
+   * @param params.sectionMap - map of sectionId → content string
+   * @param params.totalBudget - optional total token budget for allocation
+   * @param params.suffix - content always appended last (e.g., hippo nod)
+   * @returns ordered array of section content strings
+   */
+  private buildDynamicSections(params: {
+    messages: AgentMessage[];
+    sectionMap: Record<string, string>;
+    totalBudget?: number;
+    suffix?: string;
+  }): string[] {
+    const { messages, sectionMap, suffix } = params;
+
+    // Default static order: the insertion order of sectionMap keys
+    const defaultOrder = Object.keys(sectionMap);
+
+    if (!this.dynamicPrioritizationEnabled) {
+      const sections = defaultOrder.map((id) => sectionMap[id]).filter(Boolean);
+      if (suffix?.trim()) sections.push(suffix);
+      return sections;
+    }
+
+    // Detect task type from messages
+    const runtimeMessages = messages.map((msg) => {
+      const raw = msg as unknown as Record<string, unknown>;
+      return {
+        role: (typeof raw.role === "string" ? raw.role : "assistant"),
+        content: getMessageText(msg),
+      };
+    });
+
+    const taskResult: TaskDetectionResult = detectTaskType(runtimeMessages);
+
+    // Low confidence → fall back to static ordering
+    if (taskResult.confidence < 0.3) {
+      const sections = defaultOrder.map((id) => sectionMap[id]).filter(Boolean);
+      if (suffix?.trim()) sections.push(suffix);
+      return sections;
+    }
+
+    // Get dynamic priorities
+    const availableSections = defaultOrder.filter((id) => sectionMap[id]?.trim());
+    const budget = params.totalBudget ?? 0;
+    const priorities: ContextPriority[] = prioritizeForTask(
+      taskResult.taskType,
+      budget,
+      availableSections,
+    );
+
+    // Log for debugging (verbose only)
+    if (this.config.cognitiveEnabled !== false) {
+      console.log(
+        `[FatHippo] Task detected: ${taskResult.taskType} (confidence: ${taskResult.confidence}, signals: ${taskResult.signals.slice(0, 3).join(", ")})`,
+      );
+    }
+
+    // Reorder sections by adjusted priority
+    const ordered = priorities
+      .sort((a, b) => a.adjustedPriority - b.adjustedPriority)
+      .map((p) => sectionMap[p.sectionId])
+      .filter(Boolean);
+
+    if (suffix?.trim()) ordered.push(suffix);
+    return ordered;
+  }
+
   private fitContextToBudget(params: {
     sections: string[];
     contextBudget: number;
@@ -1475,6 +1612,27 @@ export class FatHippoContextEngine implements ContextEngine {
     }
 
     return selected.join("\n\n");
+  }
+
+  /**
+   * Apply model-aware formatting to assembled context.
+   * When adapter prefers XML, wrap context in XML tags.
+   */
+  private applyModelFormatting(context: string): string {
+    if (!this.modelAdaptersEnabled || !this.modelAdapter) {
+      return context;
+    }
+
+    const adapter = this.modelAdapter.adapter;
+
+    if (adapter.prefersXml) {
+      const trimmed = context.trim();
+      if (!trimmed) return context;
+      // Wrap the entire FatHippo context block in XML for Claude-family models
+      return `<fathippo-context>\n${trimmed}\n</fathippo-context>\n`;
+    }
+
+    return context;
   }
 
   private truncateContextSection(section: string, tokenBudget: number): string {

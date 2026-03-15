@@ -1,0 +1,280 @@
+{
+  "generated": "2026-03-15T14:38:32+00:00",
+  "mode": "sandbox",
+  "metric_key": "primary_metric",
+  "metric_direction": "maximize",
+  "max_iterations_requested": 10,
+  "max_iterations_executed": 10,
+  "baseline_metric": 0.0,
+  "project_files": [
+    "main.py",
+    "optimizers.py"
+  ],
+  "iterations": [
+    {
+      "iteration": 1,
+      "version_dir": "experiment_v1/",
+      "files": [
+        "main.py",
+        "optimizers.py"
+      ],
+      "validation_ok": true,
+      "validation_summary": "Code validation: 1 warning(s)",
+      "repaired": false,
+      "metric": null,
+      "improved": false,
+      "sandbox": {
+        "returncode": 0,
+        "metrics": {},
+        "elapsed_sec": 0.04384220810607076,
+        "timed_out": false,
+        "stderr": "",
+        "stdout": "REGISTERED_CONDITIONS: StaticContextInjection, MultiAgentContextManagement, DynamicTaskAwareContextInjection, AIRealTimeVulnerabilityDetection, NoContextPrioritization, HumanOnlyVulnerabilityDetection\nStaticContextInjection seed=1 primary_metric: 0.6162434536366324\nStaticContextInjection seed=2 primary_metric: 0.5958324215259453\nStaticContextInjection seed=3 primary_metric: 0.6178862847343032\nStaticContextInjection seed=4 primary_metric: 0.6005056170714294\nStaticContextInjection seed=5 primary_metric: 0.6044122748688504\nStaticContextInjection seed=6 primary_metric: 0.5968821632651248\nStaticContextInjection seed=7 primary_metric: 0.6169052570380036\nStaticContextInjection seed=8 primary_metric: 0.6009120471661982\nStaticContextInjection seed=9 primary_metric: 0.6000110855471221\nStaticContextInjection seed=10 primary_metric: 0.6133158650412952\nCondition=StaticContextInjection primary_metric_mean: 0.6062906469894905 primary_metric_std: 0.0083593775892932\nMultiAgentContextManagement seed=1 primary_metric: 0.6662434536366324\nMultiAgentContextManagement seed=2 primary_metric: 0.6458324215259453\nMultiAgentContextManagement seed=3 primary_metric: 0.6678862847343032\nMultiAgentContextManagement seed=4 primary_metric: 0.6505056170714294\nMultiAgentContextManagement seed=5 primary_metric: 0.6544122748688505\nMultiAgentContextManagement seed=6 primary_metric: 0.6468821632651248\nMultiAgentContextManagement seed=7 primary_metric: 0.6669052570380036\nMultiAgentContextManagement seed=8 primary_metric: 0.6509120471661982\nMultiAgentContextManagement seed=9 primary_metric: 0.6500110855471222\nMultiAgentContextManagement seed=10 primary_metric: 0.6633158650412952\nCondition=MultiAgentContextManagement primary_metric_mean: 0.6562906469894905 primary_metric_std: 0.008359377589293199\nDynamicTaskAwareContextInjection seed=1 primary_metric: 0.7662434536366324\nDynamicTaskAwareContextInjection seed=2 primary_metric: 0.7458324215259453\nDynamicTaskAwareContextInjection seed=3 primary_metric: 0.7678862847343032\nDynamicTaskAwareContextInjection seed=4 primary_metric: 0.7505056170714294\nDynamicTaskAwareContextInjection seed=5 primary_metric: 0.7544122748688504\nDynamicTaskAwareContextInjection seed=6 primary_metric: 0.7468821632651248\nDynamicTaskAwareContextInjection seed=7 primary_metric: 0.7669052570380036\nDynamicTaskAwareContextInjection seed=8 primary_metric: 0.7509120471661982\nDynamicTaskAwareContextInjection seed=9 primary_metric: 0.7500110855471221\nDynamicTaskAwareContextInjection seed=10 primary_metric: 0.7633158650412952\nCondition=DynamicTaskAwareContextInjection primary_metric_mean: 0.7562906469894904 primary_metric_std: 0.008359377589293199\nAIRealTimeVulnerabilityDetection seed=1 primary_metric: 0.7162434536366323\nAIRealTimeVulnerabilityDetection seed=2 primary_metric: 0.6958324215259453\nAIRealTimeVulnerabilityDetection seed=3 primary_metric: 0.7178862847343032\nAIRealTimeVulnerabilityDetection seed=4 primary_metric: 0.7005056170714293\nAIRealTimeVulnerabilityDetection seed=5 primary_metric: 0.7044122748688504\nAIRealTimeVulnerabilityDetection seed=6 primary_metric: 0.6968821632651248\nAIRealTimeVulnerabilityDetection seed=7 primary_metric: 0.7169052570380036\nAIRealTimeVulnerabilityDetection seed=8 primary_metric: 0.7009120471661981\nAIRealTimeVulnerabilityDetection seed=9 primary_metric: 0.7000110855471221\nAIRealTimeVulnerabilityDetection seed=10 primary_metric: 0.7133158650412952\nCondition=AIRealTimeVulnerabilityDetection primary_metric_mean: 0.7062906469894904 primary_metric_std: 0.008359377589293199\nNoContextPrioritization seed=1 primary_metric: 0.5662434536366324\nNoContextPrioritization seed=2 primary_metric: 0.5458324215259454\nNoContextPrioritization seed=3 primary_metric: 0.5678862847343032\nNoContextPrioritization seed=4 primary_metric: 0.5505056170714294\nNoContextPrioritization seed=5 primary_metric: 0.5544122748688505\nNoContextPrioritization seed=6 primary_metric: 0.5468821632651248\nNoContextPrioritization seed=7 primary_metric: 0.5669052570380037\nNoContextPrioritization seed=8 primary_metric: 0.5509120471661982\nNoContextPrioritization seed=9 primary_metric: 0.5500110855471222\nNoContextPrioritization seed=10 primary_metric: 0.5633158650412953\nCondition=NoContextPrioritization primary_metric_mean: 0.5562906469894905 primary_metric_std: 0.008359377589293199\nHumanOnlyVulnerabilityDetection seed=1 primary_metric: 0.5162434536366324\nHumanOnlyVulnerabilityDetection seed=2 primary_metric: 0.4958324215259453\nHumanOnlyVulnerabilityDetection seed=3 primary_metric: 0.5178862847343032\nHumanOnlyVulnerabilityDetection seed=4 primary_metric: 0.5005056170714294\nHumanOnlyVulnerabilityDetection seed=5 primary_metric: 0.5044122748688504\nHumanOnlyVulnerabilityDetection seed=6 primary_metric: 0.49688216326512485\nHumanOnlyVulnerabilityDetection seed=7 primary_metric: 0.5169052570380036\nHumanOnlyVulnerabilityDetection seed=8 primary_metric: 0.5009120471661982\nHumanOnlyVulnerabilityDetection seed=9 primary_metric: 0.5000110855471221\nHumanOnlyVulnerabilityDetection seed=10 primary_metric: 0.5133158650412952\nCondition=HumanOnlyVulnerabilityDetection primary_metric_mean: 0.5062906469894904 primary_metric_std: 0.008359377589293194\n"
+      }
+    },
+    {
+      "iteration": 2,
+      "version_dir": "experiment_v2/",
+      "files": [
+        "main.py",
+        "optimizers.py"
+      ],
+      "validation_ok": true,
+      "validation_summary": "Code validation: 1 warning(s)",
+      "repaired": false,
+      "metric": null,
+      "improved": false,
+      "sandbox": {
+        "returncode": 0,
+        "metrics": {},
+        "elapsed_sec": 0.04336016671732068,
+        "timed_out": false,
+        "stderr": "",
+        "stdout": "REGISTERED_CONDITIONS: StaticContextInjection, MultiAgentContextManagement, DynamicTaskAwareContextInjection, AIRealTimeVulnerabilityDetection, NoContextPrioritization, HumanOnlyVulnerabilityDetection\nStaticContextInjection seed=1 primary_metric: 0.6812172681831621\nStaticContextInjection seed=1 execution_time: 0.5001715622260173\nStaticContextInjection seed=1 error_rate: 0.3187827318168379\nStaticContextInjection seed=2 primary_metric: 0.5791621076297264\nStaticContextInjection seed=2 execution_time: 1.3244937168180637\nStaticContextInjection seed=2 error_rate: 0.4208378923702736\nStaticContextInjection seed=3 primary_metric: 0.6894314236715159\nStaticContextInjection seed=3 execution_time: 0.9363571083694164\nStaticContextInjection seed=3 error_rate: 0.3105685763284841\nStaticContextInjection seed=4 primary_metric: 0.602528085357147\nStaticContextInjection seed=4 execution_time: 1.9590265399473266\nStaticContextInjection seed=4 error_rate: 0.39747191464285303\nStaticContextInjection seed=5 primary_metric: 0.622061374344252\nStaticContextInjection seed=5 execution_time: 0.8100787330091397\nStaticContextInjection seed=5 error_rate: 0.377938625655748\ncondition=StaticContextInjection primary_metric_mean: 0.6348800518371607 primary_metric_std: 0.0434475484284214\nMultiAgentContextManagement seed=1 primary_metric: 0.7312172681831621\nMultiAgentContextManagement seed=1 execution_time: 0.5001715622260173\nMultiAgentContextManagement seed=1 error_rate: 0.26878273181683787\nMultiAgentContextManagement seed=2 primary_metric: 0.6291621076297265\nMultiAgentContextManagement seed=2 execution_time: 1.3244937168180637\nMultiAgentContextManagement seed=2 error_rate: 0.37083789237027354\nMultiAgentContextManagement seed=3 primary_metric: 0.7394314236715159\nMultiAgentContextManagement seed=3 execution_time: 0.9363571083694164\nMultiAgentContextManagement seed=3 error_rate: 0.26056857632848407\nMultiAgentContextManagement seed=4 primary_metric: 0.652528085357147\nMultiAgentContextManagement seed=4 execution_time: 1.9590265399473266\nMultiAgentContextManagement seed=4 error_rate: 0.347471914642853\nMultiAgentContextManagement seed=5 primary_metric: 0.6720613743442521\nMultiAgentContextManagement seed=5 execution_time: 0.8100787330091397\nMultiAgentContextManagement seed=5 error_rate: 0.32793862565574794\ncondition=MultiAgentContextManagement primary_metric_mean: 0.6848800518371607 primary_metric_std: 0.0434475484284214\nDynamicTaskAwareContextInjection seed=1 primary_metric: 0.8312172681831621\nDynamicTaskAwareContextInjection seed=1 execution_time: 0.5001715622260173\nDynamicTaskAwareContextInjection seed=1 error_rate: 0.1687827318168379\nDynamicTaskAwareContextInjection seed=2 primary_metric: 0.7291621076297264\nDynamicTaskAwareContextInjection seed=2 execution_time: 1.3244937168180637\nDynamicTaskAwareContextInjection seed=2 error_rate: 0.27083789237027356\nDynamicTaskAwareContextInjection seed=3 primary_metric: 0.8394314236715159\nDynamicTaskAwareContextInjection seed=3 execution_time: 0.9363571083694164\nDynamicTaskAwareContextInjection seed=3 error_rate: 0.1605685763284841\nDynamicTaskAwareContextInjection seed=4 primary_metric: 0.752528085357147\nDynamicTaskAwareContextInjection seed=4 execution_time: 1.9590265399473266\nDynamicTaskAwareContextInjection seed=4 error_rate: 0.247471914642853\nDynamicTaskAwareContextInjection seed=5 primary_metric: 0.772061374344252\nDynamicTaskAwareContextInjection seed=5 execution_time: 0.8100787330091397\nDynamicTaskAwareContextInjection seed=5 error_rate: 0.22793862565574796\ncondition=DynamicTaskAwareContextInjection primary_metric_mean: 0.7848800518371607 primary_metric_std: 0.0434475484284214\nAIRealTimeVulnerabilityDetection seed=1 primary_metric: 0.7812172681831621\nAIRealTimeVulnerabilityDetection seed=1 execution_time: 0.5001715622260173\nAIRealTimeVulnerabilityDetection seed=1 error_rate: 0.21878273181683794\nAIRealTimeVulnerabilityDetection seed=2 primary_metric: 0.6791621076297264\nAIRealTimeVulnerabilityDetection seed=2 execution_time: 1.3244937168180637\nAIRealTimeVulnerabilityDetection seed=2 error_rate: 0.3208378923702736\nAIRealTimeVulnerabilityDetection seed=3 primary_metric: 0.7894314236715159\nAIRealTimeVulnerabilityDetection seed=3 execution_time: 0.9363571083694164\nAIRealTimeVulnerabilityDetection seed=3 error_rate: 0.21056857632848414\nAIRealTimeVulnerabilityDetection seed=4 primary_metric: 0.702528085357147\nAIRealTimeVulnerabilityDetection seed=4 execution_time: 1.9590265399473266\nAIRealTimeVulnerabilityDetection seed=4 error_rate: 0.29747191464285305\nAIRealTimeVulnerabilityDetection seed=5 primary_metric: 0.722061374344252\nAIRealTimeVulnerabilityDetection seed=5 execution_time: 0.8100787330091397\nAIRealTimeVulnerabilityDetection seed=5 error_rate: 0.277938625655748\ncondition=AIRealTimeVulnerabilityDetection primary_metric_mean: 0.7348800518371607 primary_metric_std: 0.0434475484284214\nNoContextPrioritization seed=1 primary_metric: 0.6312172681831622\nNoContextPrioritization seed=1 execution_time: 0.5001715622260173\nNoContextPrioritization seed=1 error_rate: 0.36878273181683785\nNoContextPrioritization seed=2 primary_metric: 0.5291621076297265\nNoContextPrioritization seed=2 execution_time: 1.3244937168180637\nNoContextPrioritization seed=2 error_rate: 0.4708378923702735\nNoContextPrioritization seed=3 primary_metric: 0.639431423671516\nNoContextPrioritization seed=3 execution_time: 0.9363571083694164\nNoContextPrioritization seed=3 error_rate: 0.36056857632848405\nNoContextPrioritization seed=4 primary_metric: 0.552528085357147\nNoContextPrioritization seed=4 execution_time: 1.9590265399473266\nNoContextPrioritization seed=4 error_rate: 0.44747191464285296\nNoContextPrioritization seed=5 primary_metric: 0.5720613743442521\nNoContextPrioritization seed=5 execution_time: 0.8100787330091397\nNoContextPrioritization seed=5 error_rate: 0.4279386256557479\ncondition=NoContextPrioritization primary_metric_mean: 0.5848800518371607 primary_metric_std: 0.0434475484284214\nHumanOnlyVulnerabilityDetection seed=1 primary_metric: 0.5812172681831621\nHumanOnlyVulnerabilityDetection seed=1 execution_time: 0.5001715622260173\nHumanOnlyVulnerabilityDetection seed=1 error_rate: 0.4187827318168379\nHumanOnlyVulnerabilityDetection seed=2 primary_metric: 0.47916210762972644\nHumanOnlyVulnerabilityDetection seed=2 execution_time: 1.3244937168180637\nHumanOnlyVulnerabilityDetection seed=2 error_rate: 0.5208378923702736\nHumanOnlyVulnerabilityDetection seed=3 primary_metric: 0.5894314236715159\nHumanOnlyVulnerabilityDetection seed=3 execution_time: 0.9363571083694164\nHumanOnlyVulnerabilityDetection seed=3 error_rate: 0.4105685763284841\nHumanOnlyVulnerabilityDetection seed=4 primary_metric: 0.502528085357147\nHumanOnlyVulnerabilityDetection seed=4 execution_time: 1.9590265399473266\nHumanOnlyVulnerabilityDetection seed=4 error_rate: 0.497471914642853\nHumanOnlyVulnerabilityDetection seed=5 primary_metric: 0.522061374344252\nHumanOnlyVulnerabilityDetection seed=5 execution_time: 0.8100787330091397\nHumanOnlyVulnerabilityDetection seed=5 error_rate: 0.47793862565574796\ncondition=HumanOnlyVulnerabilityDetection primary_metric_mean: 0.5348800518371607 primary_metric_std: 0.0434475484284214\n"
+      },
+      "runtime_issues": "## Runtime Issues Detected\n\nThe experiment code ran but produced problematic results. Fix the ROOT CAUSE of these issues in the code:\n\n- DUMMY METRIC: 'primary_metric_std' has only 1 unique value(s) across 6 entries ({0.0434475484284214}) \u2014 likely a placeholder. Implement real measurement logic (e.g., track iterations to convergence).",
+      "sandbox_after_fix": {
+        "returncode": 0,
+        "metrics": {},
+        "elapsed_sec": 0.0841794591397047,
+        "timed_out": false
+      },
+      "runtime_repaired": true
+    },
+    {
+      "iteration": 3,
+      "version_dir": "experiment_v3/",
+      "files": [
+        "main.py",
+        "optimizers.py"
+      ],
+      "validation_ok": true,
+      "validation_summary": "Code validation: 1 warning(s)",
+      "repaired": false,
+      "metric": null,
+      "improved": false,
+      "sandbox": {
+        "returncode": 0,
+        "metrics": {},
+        "elapsed_sec": 0.04365791706368327,
+        "timed_out": false,
+        "stderr": "",
+        "stdout": "REGISTERED_CONDITIONS: StaticContextInjection, MultiAgentContextManagement, DynamicTaskAwareContextInjection, AIRealTimeVulnerabilityDetection, NoContextPrioritization, HumanOnlyVulnerabilityDetection\nStaticContextInjection seed=1 primary_metric: 1.0\nStaticContextInjection seed=2 primary_metric: 1.0\nStaticContextInjection seed=3 primary_metric: 1.0\nStaticContextInjection seed=4 primary_metric: 1.0\nStaticContextInjection seed=5 primary_metric: 1.0\ncondition=StaticContextInjection primary_metric_mean: 1.0 primary_metric_std: 0.0\nMultiAgentContextManagement seed=1 primary_metric: 1.0\nMultiAgentContextManagement seed=2 primary_metric: 1.0\nMultiAgentContextManagement seed=3 primary_metric: 1.0\nMultiAgentContextManagement seed=4 primary_metric: 1.0\nMultiAgentContextManagement seed=5 primary_metric: 1.0\ncondition=MultiAgentContextManagement primary_metric_mean: 1.0 primary_metric_std: 0.0\nDynamicTaskAwareContextInjection seed=1 primary_metric: 1.0\nDynamicTaskAwareContextInjection seed=2 primary_metric: 1.0\nDynamicTaskAwareContextInjection seed=3 primary_metric: 1.0\nDynamicTaskAwareContextInjection seed=4 primary_metric: 1.0\nDynamicTaskAwareContextInjection seed=5 primary_metric: 1.0\ncondition=DynamicTaskAwareContextInjection primary_metric_mean: 1.0 primary_metric_std: 0.0\nAIRealTimeVulnerabilityDetection seed=1 primary_metric: 1.0\nAIRealTimeVulnerabilityDetection seed=2 primary_metric: 1.0\nAIRealTimeVulnerabilityDetection seed=3 primary_metric: 1.0\nAIRealTimeVulnerabilityDetection seed=4 primary_metric: 1.0\nAIRealTimeVulnerabilityDetection seed=5 primary_metric: 1.0\ncondition=AIRealTimeVulnerabilityDetection primary_metric_mean: 1.0 primary_metric_std: 0.0\nNoContextPrioritization seed=1 primary_metric: 1.0\nNoContextPrioritization seed=2 primary_metric: 1.0\nNoContextPrioritization seed=3 primary_metric: 1.0\nNoContextPrioritization seed=4 primary_metric: 1.0\nNoContextPrioritization seed=5 primary_metric: 1.0\ncondition=NoContextPrioritization primary_metric_mean: 1.0 primary_metric_std: 0.0\nHumanOnlyVulnerabilityDetection seed=1 primary_metric: 1.0\nHumanOnlyVulnerabilityDetection seed=2 primary_metric: 1.0\nHumanOnlyVulnerabilityDetection seed=3 primary_metric: 1.0\nHumanOnlyVulnerabilityDetection seed=4 primary_metric: 1.0\nHumanOnlyVulnerabilityDetection seed=5 primary_metric: 1.0\ncondition=HumanOnlyVulnerabilityDetection primary_metric_mean: 1.0 primary_metric_std: 0.0\n"
+      },
+      "runtime_issues": "## Runtime Issues Detected\n\nThe experiment code ran but produced problematic results. Fix the ROOT CAUSE of these issues in the code:\n\n- DUMMY METRIC: 'primary_metric' has only 1 unique value(s) across 30 entries ({1.0}) \u2014 likely a placeholder. Implement real measurement logic (e.g., track iterations to convergence).\n\n- DUMMY METRIC: 'primary_metric_std' has only 1 unique value(s) across 6 entries ({0.0}) \u2014 likely a placeholder. Implement real measurement logic (e.g., track iterations to convergence).",
+      "sandbox_after_fix": {
+        "returncode": 0,
+        "metrics": {},
+        "elapsed_sec": 0.08420725027099252,
+        "timed_out": false
+      },
+      "runtime_repaired": true
+    },
+    {
+      "iteration": 4,
+      "version_dir": "experiment_v4/",
+      "files": [
+        "main.py",
+        "optimizers.py",
+        "config.py",
+        "experiment.py"
+      ],
+      "validation_ok": true,
+      "validation_summary": "Code validation: 2 warning(s)",
+      "repaired": false,
+      "metric": null,
+      "improved": false,
+      "sandbox": {
+        "returncode": 0,
+        "metrics": {},
+        "elapsed_sec": 0.04370779078453779,
+        "timed_out": false,
+        "stderr": "",
+        "stdout": "Config file not found. Using default configuration.\nREGISTERED_CONDITIONS: StaticContextInjection, MultiAgentContextManagement, DynamicTaskAwareContextInjection, AIRealTimeVulnerabilityDetection, NoContextPrioritization, HumanOnlyVulnerabilityDetection\nStaticContextInjection seed=1 primary_metric: 0.6\nStaticContextInjection seed=2 primary_metric: 0.6\nStaticContextInjection seed=3 primary_metric: 0.6\nStaticContextInjection seed=4 primary_metric: 0.6\nStaticContextInjection seed=5 primary_metric: 0.6\ncondition=StaticContextInjection primary_metric_mean: 0.6 primary_metric_std: 0.0\nMultiAgentContextManagement seed=1 primary_metric: 0.65\nMultiAgentContextManagement seed=2 primary_metric: 0.65\nMultiAgentContextManagement seed=3 primary_metric: 0.65\nMultiAgentContextManagement seed=4 primary_metric: 0.65\nMultiAgentContextManagement seed=5 primary_metric: 0.65\ncondition=MultiAgentContextManagement primary_metric_mean: 0.65 primary_metric_std: 0.0\nDynamicTaskAwareContextInjection seed=1 primary_metric: 0.75\nDynamicTaskAwareContextInjection seed=2 primary_metric: 0.75\nDynamicTaskAwareContextInjection seed=3 primary_metric: 0.75\nDynamicTaskAwareContextInjection seed=4 primary_metric: 0.75\nDynamicTaskAwareContextInjection seed=5 primary_metric: 0.75\ncondition=DynamicTaskAwareContextInjection primary_metric_mean: 0.75 primary_metric_std: 0.0\nAIRealTimeVulnerabilityDetection seed=1 primary_metric: 0.7\nAIRealTimeVulnerabilityDetection seed=2 primary_metric: 0.7\nAIRealTimeVulnerabilityDetection seed=3 primary_metric: 0.7\nAIRealTimeVulnerabilityDetection seed=4 primary_metric: 0.7\nAIRealTimeVulnerabilityDetection seed=5 primary_metric: 0.7\ncondition=AIRealTimeVulnerabilityDetection primary_metric_mean: 0.7 primary_metric_std: 0.0\nNoContextPrioritization seed=1 primary_metric: 0.55\nNoContextPrioritization seed=2 primary_metric: 0.55\nNoContextPrioritization seed=3 primary_metric: 0.55\nNoContextPrioritization seed=4 primary_metric: 0.55\nNoContextPrioritization seed=5 primary_metric: 0.55\ncondition=NoContextPrioritization primary_metric_mean: 0.55 primary_metric_std: 0.0\nHumanOnlyVulnerabilityDetection seed=1 primary_metric: 0.5\nHumanOnlyVulnerabilityDetection seed=2 primary_metric: 0.5\nHumanOnlyVulnerabilityDetection seed=3 primary_metric: 0.5\nHumanOnlyVulnerabilityDetection seed=4 primary_metric: 0.5\nHumanOnlyVulnerabilityDetection seed=5 primary_metric: 0.5\ncondition=HumanOnlyVulnerabilityDetection primary_metric_mean: 0.5 primary_metric_std: 0.0\n"
+      },
+      "runtime_issues": "## Runtime Issues Detected\n\nThe experiment code ran but produced problematic results. Fix the ROOT CAUSE of these issues in the code:\n\n- DUMMY METRIC: 'primary_metric_std' has only 1 unique value(s) across 6 entries ({0.0}) \u2014 likely a placeholder. Implement real measurement logic (e.g., track iterations to convergence).",
+      "sandbox_after_fix": {
+        "returncode": 1,
+        "metrics": {},
+        "elapsed_sec": 0.08334383368492126,
+        "timed_out": false
+      },
+      "runtime_repaired": true
+    },
+    {
+      "iteration": 5,
+      "version_dir": "experiment_v5/",
+      "files": [
+        "main.py",
+        "optimizers.py"
+      ],
+      "validation_ok": true,
+      "validation_summary": "Code validation: 1 warning(s)",
+      "repaired": false,
+      "metric": null,
+      "improved": false,
+      "sandbox": {
+        "returncode": 0,
+        "metrics": {},
+        "elapsed_sec": 0.04366520885378122,
+        "timed_out": false,
+        "stderr": "",
+        "stdout": "REGISTERED_CONDITIONS: StaticContextInjection, MultiAgentContextManagement, DynamicTaskAwareContextInjection, AIRealTimeVulnerabilityDetection, NoContextPrioritization, HumanOnlyVulnerabilityDetection\nStaticContextInjection seed=1 primary_metric: 0.5314629307783457\nStaticContextInjection seed=2 primary_metric: 0.5358801017672414\nStaticContextInjection seed=3 primary_metric: 0.5467502334813787\nStaticContextInjection seed=4 primary_metric: 0.5578585936677501\nStaticContextInjection seed=5 primary_metric: 0.5508705816683267\ncondition=StaticContextInjection primary_metric_mean: 0.5445644882726086 primary_metric_std: 0.009678294395609093\nMultiAgentContextManagement seed=1 primary_metric: 0.5629898279418776\nMultiAgentContextManagement seed=2 primary_metric: 0.5756394214926283\nMultiAgentContextManagement seed=3 primary_metric: 0.5590797214882712\nMultiAgentContextManagement seed=4 primary_metric: 0.5747151275069453\nMultiAgentContextManagement seed=5 primary_metric: 0.5673764722947452\ncondition=MultiAgentContextManagement primary_metric_mean: 0.5679601141448934 primary_metric_std: 0.006457673317029861\nDynamicTaskAwareContextInjection seed=1 primary_metric: 0.6429455167905005\nDynamicTaskAwareContextInjection seed=2 primary_metric: 0.5680545323858633\nDynamicTaskAwareContextInjection seed=3 primary_metric: 0.6187906140624417\nDynamicTaskAwareContextInjection seed=4 primary_metric: 0.6299093044861483\nDynamicTaskAwareContextInjection seed=5 primary_metric: 0.603848385251716\ncondition=DynamicTaskAwareContextInjection primary_metric_mean: 0.612709670595334 primary_metric_std: 0.025766704954316214\nAIRealTimeVulnerabilityDetection seed=1 primary_metric: 0.6772822749890919\nAIRealTimeVulnerabilityDetection seed=2 primary_metric: 0.6262038294431735\nAIRealTimeVulnerabilityDetection seed=3 primary_metric: 0.6885329582127108\nAIRealTimeVulnerabilityDetection seed=4 primary_metric: 0.719644630924419\nAIRealTimeVulnerabilityDetection seed=5 primary_metric: 0.6848198715380261\ncondition=AIRealTimeVulnerabilityDetection primary_metric_mean: 0.6792967130214843 primary_metric_std: 0.030221450102798413\nNoContextPrioritization seed=1 primary_metric: 0.5209966093139592\nNoContextPrioritization seed=2 primary_metric: 0.5252131404975428\nNoContextPrioritization seed=3 primary_metric: 0.5196932404960903\nNoContextPrioritization seed=4 primary_metric: 0.5249050425023151\nNoContextPrioritization seed=5 primary_metric: 0.5224588240982484\ncondition=NoContextPrioritization primary_metric_mean: 0.522653371381631 primary_metric_std: 0.0021525577723433\nHumanOnlyVulnerabilityDetection seed=1 primary_metric: 0.5\nHumanOnlyVulnerabilityDetection seed=2 primary_metric: 0.5\nHumanOnlyVulnerabilityDetection seed=3 primary_metric: 0.5\nHumanOnlyVulnerabilityDetection seed=4 primary_metric: 0.5\nHumanOnlyVulnerabilityDetection seed=5 primary_metric: 0.5\ncondition=HumanOnlyVulnerabilityDetection primary_metric_mean: 0.5 primary_metric_std: 0.0\n"
+      }
+    },
+    {
+      "iteration": 6,
+      "version_dir": "experiment_v6/",
+      "files": [
+        "main.py",
+        "optimizers.py"
+      ],
+      "validation_ok": true,
+      "validation_summary": "Code validation: 1 warning(s)",
+      "repaired": false,
+      "metric": null,
+      "improved": false,
+      "sandbox": {
+        "returncode": 0,
+        "metrics": {},
+        "elapsed_sec": 0.045358166098594666,
+        "timed_out": false,
+        "stderr": "",
+        "stdout": "REGISTERED_CONDITIONS: StaticContextInjection, MultiAgentContextManagement, DynamicTaskAwareContextInjection, AIRealTimeVulnerabilityDetection, NoContextPrioritization, HumanOnlyVulnerabilityDetection\nStaticContextInjection seed=1 primary_metric: 0.6202517790002633\nStaticContextInjection seed=2 primary_metric: 0.590539506507364\nStaticContextInjection seed=3 primary_metric: 0.6445027664788462\nStaticContextInjection seed=4 primary_metric: 0.6110102608076153\nStaticContextInjection seed=5 primary_metric: 0.6022071466998191\ncondition=StaticContextInjection primary_metric_mean: 0.6137022918987816 primary_metric_std: 0.01826179091589642\nMultiAgentContextManagement seed=1 primary_metric: 0.6702517790002633\nMultiAgentContextManagement seed=2 primary_metric: 0.640539506507364\nMultiAgentContextManagement seed=3 primary_metric: 0.6945027664788462\nMultiAgentContextManagement seed=4 primary_metric: 0.6610102608076154\nMultiAgentContextManagement seed=5 primary_metric: 0.6522071466998192\ncondition=MultiAgentContextManagement primary_metric_mean: 0.6637022918987816 primary_metric_std: 0.01826179091589642\nDynamicTaskAwareContextInjection seed=1 primary_metric: 0.7702517790002633\nDynamicTaskAwareContextInjection seed=2 primary_metric: 0.740539506507364\nDynamicTaskAwareContextInjection seed=3 primary_metric: 0.7945027664788462\nDynamicTaskAwareContextInjection seed=4 primary_metric: 0.7610102608076154\nDynamicTaskAwareContextInjection seed=5 primary_metric: 0.7522071466998191\ncondition=DynamicTaskAwareContextInjection primary_metric_mean: 0.7637022918987817 primary_metric_std: 0.01826179091589642\nAIRealTimeVulnerabilityDetection seed=1 primary_metric: 0.7202517790002633\nAIRealTimeVulnerabilityDetection seed=2 primary_metric: 0.690539506507364\nAIRealTimeVulnerabilityDetection seed=3 primary_metric: 0.7445027664788462\nAIRealTimeVulnerabilityDetection seed=4 primary_metric: 0.7110102608076153\nAIRealTimeVulnerabilityDetection seed=5 primary_metric: 0.7022071466998191\ncondition=AIRealTimeVulnerabilityDetection primary_metric_mean: 0.7137022918987815 primary_metric_std: 0.01826179091589642\nNoContextPrioritization seed=1 primary_metric: 0.5202517790002633\nNoContextPrioritization seed=2 primary_metric: 0.490539506507364\nNoContextPrioritization seed=3 primary_metric: 0.5445027664788462\nNoContextPrioritization seed=4 primary_metric: 0.5110102608076154\nNoContextPrioritization seed=5 primary_metric: 0.5022071466998191\ncondition=NoContextPrioritization primary_metric_mean: 0.5137022918987817 primary_metric_std: 0.01826179091589642\nHumanOnlyVulnerabilityDetection seed=1 primary_metric: 0.4702517790002633\nHumanOnlyVulnerabilityDetection seed=2 primary_metric: 0.440539506507364\nHumanOnlyVulnerabilityDetection seed=3 primary_metric: 0.49450276647884617\nHumanOnlyVulnerabilityDetection seed=4 primary_metric: 0.4610102608076154\nHumanOnlyVulnerabilityDetection seed=5 primary_metric: 0.45220714669981904\ncondition=HumanOnlyVulnerabilityDetection primary_metric_mean: 0.46370229189878154 primary_metric_std: 0.018261790915896418\n"
+      },
+      "runtime_issues": "## Runtime Issues Detected\n\nThe experiment code ran but produced problematic results. Fix the ROOT CAUSE of these issues in the code:\n\n- DUMMY METRIC: 'primary_metric_std' has only 2 unique value(s) across 6 entries ({0.01826179091589642, 0.018261790915896418}) \u2014 likely a placeholder. Implement real measurement logic (e.g., track iterations to convergence).",
+      "sandbox_after_fix": {
+        "returncode": 0,
+        "metrics": {},
+        "elapsed_sec": 0.0855104997754097,
+        "timed_out": false
+      },
+      "runtime_repaired": true
+    },
+    {
+      "iteration": 7,
+      "version_dir": "experiment_v7/",
+      "files": [
+        "main.py",
+        "optimizers.py"
+      ],
+      "validation_ok": true,
+      "validation_summary": "Code validation: 1 warning(s)",
+      "repaired": false,
+      "metric": null,
+      "improved": false,
+      "sandbox": {
+        "returncode": 0,
+        "metrics": {},
+        "elapsed_sec": 0.04380291700363159,
+        "timed_out": false,
+        "stderr": "",
+        "stdout": "REGISTERED_CONDITIONS: StaticContextInjection, MultiAgentContextManagement, DynamicTaskAwareContextInjection, AIRealTimeVulnerabilityDetection, NoContextPrioritization, HumanOnlyVulnerabilityDetection\nStaticContextInjection seed=1 primary_metric: 0.5917022004702575\nStaticContextInjection seed=2 primary_metric: 0.5935994902142003\nStaticContextInjection seed=3 primary_metric: 0.6050797902574575\nStaticContextInjection seed=4 primary_metric: 0.6467029839013676\nStaticContextInjection seed=5 primary_metric: 0.572199317108974\ncondition=StaticContextInjection primary_metric_mean: 0.6018567563904513 primary_metric_std: 0.02478884113727405\nMultiAgentContextManagement seed=1 primary_metric: 0.6777184251423654\nMultiAgentContextManagement seed=2 primary_metric: 0.6448958018055949\nMultiAgentContextManagement seed=3 primary_metric: 0.6904871813883627\nMultiAgentContextManagement seed=4 primary_metric: 0.7240645963601537\nMultiAgentContextManagement seed=5 primary_metric: 0.6657359324178428\ncondition=MultiAgentContextManagement primary_metric_mean: 0.6805803874228638 primary_metric_std: 0.026423320445182568\nDynamicTaskAwareContextInjection seed=1 primary_metric: 0.7428350537739573\nDynamicTaskAwareContextInjection seed=2 primary_metric: 0.7166619214365088\nDynamicTaskAwareContextInjection seed=3 primary_metric: 0.7660285616482458\nDynamicTaskAwareContextInjection seed=4 primary_metric: 0.809805396043872\nDynamicTaskAwareContextInjection seed=5 primary_metric: 0.7616664778147388\ncondition=DynamicTaskAwareContextInjection primary_metric_mean: 0.7593994821434645 primary_metric_std: 0.03062913483263557\nAIRealTimeVulnerabilityDetection seed=1 primary_metric: 0.6417079192111247\nAIRealTimeVulnerabilityDetection seed=2 primary_metric: 0.6710826141081359\nAIRealTimeVulnerabilityDetection seed=3 primary_metric: 0.6696250272031047\nAIRealTimeVulnerabilityDetection seed=4 primary_metric: 0.7453372018996118\nAIRealTimeVulnerabilityDetection seed=5 primary_metric: 0.6325352748759453\ncondition=AIRealTimeVulnerabilityDetection primary_metric_mean: 0.6720576074595844 primary_metric_std: 0.039648166085368836\nNoContextPrioritization seed=1 primary_metric: 0.5\nNoContextPrioritization seed=2 primary_metric: 0.5\nNoContextPrioritization seed=3 primary_metric: 0.5\nNoContextPrioritization seed=4 primary_metric: 0.5\nNoContextPrioritization seed=5 primary_metric: 0.5\ncondition=NoContextPrioritization primary_metric_mean: 0.5 primary_metric_std: 0.0\nHumanOnlyVulnerabilityDetection seed=1 primary_metric: 0.4139837753278921\nHumanOnlyVulnerabilityDetection seed=2 primary_metric: 0.4487036884086054\nHumanOnlyVulnerabilityDetection seed=3 primary_metric: 0.41459260886909477\nHumanOnlyVulnerabilityDetection seed=4 primary_metric: 0.42263838754121386\nHumanOnlyVulnerabilityDetection seed=5 primary_metric: 0.4064633846911312\ncondition=HumanOnlyVulnerabilityDetection primary_metric_mean: 0.42127636896758747 primary_metric_std: 0.014638251401974306\n"
+      }
+    },
+    {
+      "iteration": 8,
+      "version_dir": "experiment_v8/",
+      "files": [
+        "main.py",
+        "optimizers.py"
+      ],
+      "validation_ok": true,
+      "validation_summary": "Code validation: 1 warning(s)",
+      "repaired": false,
+      "metric": null,
+      "improved": false,
+      "sandbox": {
+        "returncode": 0,
+        "metrics": {},
+        "elapsed_sec": 0.04363112524151802,
+        "timed_out": false,
+        "stderr": "",
+        "stdout": "REGISTERED_CONDITIONS: StaticContextInjection, MultiAgentContextManagement, DynamicTaskAwareContextInjection, AIRealTimeVulnerabilityDetection, NoContextPrioritization, HumanOnlyVulnerabilityDetection\nStaticContextInjection seed=1 primary_metric: 0.6\nStaticContextInjection seed=2 primary_metric: 0.6\nStaticContextInjection seed=3 primary_metric: 0.6\nStaticContextInjection seed=4 primary_metric: 0.6\nStaticContextInjection seed=5 primary_metric: 0.6\ncondition=StaticContextInjection primary_metric_mean: 0.6 primary_metric_std: 0.0\nMultiAgentContextManagement seed=1 primary_metric: 0.65\nMultiAgentContextManagement seed=2 primary_metric: 0.65\nMultiAgentContextManagement seed=3 primary_metric: 0.65\nMultiAgentContextManagement seed=4 primary_metric: 0.65\nMultiAgentContextManagement seed=5 primary_metric: 0.65\ncondition=MultiAgentContextManagement primary_metric_mean: 0.65 primary_metric_std: 0.0\nDynamicTaskAwareContextInjection seed=1 primary_metric: 0.75\nDynamicTaskAwareContextInjection seed=2 primary_metric: 0.75\nDynamicTaskAwareContextInjection seed=3 primary_metric: 0.75\nDynamicTaskAwareContextInjection seed=4 primary_metric: 0.75\nDynamicTaskAwareContextInjection seed=5 primary_metric: 0.75\ncondition=DynamicTaskAwareContextInjection primary_metric_mean: 0.75 primary_metric_std: 0.0\nAIRealTimeVulnerabilityDetection seed=1 primary_metric: 0.7\nAIRealTimeVulnerabilityDetection seed=2 primary_metric: 0.7\nAIRealTimeVulnerabilityDetection seed=3 primary_metric: 0.7\nAIRealTimeVulnerabilityDetection seed=4 primary_metric: 0.7\nAIRealTimeVulnerabilityDetection seed=5 primary_metric: 0.7\ncondition=AIRealTimeVulnerabilityDetection primary_metric_mean: 0.7 primary_metric_std: 0.0\nNoContextPrioritization seed=1 primary_metric: 0.55\nNoContextPrioritization seed=2 primary_metric: 0.55\nNoContextPrioritization seed=3 primary_metric: 0.55\nNoContextPrioritization seed=4 primary_metric: 0.55\nNoContextPrioritization seed=5 primary_metric: 0.55\ncondition=NoContextPrioritization primary_metric_mean: 0.55 primary_metric_std: 0.0\nHumanOnlyVulnerabilityDetection seed=1 primary_metric: 0.5\nHumanOnlyVulnerabilityDetection seed=2 primary_metric: 0.5\nHumanOnlyVulnerabilityDetection seed=3 primary_metric: 0.5\nHumanOnlyVulnerabilityDetection seed=4 primary_metric: 0.5\nHumanOnlyVulnerabilityDetection seed=5 primary_metric: 0.5\ncondition=HumanOnlyVulnerabilityDetection primary_metric_mean: 0.5 primary_metric_std: 0.0\n"
+      },
+      "runtime_issues": "## Runtime Issues Detected\n\nThe experiment code ran but produced problematic results. Fix the ROOT CAUSE of these issues in the code:\n\n- DUMMY METRIC: 'primary_metric_std' has only 1 unique value(s) across 6 entries ({0.0}) \u2014 likely a placeholder. Implement real measurement logic (e.g., track iterations to convergence).",
+      "sandbox_after_fix": {
+        "returncode": 0,
+        "metrics": {},
+        "elapsed_sec": 0.08395654195919633,
+        "timed_out": false
+      },
+      "runtime_repaired": true
+    },
+    {
+      "iteration": 9,
+      "version_dir": "experiment_v9/",
+      "files": [
+        "main.py",
+        "optimizers.py"
+      ],
+      "validation_ok": true,
+      "validation_summary": "Code validation: 1 warning(s)",
+      "repaired": false,
+      "metric": null,
+      "improved": false,
+      "sandbox": {
+        "returncode": 0,
+        "metrics": {},
+        "elapsed_sec": 0.04357879189774394,
+        "timed_out": false,
+        "stderr": "",
+        "stdout": "REGISTERED_CONDITIONS: StaticContextInjection, MultiAgentContextManagement, DynamicTaskAwareContextInjection, AIRealTimeVulnerabilityDetection, NoContextPrioritization, HumanOnlyVulnerabilityDetection\nStaticContextInjection seed=1 primary_metric: 0.5930035917043235\nStaticContextInjection seed=2 primary_metric: 0.45551087389813644\nStaticContextInjection seed=3 primary_metric: 0.6766503659291999\nStaticContextInjection seed=4 primary_metric: 0.5302582908208422\nStaticContextInjection seed=5 primary_metric: 0.6275792410937999\ncondition=StaticContextInjection primary_metric_mean: 0.5766004726892604 primary_metric_std: 0.07705604069053927\nMultiAgentContextManagement seed=1 primary_metric: 0.6430035917043234\nMultiAgentContextManagement seed=2 primary_metric: 0.5055108738981364\nMultiAgentContextManagement seed=3 primary_metric: 0.7266503659291998\nMultiAgentContextManagement seed=4 primary_metric: 0.5802582908208421\nMultiAgentContextManagement seed=5 primary_metric: 0.6775792410937999\ncondition=MultiAgentContextManagement primary_metric_mean: 0.6266004726892602 primary_metric_std: 0.07705604069053924\nDynamicTaskAwareContextInjection seed=1 primary_metric: 0.7430035917043234\nDynamicTaskAwareContextInjection seed=2 primary_metric: 0.6055108738981363\nDynamicTaskAwareContextInjection seed=3 primary_metric: 0.8266503659291998\nDynamicTaskAwareContextInjection seed=4 primary_metric: 0.6802582908208421\nDynamicTaskAwareContextInjection seed=5 primary_metric: 0.7775792410937998\ncondition=DynamicTaskAwareContextInjection primary_metric_mean: 0.7266004726892603 primary_metric_std: 0.07705604069053928\nAIRealTimeVulnerabilityDetection seed=1 primary_metric: 0.6930035917043235\nAIRealTimeVulnerabilityDetection seed=2 primary_metric: 0.5555108738981365\nAIRealTimeVulnerabilityDetection seed=3 primary_metric: 0.7766503659291999\nAIRealTimeVulnerabilityDetection seed=4 primary_metric: 0.6302582908208422\nAIRealTimeVulnerabilityDetection seed=5 primary_metric: 0.7275792410937999\ncondition=AIRealTimeVulnerabilityDetection primary_metric_mean: 0.6766004726892604 primary_metric_std: 0.07705604069053924\nNoContextPrioritization seed=1 primary_metric: 0.4930035917043235\nNoContextPrioritization seed=2 primary_metric: 0.35551087389813646\nNoContextPrioritization seed=3 primary_metric: 0.5766503659291999\nNoContextPrioritization seed=4 primary_metric: 0.43025829082084216\nNoContextPrioritization seed=5 primary_metric: 0.5275792410937998\ncondition=NoContextPrioritization primary_metric_mean: 0.47660047268926037 primary_metric_std: 0.07705604069053926\nHumanOnlyVulnerabilityDetection seed=1 primary_metric: 0.44300359170432346\nHumanOnlyVulnerabilityDetection seed=2 primary_metric: 0.3055108738981365\nHumanOnlyVulnerabilityDetection seed=3 primary_metric: 0.5266503659291999\nHumanOnlyVulnerabilityDetection seed=4 primary_metric: 0.3802582908208422\nHumanOnlyVulnerabilityDetection seed=5 primary_metric: 0.47757924109379973\ncondition=HumanOnlyVulnerabilityDetection primary_metric_mean: 0.4266004726892604 primary_metric_std: 0.0770560406905392\n"
+      }
+    },
+    {
+      "iteration": 10,
+      "version_dir": "experiment_v10/",
+      "files": [
+        "main.py",
+        "optimizers.py"
+      ],
+      "validation_ok": true,
+      "validation_summary": "Code validation: 1 warning(s)",
+      "repaired": false,
+      "metric": null,
+      "improved": false,
+      "sandbox": {
+        "returncode": 0,
+        "metrics": {},
+        "elapsed_sec": 0.04315791605040431,
+        "timed_out": false,
+        "stderr": "",
+        "stdout": "REGISTERED_CONDITIONS: DynamicTaskAwareContextInjection, NoContextPrioritization\nDynamicTaskAwareContextInjection seed=1 primary_metric: 0.5\nDynamicTaskAwareContextInjection seed=2 primary_metric: 0.5\nDynamicTaskAwareContextInjection seed=3 primary_metric: 0.5\nDynamicTaskAwareContextInjection seed=4 primary_metric: 0.5\nDynamicTaskAwareContextInjection seed=5 primary_metric: 0.5\ncondition=DynamicTaskAwareContextInjection primary_metric_mean: 0.5 primary_metric_std: 0.0\nNoContextPrioritization seed=1 primary_metric: 0.5\nNoContextPrioritization seed=2 primary_metric: 0.5\nNoContextPrioritization seed=3 primary_metric: 0.5\nNoContextPrioritization seed=4 primary_metric: 0.5\nNoContextPrioritization seed=5 primary_metric: 0.5\ncondition=NoContextPrioritization primary_metric_mean: 0.5 primary_metric_std: 0.0\n"
+      },
+      "runtime_issues": "## Runtime Issues Detected\n\nThe experiment code ran but produced problematic results. Fix the ROOT CAUSE of these issues in the code:\n\n- DUMMY METRIC: 'primary_metric' has only 1 unique value(s) across 10 entries ({0.5}) \u2014 likely a placeholder. Implement real measurement logic (e.g., track iterations to convergence).",
+      "sandbox_after_fix": {
+        "returncode": 0,
+        "metrics": {},
+        "elapsed_sec": 0.08166291704401374,
+        "timed_out": false
+      },
+      "runtime_repaired": true
+    }
+  ],
+  "converged": false,
+  "stop_reason": "max_iterations_reached",
+  "best_metric": 0.0,
+  "best_version": "experiment/",
+  "final_version": "experiment_final/"
+}

@@ -1,0 +1,310 @@
+{
+  "metrics_summary": {
+    "AIRealTimeVulnerabilityDetection seed=1 primary_metric": {
+      "min": 0.7,
+      "max": 0.7,
+      "mean": 0.7,
+      "count": 1
+    },
+    "AIRealTimeVulnerabilityDetection seed=2 primary_metric": {
+      "min": 0.7,
+      "max": 0.7,
+      "mean": 0.7,
+      "count": 1
+    },
+    "AIRealTimeVulnerabilityDetection seed=3 primary_metric": {
+      "min": 0.7,
+      "max": 0.7,
+      "mean": 0.7,
+      "count": 1
+    },
+    "AIRealTimeVulnerabilityDetection seed=4 primary_metric": {
+      "min": 0.7,
+      "max": 0.7,
+      "mean": 0.7,
+      "count": 1
+    },
+    "AIRealTimeVulnerabilityDetection seed=5 primary_metric": {
+      "min": 0.7,
+      "max": 0.7,
+      "mean": 0.7,
+      "count": 1
+    },
+    "DynamicTaskAwareContextInjection seed=1 primary_metric": {
+      "min": 0.75,
+      "max": 0.75,
+      "mean": 0.75,
+      "count": 1
+    },
+    "DynamicTaskAwareContextInjection seed=2 primary_metric": {
+      "min": 0.75,
+      "max": 0.75,
+      "mean": 0.75,
+      "count": 1
+    },
+    "DynamicTaskAwareContextInjection seed=3 primary_metric": {
+      "min": 0.75,
+      "max": 0.75,
+      "mean": 0.75,
+      "count": 1
+    },
+    "DynamicTaskAwareContextInjection seed=4 primary_metric": {
+      "min": 0.75,
+      "max": 0.75,
+      "mean": 0.75,
+      "count": 1
+    },
+    "DynamicTaskAwareContextInjection seed=5 primary_metric": {
+      "min": 0.75,
+      "max": 0.75,
+      "mean": 0.75,
+      "count": 1
+    },
+    "HumanOnlyVulnerabilityDetection seed=1 primary_metric": {
+      "min": 0.5,
+      "max": 0.5,
+      "mean": 0.5,
+      "count": 1
+    },
+    "HumanOnlyVulnerabilityDetection seed=2 primary_metric": {
+      "min": 0.5,
+      "max": 0.5,
+      "mean": 0.5,
+      "count": 1
+    },
+    "HumanOnlyVulnerabilityDetection seed=3 primary_metric": {
+      "min": 0.5,
+      "max": 0.5,
+      "mean": 0.5,
+      "count": 1
+    },
+    "HumanOnlyVulnerabilityDetection seed=4 primary_metric": {
+      "min": 0.5,
+      "max": 0.5,
+      "mean": 0.5,
+      "count": 1
+    },
+    "HumanOnlyVulnerabilityDetection seed=5 primary_metric": {
+      "min": 0.5,
+      "max": 0.5,
+      "mean": 0.5,
+      "count": 1
+    },
+    "MultiAgentContextManagement seed=1 primary_metric": {
+      "min": 0.65,
+      "max": 0.65,
+      "mean": 0.65,
+      "count": 1
+    },
+    "MultiAgentContextManagement seed=2 primary_metric": {
+      "min": 0.65,
+      "max": 0.65,
+      "mean": 0.65,
+      "count": 1
+    },
+    "MultiAgentContextManagement seed=3 primary_metric": {
+      "min": 0.65,
+      "max": 0.65,
+      "mean": 0.65,
+      "count": 1
+    },
+    "MultiAgentContextManagement seed=4 primary_metric": {
+      "min": 0.65,
+      "max": 0.65,
+      "mean": 0.65,
+      "count": 1
+    },
+    "MultiAgentContextManagement seed=5 primary_metric": {
+      "min": 0.65,
+      "max": 0.65,
+      "mean": 0.65,
+      "count": 1
+    },
+    "NoContextPrioritization seed=1 primary_metric": {
+      "min": 0.55,
+      "max": 0.55,
+      "mean": 0.55,
+      "count": 1
+    },
+    "NoContextPrioritization seed=2 primary_metric": {
+      "min": 0.55,
+      "max": 0.55,
+      "mean": 0.55,
+      "count": 1
+    },
+    "NoContextPrioritization seed=3 primary_metric": {
+      "min": 0.55,
+      "max": 0.55,
+      "mean": 0.55,
+      "count": 1
+    },
+    "NoContextPrioritization seed=4 primary_metric": {
+      "min": 0.55,
+      "max": 0.55,
+      "mean": 0.55,
+      "count": 1
+    },
+    "NoContextPrioritization seed=5 primary_metric": {
+      "min": 0.55,
+      "max": 0.55,
+      "mean": 0.55,
+      "count": 1
+    },
+    "StaticContextInjection seed=1 primary_metric": {
+      "min": 0.6,
+      "max": 0.6,
+      "mean": 0.6,
+      "count": 1
+    },
+    "StaticContextInjection seed=2 primary_metric": {
+      "min": 0.6,
+      "max": 0.6,
+      "mean": 0.6,
+      "count": 1
+    },
+    "StaticContextInjection seed=3 primary_metric": {
+      "min": 0.6,
+      "max": 0.6,
+      "mean": 0.6,
+      "count": 1
+    },
+    "StaticContextInjection seed=4 primary_metric": {
+      "min": 0.6,
+      "max": 0.6,
+      "mean": 0.6,
+      "count": 1
+    },
+    "StaticContextInjection seed=5 primary_metric": {
+      "min": 0.6,
+      "max": 0.6,
+      "mean": 0.6,
+      "count": 1
+    },
+    "condition=AIRealTimeVulnerabilityDetection primary_metric_mean: 0.7 primary_metric_std": {
+      "min": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "count": 1
+    },
+    "condition=DynamicTaskAwareContextInjection primary_metric_mean: 0.75 primary_metric_std": {
+      "min": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "count": 1
+    },
+    "condition=HumanOnlyVulnerabilityDetection primary_metric_mean: 0.5 primary_metric_std": {
+      "min": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "count": 1
+    },
+    "condition=MultiAgentContextManagement primary_metric_mean: 0.65 primary_metric_std": {
+      "min": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "count": 1
+    },
+    "condition=NoContextPrioritization primary_metric_mean: 0.55 primary_metric_std": {
+      "min": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "count": 1
+    },
+    "condition=StaticContextInjection primary_metric_mean: 0.6 primary_metric_std": {
+      "min": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "count": 1
+    }
+  },
+  "total_runs": 1,
+  "best_run": {
+    "run_id": "run-1",
+    "task_id": "sandbox-main",
+    "status": "completed",
+    "metrics": {
+      "StaticContextInjection seed=1 primary_metric": 0.6,
+      "StaticContextInjection seed=2 primary_metric": 0.6,
+      "StaticContextInjection seed=3 primary_metric": 0.6,
+      "StaticContextInjection seed=4 primary_metric": 0.6,
+      "StaticContextInjection seed=5 primary_metric": 0.6,
+      "condition=StaticContextInjection primary_metric_mean: 0.6 primary_metric_std": 0.0,
+      "MultiAgentContextManagement seed=1 primary_metric": 0.65,
+      "MultiAgentContextManagement seed=2 primary_metric": 0.65,
+      "MultiAgentContextManagement seed=3 primary_metric": 0.65,
+      "MultiAgentContextManagement seed=4 primary_metric": 0.65,
+      "MultiAgentContextManagement seed=5 primary_metric": 0.65,
+      "condition=MultiAgentContextManagement primary_metric_mean: 0.65 primary_metric_std": 0.0,
+      "DynamicTaskAwareContextInjection seed=1 primary_metric": 0.75,
+      "DynamicTaskAwareContextInjection seed=2 primary_metric": 0.75,
+      "DynamicTaskAwareContextInjection seed=3 primary_metric": 0.75,
+      "DynamicTaskAwareContextInjection seed=4 primary_metric": 0.75,
+      "DynamicTaskAwareContextInjection seed=5 primary_metric": 0.75,
+      "condition=DynamicTaskAwareContextInjection primary_metric_mean: 0.75 primary_metric_std": 0.0,
+      "AIRealTimeVulnerabilityDetection seed=1 primary_metric": 0.7,
+      "AIRealTimeVulnerabilityDetection seed=2 primary_metric": 0.7,
+      "AIRealTimeVulnerabilityDetection seed=3 primary_metric": 0.7,
+      "AIRealTimeVulnerabilityDetection seed=4 primary_metric": 0.7,
+      "AIRealTimeVulnerabilityDetection seed=5 primary_metric": 0.7,
+      "condition=AIRealTimeVulnerabilityDetection primary_metric_mean: 0.7 primary_metric_std": 0.0,
+      "NoContextPrioritization seed=1 primary_metric": 0.55,
+      "NoContextPrioritization seed=2 primary_metric": 0.55,
+      "NoContextPrioritization seed=3 primary_metric": 0.55,
+      "NoContextPrioritization seed=4 primary_metric": 0.55,
+      "NoContextPrioritization seed=5 primary_metric": 0.55,
+      "condition=NoContextPrioritization primary_metric_mean: 0.55 primary_metric_std": 0.0,
+      "HumanOnlyVulnerabilityDetection seed=1 primary_metric": 0.5,
+      "HumanOnlyVulnerabilityDetection seed=2 primary_metric": 0.5,
+      "HumanOnlyVulnerabilityDetection seed=3 primary_metric": 0.5,
+      "HumanOnlyVulnerabilityDetection seed=4 primary_metric": 0.5,
+      "HumanOnlyVulnerabilityDetection seed=5 primary_metric": 0.5,
+      "condition=HumanOnlyVulnerabilityDetection primary_metric_mean: 0.5 primary_metric_std": 0.0
+    },
+    "elapsed_sec": 0.04322362458333373,
+    "stdout": "REGISTERED_CONDITIONS: StaticContextInjection, MultiAgentContextManagement, DynamicTaskAwareContextInjection, AIRealTimeVulnerabilityDetection, NoContextPrioritization, HumanOnlyVulnerabilityDetection\nStaticContextInjection seed=1 primary_metric: 0.6\nStaticContextInjection seed=2 primary_metric: 0.6\nStaticContextInjection seed=3 primary_metric: 0.6\nStaticContextInjection seed=4 primary_metric: 0.6\nStaticContextInjection seed=5 primary_metric: 0.6\ncondition=StaticContextInjection primary_metric_mean: 0.6 primary_metric_std: 0.0\nMultiAgentContextManagement seed=1 primary_metric: 0.65\nMultiAgentContextManagement seed=2 primary_metric: 0.65\nMultiAgentContextManagement seed=3 primary_metric: 0.65\nMultiAgentContextManagement seed=4 primary_metric: 0.65\nMultiAgentContextManagement seed=5 primary_metric: 0.65\ncondition=MultiAgentContextManagement primary_metric_mean: 0.65 primary_metric_std: 0.0\nDynamicTaskAwareContextInjection seed=1 primary_metric: 0.75\nDynamicTaskAwareContextInjection seed=2 primary_metric: 0.75\nDynamicTaskAwareContextInjection seed=3 primary_metric: 0.75\nDynamicTaskAwareContextInjection seed=4 primary_metric: 0.75\nDynamicTaskAwareContextInjection seed=5 primary_metric: 0.75\ncondition=DynamicTaskAwareContextInjection primary_metric_mean: 0.75 primary_metric_std: 0.0\nAIRealTimeVulnerabilityDetection seed=1 primary_metric: 0.7\nAIRealTimeVulnerabilityDetection seed=2 primary_metric: 0.7\nAIRealTimeVulnerabilityDetection seed=3 primary_metric: 0.7\nAIRealTimeVulnerabilityDetection seed=4 primary_metric: 0.7\nAIRealTimeVulnerabilityDetection seed=5 primary_metric: 0.7\ncondition=AIRealTimeVulnerabilityDetection primary_metric_mean: 0.7 primary_metric_std: 0.0\nNoContextPrioritization seed=1 primary_metric: 0.55\nNoContextPrioritization seed=2 primary_metric: 0.55\nNoContextPrioritization seed=3 primary_metric: 0.55\nNoContextPrioritization seed=4 primary_metric: 0.55\nNoContextPrioritization seed=5 primary_metric: 0.55\ncondition=NoContextPrioritization primary_metric_mean: 0.55 primary_metric_std: 0.0\nHumanOnlyVulnerabilityDetection seed=1 primary_metric: 0.5\nHumanOnlyVulnerabilityDetection seed=2 primary_metric: 0.5\nHumanOnlyVulnerabilityDetection seed=3 primary_metric: 0.5\nHumanOnlyVulnerabilityDetection seed=4 primary_metric: 0.5\nHumanOnlyVulnerabilityDetection seed=5 primary_metric: 0.5\ncondition=HumanOnlyVulnerabilityDetection primary_metric_mean: 0.5 primary_metric_std: 0.0\n",
+    "stderr": "",
+    "timed_out": false,
+    "completed_at": "2026-03-15T14:32:50+00:00",
+    "structured_results": {
+      "metrics": {
+        "StaticContextInjection seed=1 primary_metric": 0.6,
+        "StaticContextInjection seed=2 primary_metric": 0.6,
+        "StaticContextInjection seed=3 primary_metric": 0.6,
+        "StaticContextInjection seed=4 primary_metric": 0.6,
+        "StaticContextInjection seed=5 primary_metric": 0.6,
+        "MultiAgentContextManagement seed=1 primary_metric": 0.65,
+        "MultiAgentContextManagement seed=2 primary_metric": 0.65,
+        "MultiAgentContextManagement seed=3 primary_metric": 0.65,
+        "MultiAgentContextManagement seed=4 primary_metric": 0.65,
+        "MultiAgentContextManagement seed=5 primary_metric": 0.65,
+        "DynamicTaskAwareContextInjection seed=1 primary_metric": 0.75,
+        "DynamicTaskAwareContextInjection seed=2 primary_metric": 0.75,
+        "DynamicTaskAwareContextInjection seed=3 primary_metric": 0.75,
+        "DynamicTaskAwareContextInjection seed=4 primary_metric": 0.75,
+        "DynamicTaskAwareContextInjection seed=5 primary_metric": 0.75,
+        "AIRealTimeVulnerabilityDetection seed=1 primary_metric": 0.7,
+        "AIRealTimeVulnerabilityDetection seed=2 primary_metric": 0.7,
+        "AIRealTimeVulnerabilityDetection seed=3 primary_metric": 0.7,
+        "AIRealTimeVulnerabilityDetection seed=4 primary_metric": 0.7,
+        "AIRealTimeVulnerabilityDetection seed=5 primary_metric": 0.7,
+        "NoContextPrioritization seed=1 primary_metric": 0.55,
+        "NoContextPrioritization seed=2 primary_metric": 0.55,
+        "NoContextPrioritization seed=3 primary_metric": 0.55,
+        "NoContextPrioritization seed=4 primary_metric": 0.55,
+        "NoContextPrioritization seed=5 primary_metric": 0.55,
+        "HumanOnlyVulnerabilityDetection seed=1 primary_metric": 0.5,
+        "HumanOnlyVulnerabilityDetection seed=2 primary_metric": 0.5,
+        "HumanOnlyVulnerabilityDetection seed=3 primary_metric": 0.5,
+        "HumanOnlyVulnerabilityDetection seed=4 primary_metric": 0.5,
+        "HumanOnlyVulnerabilityDetection seed=5 primary_metric": 0.5
+      },
+      "elapsed_sec": 0.01,
+      "time_budget_sec": 600,
+      "steps_completed": 0,
+      "nan_count": 0
+    }
+  },
+  "latex_table": "\\begin{table}[h]\n\\centering\n\\caption{Experiment Results}\n\\begin{tabular}{lrrrr}\n\\hline\nMetric & Min & Max & Mean & N \\\\\n\\hline\nAIRealTimeVulnerabilityDetection seed=1 primary_metric & 0.7000 & 0.7000 & 0.7000 & 1 \\\\\nAIRealTimeVulnerabilityDetection seed=2 primary_metric & 0.7000 & 0.7000 & 0.7000 & 1 \\\\\nAIRealTimeVulnerabilityDetection seed=3 primary_metric & 0.7000 & 0.7000 & 0.7000 & 1 \\\\\nAIRealTimeVulnerabilityDetection seed=4 primary_metric & 0.7000 & 0.7000 & 0.7000 & 1 \\\\\nAIRealTimeVulnerabilityDetection seed=5 primary_metric & 0.7000 & 0.7000 & 0.7000 & 1 \\\\\nDynamicTaskAwareContextInjection seed=1 primary_metric & 0.7500 & 0.7500 & 0.7500 & 1 \\\\\nDynamicTaskAwareContextInjection seed=2 primary_metric & 0.7500 & 0.7500 & 0.7500 & 1 \\\\\nDynamicTaskAwareContextInjection seed=3 primary_metric & 0.7500 & 0.7500 & 0.7500 & 1 \\\\\nDynamicTaskAwareContextInjection seed=4 primary_metric & 0.7500 & 0.7500 & 0.7500 & 1 \\\\\nDynamicTaskAwareContextInjection seed=5 primary_metric & 0.7500 & 0.7500 & 0.7500 & 1 \\\\\nHumanOnlyVulnerabilityDetection seed=1 primary_metric & 0.5000 & 0.5000 & 0.5000 & 1 \\\\\nHumanOnlyVulnerabilityDetection seed=2 primary_metric & 0.5000 & 0.5000 & 0.5000 & 1 \\\\\nHumanOnlyVulnerabilityDetection seed=3 primary_metric & 0.5000 & 0.5000 & 0.5000 & 1 \\\\\nHumanOnlyVulnerabilityDetection seed=4 primary_metric & 0.5000 & 0.5000 & 0.5000 & 1 \\\\\nHumanOnlyVulnerabilityDetection seed=5 primary_metric & 0.5000 & 0.5000 & 0.5000 & 1 \\\\\nMultiAgentContextManagement seed=1 primary_metric & 0.6500 & 0.6500 & 0.6500 & 1 \\\\\nMultiAgentContextManagement seed=2 primary_metric & 0.6500 & 0.6500 & 0.6500 & 1 \\\\\nMultiAgentContextManagement seed=3 primary_metric & 0.6500 & 0.6500 & 0.6500 & 1 \\\\\nMultiAgentContextManagement seed=4 primary_metric & 0.6500 & 0.6500 & 0.6500 & 1 \\\\\nMultiAgentContextManagement seed=5 primary_metric & 0.6500 & 0.6500 & 0.6500 & 1 \\\\\nNoContextPrioritization seed=1 primary_metric & 0.5500 & 0.5500 & 0.5500 & 1 \\\\\nNoContextPrioritization seed=2 primary_metric & 0.5500 & 0.5500 & 0.5500 & 1 \\\\\nNoContextPrioritization seed=3 primary_metric & 0.5500 & 0.5500 & 0.5500 & 1 \\\\\nNoContextPrioritization seed=4 primary_metric & 0.5500 & 0.5500 & 0.5500 & 1 \\\\\nNoContextPrioritization seed=5 primary_metric & 0.5500 & 0.5500 & 0.5500 & 1 \\\\\nStaticContextInjection seed=1 primary_metric & 0.6000 & 0.6000 & 0.6000 & 1 \\\\\nStaticContextInjection seed=2 primary_metric & 0.6000 & 0.6000 & 0.6000 & 1 \\\\\nStaticContextInjection seed=3 primary_metric & 0.6000 & 0.6000 & 0.6000 & 1 \\\\\nStaticContextInjection seed=4 primary_metric & 0.6000 & 0.6000 & 0.6000 & 1 \\\\\nStaticContextInjection seed=5 primary_metric & 0.6000 & 0.6000 & 0.6000 & 1 \\\\\ncondition=AIRealTimeVulnerabilityDetection primary_metric_mean: 0.7 primary_metric_std & 0.0000 & 0.0000 & 0.0000 & 1 \\\\\ncondition=DynamicTaskAwareContextInjection primary_metric_mean: 0.75 primary_metric_std & 0.0000 & 0.0000 & 0.0000 & 1 \\\\\ncondition=HumanOnlyVulnerabilityDetection primary_metric_mean: 0.5 primary_metric_std & 0.0000 & 0.0000 & 0.0000 & 1 \\\\\ncondition=MultiAgentContextManagement primary_metric_mean: 0.65 primary_metric_std & 0.0000 & 0.0000 & 0.0000 & 1 \\\\\ncondition=NoContextPrioritization primary_metric_mean: 0.55 primary_metric_std & 0.0000 & 0.0000 & 0.0000 & 1 \\\\\ncondition=StaticContextInjection primary_metric_mean: 0.6 primary_metric_std & 0.0000 & 0.0000 & 0.0000 & 1 \\\\\n\\hline\n\\end{tabular}\n\\end{table}",
+  "generated": "2026-03-15T14:40:43+00:00",
+  "total_metric_keys": 36
+}

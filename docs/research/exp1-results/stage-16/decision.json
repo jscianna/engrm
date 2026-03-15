@@ -1,0 +1,15 @@
+{
+  "stage_id": "16-paper_outline",
+  "run_id": "rc-20260315-143023-95c8c3",
+  "status": "done",
+  "decision": "proceed",
+  "output_artifacts": [
+    "outline.md"
+  ],
+  "evidence_refs": [
+    "stage-16/outline.md"
+  ],
+  "error": null,
+  "ts": "2026-03-15T14:41:21+00:00",
+  "next_stage": 17
+}

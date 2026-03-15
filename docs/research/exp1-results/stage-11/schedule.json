@@ -1,0 +1,54 @@
+{
+  "tasks": [
+    {
+      "id": 1,
+      "name": "NoContextPrioritization",
+      "depends_on": [],
+      "gpu_count": 1,
+      "estimated_minutes": 180,
+      "priority": 2
+    },
+    {
+      "id": 2,
+      "name": "HumanOnlyVulnerabilityDetection",
+      "depends_on": [],
+      "gpu_count": 1,
+      "estimated_minutes": 240,
+      "priority": 2
+    },
+    {
+      "id": 3,
+      "name": "StaticContextInjection",
+      "depends_on": [],
+      "gpu_count": 1,
+      "estimated_minutes": 210,
+      "priority": 3
+    },
+    {
+      "id": 4,
+      "name": "MultiAgentContextManagement",
+      "depends_on": [],
+      "gpu_count": 1,
+      "estimated_minutes": 220,
+      "priority": 3
+    },
+    {
+      "id": 5,
+      "name": "DynamicTaskAwareContextInjection",
+      "depends_on": [],
+      "gpu_count": 1,
+      "estimated_minutes": 200,
+      "priority": 1
+    },
+    {
+      "id": 6,
+      "name": "AIRealTimeVulnerabilityDetection",
+      "depends_on": [],
+      "gpu_count": 1,
+      "estimated_minutes": 230,
+      "priority": 1
+    }
+  ],
+  "total_gpu_budget": 6,
+  "generated": "2023-10-20"
+}

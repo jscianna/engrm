@@ -1,0 +1,37 @@
+{
+  "stage_id": "13-iterative_refine",
+  "run_id": "rc-20260315-143023-95c8c3",
+  "status": "done",
+  "decision": "proceed",
+  "output_artifacts": [
+    "refinement_log.json",
+    "experiment_final/",
+    "experiment_v1/",
+    "experiment_v2/",
+    "experiment_v3/",
+    "experiment_v4/",
+    "experiment_v5/",
+    "experiment_v6/",
+    "experiment_v7/",
+    "experiment_v8/",
+    "experiment_v9/",
+    "experiment_v10/"
+  ],
+  "evidence_refs": [
+    "stage-13/refinement_log.json",
+    "stage-13/experiment_final/",
+    "stage-13/experiment_v1/",
+    "stage-13/experiment_v2/",
+    "stage-13/experiment_v3/",
+    "stage-13/experiment_v4/",
+    "stage-13/experiment_v5/",
+    "stage-13/experiment_v6/",
+    "stage-13/experiment_v7/",
+    "stage-13/experiment_v8/",
+    "stage-13/experiment_v9/",
+    "stage-13/experiment_v10/"
+  ],
+  "error": null,
+  "ts": "2026-03-15T14:40:43+00:00",
+  "next_stage": 14
+}

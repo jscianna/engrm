@@ -1,0 +1,2 @@
+Started: Sun Mar 15 22:22:18 +08 2026
+Preflight check... Hardware advisory: macOS GPU detected (Apple Silicon GPU). PyTorch MPS backend is available but has limited performance compared to NVIDIA CUDA GPUs. For large-scale experiments, consider using a remote GPU server.

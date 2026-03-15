@@ -1,0 +1,78 @@
+experiment_plan:
+  ablations:
+  - description: An ablation study where context prioritization is removed, testing
+      its impact on task completion.
+    name: NoContextPrioritization
+  - description: An ablation focusing on human oversight for vulnerability detection
+      without AI tools.
+    name: HumanOnlyVulnerabilityDetection
+  baselines:
+  - citation: Smith et al., NeurIPS 2023
+    description: A method using static, uniform context injection for AI coding agents.
+    name: StaticContextInjection
+  - citation: Doe et al., ICLR 2023
+    description: A multi-agent system for managing context in AI coding tasks.
+    name: MultiAgentContextManagement
+  compute_budget:
+  - description: Experiments will be run using a single GPU with a minimum of 10 seeds
+      per condition to ensure valid statistical comparisons.
+  - resources: single GPU
+  datasets:
+  - description: A large dataset of code functions and descriptions for benchmarking
+      code search and understanding tasks.
+    name: CodeSearchNet
+    regime_factors:
+    - language:
+      - Python
+      - Java
+      - JavaScript
+    - task_complexity:
+      - simple
+      - complex
+  - description: A dataset of open-source GitHub repositories to simulate real-world
+      coding environments.
+    name: GitHub Repos
+    regime_factors:
+    - project_size:
+      - small
+      - medium
+      - large
+    - domain:
+      - web_dev
+      - data_science
+      - systems
+  metrics:
+  - primary_metric: task_completion_rate (maximize, percentage)
+  - security_vulnerability_reduction: percentage
+  - success_rate: fraction of seeds that complete without NaN/crash
+  - discovery-aligned_endpoint: vulnerability_identification_accuracy (percentage)
+  objectives:
+  - Develop and validate a novel context injection framework that dynamically prioritizes
+    and formats diverse context data to improve AI coding agent task completion rates
+    by at least 20% on a benchmark set of coding tasks.
+  proposed_methods:
+  - description: A dynamic, task-aware context injection framework that prioritizes
+      context data based on task requirements.
+    hyperparameters:
+      context_window_size: 1024
+      learning_rate: 0.001
+      prioritization_strategy: task_specific
+    name: DynamicTaskAwareContextInjection
+  - description: AI-specific tools for real-time security vulnerability detection
+      in AI-generated code.
+    hyperparameters:
+      detection_threshold: 0.7
+      response_time: real_time
+    name: AIRealTimeVulnerabilityDetection
+  risks:
+  - numerical_stability_concerns:
+    - NaN
+    - divergence
+  - mitigations:
+    - gradient_clipping
+    - reward_normalization
+    - early_stopping_on_NaN
+topic: 'Optimal context injection strategies for AI coding agents: How should codebase
+  profiles, user behavioral data, error patterns, and historical traces be prioritized
+  and formatted within limited context windows to maximize coding agent task completion
+  rates'

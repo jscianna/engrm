@@ -1,0 +1,19 @@
+{
+  "stage_id": "23-citation_verify",
+  "run_id": "rc-20260315-143023-95c8c3",
+  "status": "done",
+  "decision": "proceed",
+  "output_artifacts": [
+    "verification_report.json",
+    "references_verified.bib",
+    "paper_final_verified.md"
+  ],
+  "evidence_refs": [
+    "stage-23/verification_report.json",
+    "stage-23/references_verified.bib",
+    "stage-23/paper_final_verified.md"
+  ],
+  "error": null,
+  "ts": "2026-03-15T14:54:12+00:00",
+  "next_stage": null
+}
