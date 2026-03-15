@@ -40,6 +40,20 @@ import type { FatHippoConfig, Memory, SynthesizedMemory } from "./types.js";
 import { buildStructuredTrace, getMessageText, shouldCaptureCodingTrace } from "./cognitive/trace-capture.js";
 import { CONTEXT_ENGINE_ID, CONTEXT_ENGINE_VERSION } from "./version.js";
 import {
+  initializeUserDNA,
+  analyzeSession,
+  mergeSignals,
+  formatUserDNAForInjection,
+  loadUserDNA,
+  saveUserDNA,
+  type UserDNA,
+} from "./user-dna/index.js";
+import {
+  processTraceForCollective,
+  getCollectiveWisdom,
+  type TraceData,
+} from "./collective/index.js";
+import {
   formatMemoriesForInjection,
   dedupeMemories,
   estimateTokens,
@@ -86,6 +100,13 @@ export class FatHippoContextEngine implements ContextEngine {
   // Codebase profiling state
   private sessionCodebaseProfiles: Map<string, CodebaseProfile | null> = new Map();
   private codebaseProfilingEnabled: boolean;
+
+  // User DNA state
+  private userDNACache: Map<string, UserDNA | null> = new Map();
+  private userDNAEnabled: boolean;
+
+  // Collective intelligence state
+  private collectiveEnabled: boolean;
   
   private static readonly TRIVIAL_ACKS = new Set([
     "ok",
@@ -130,6 +151,10 @@ export class FatHippoContextEngine implements ContextEngine {
     this.cognitiveEnabled = this.mode === "hosted" && config.cognitiveEnabled !== false;
     // Enable codebase profiling (default: true)
     this.codebaseProfilingEnabled = config.codebaseProfilingEnabled !== false;
+    // Enable User DNA (default: true)
+    this.userDNAEnabled = config.userDNAEnabled !== false;
+    // Enable collective intelligence (default: true for hosted)
+    this.collectiveEnabled = this.mode === "hosted" && config.collectiveEnabled !== false;
   }
 
   /**
@@ -270,6 +295,13 @@ export class FatHippoContextEngine implements ContextEngine {
         sessionFile: params.sessionFile,
         messages: params.messages,
       });
+
+      // User DNA analysis (local mode)
+      await this.updateUserDNA({
+        sessionId: params.sessionId,
+        sessionFile: params.sessionFile,
+        messages: params.messages,
+      });
       return;
     }
 
@@ -294,6 +326,22 @@ export class FatHippoContextEngine implements ContextEngine {
       });
     } catch (error) {
       console.error("[FatHippo] Record turn error:", error);
+    }
+
+    // User DNA analysis (hosted mode)
+    await this.updateUserDNA({
+      sessionId: params.sessionId,
+      sessionFile: params.sessionFile,
+      messages: params.messages,
+    });
+
+    // Collective intelligence processing (hosted mode, opt-in only)
+    if (this.collectiveEnabled && this.cognitiveEnabled) {
+      await this.processTraceForCollectiveSharing({
+        sessionId: params.sessionId,
+        sessionFile: params.sessionFile,
+        messages: params.messages,
+      });
     }
   }
   
@@ -399,17 +447,29 @@ export class FatHippoContextEngine implements ContextEngine {
       hostedSession.workspaceRoot,
     );
 
+    // User DNA context injection
+    const userDNABlock = await this.getUserDNABlock(
+      hostedSession.workspaceRoot,
+    );
+
+    // Collective wisdom injection (when error detected)
+    const collectiveBlock = this.collectiveEnabled
+      ? await this.getCollectiveWisdomBlock(lastUserMessage, params.messages)
+      : "";
+
     const fullContext = typeof params.tokenBudget === "number" && params.tokenBudget > 0
       ? this.fitContextToBudget({
           sections: [
             runtimeAwareness,
             profileBlock,
+            userDNABlock,
             hostedContext,
+            collectiveBlock,
             hippoNodInstruction,
           ],
           contextBudget: Math.max(0, params.tokenBudget - baseMessageTokens),
         })
-      : runtimeAwareness + profileBlock + hostedContext + hippoNodInstruction;
+      : runtimeAwareness + profileBlock + userDNABlock + hostedContext + collectiveBlock + hippoNodInstruction;
     const tokens = estimateTokens(fullContext) + baseMessageTokens;
 
     return {
@@ -522,11 +582,17 @@ export class FatHippoContextEngine implements ContextEngine {
       localProfileId !== "openclaw-local-default" ? localProfileId : undefined,
     );
 
+    // User DNA context injection (local mode)
+    const userDNABlock = await this.getUserDNABlock(
+      localProfileId !== "openclaw-local-default" ? localProfileId : undefined,
+    );
+
     const fullContext = typeof params.tokenBudget === "number" && params.tokenBudget > 0
         ? this.fitContextToBudget({
           sections: [
             runtimeAwareness,
             profileBlock,
+            userDNABlock,
             workflowBlock,
             patternBlock,
             memoryBlock ? `${memoryBlock}\n` : "",
@@ -535,7 +601,7 @@ export class FatHippoContextEngine implements ContextEngine {
           ],
           contextBudget: Math.max(0, params.tokenBudget - baseTokens),
         })
-      : runtimeAwareness + profileBlock + workflowBlock + patternBlock + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + hippoNodInstruction;
+      : runtimeAwareness + profileBlock + userDNABlock + workflowBlock + patternBlock + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + hippoNodInstruction;
 
     return {
       messages: params.messages,
@@ -874,6 +940,7 @@ export class FatHippoContextEngine implements ContextEngine {
     this.sessionStartTimes.clear();
     this.sessionHippoNodState.clear();
     this.sessionCodebaseProfiles.clear();
+    this.userDNACache.clear();
   }
 
   // --- Codebase profiling methods ---
@@ -917,6 +984,165 @@ export class FatHippoContextEngine implements ContextEngine {
     }
 
     return "";
+  }
+
+  // --- User DNA methods ---
+
+  private async updateUserDNA(params: {
+    sessionId: string;
+    sessionFile: string;
+    messages: AgentMessage[];
+  }): Promise<void> {
+    if (!this.userDNAEnabled) return;
+
+    try {
+      const workspaceRoot = this.detectWorkspaceRoot(params.sessionFile) ?? ".";
+      const userId = this.config.namespace ?? this.config.installationId ?? "default";
+
+      // Load existing DNA (from cache or storage)
+      let dna = this.userDNACache.get(userId);
+      if (dna === undefined) {
+        dna = await loadUserDNA(userId, workspaceRoot);
+        this.userDNACache.set(userId, dna);
+      }
+
+      if (!dna) {
+        dna = initializeUserDNA(userId);
+      }
+
+      // Extract messages for analysis
+      const runtimeMessages = this.toRuntimeMessages(params.messages);
+      const sessionStartTime = this.sessionStartTimes.get(params.sessionId) ?? Date.now() - 60000;
+      const sessionDurationMs = Date.now() - sessionStartTime;
+
+      // Only analyze if we have meaningful messages
+      if (runtimeMessages.length < 2) return;
+
+      const signals = analyzeSession({
+        messages: runtimeMessages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          timestamp: new Date().toISOString(),
+        })),
+        sessionDurationMs,
+        filesModified: this.detectFilesModified(params.sessionFile, params.messages),
+        toolsUsed: this.detectToolsUsed(params.messages),
+      });
+
+      // Merge signals into DNA
+      dna = mergeSignals(dna, signals);
+
+      // Save updated DNA
+      await saveUserDNA(dna, workspaceRoot);
+      this.userDNACache.set(userId, dna);
+    } catch (error) {
+      // User DNA analysis is best-effort — never break the session
+      console.error("[FatHippo] User DNA update error:", error);
+    }
+  }
+
+  private async getUserDNABlock(workspaceRoot?: string): Promise<string> {
+    if (!this.userDNAEnabled) return "";
+
+    try {
+      const userId = this.config.namespace ?? this.config.installationId ?? "default";
+
+      // Check cache first
+      let dna = this.userDNACache.get(userId);
+      if (dna === undefined && workspaceRoot) {
+        dna = await loadUserDNA(userId, workspaceRoot);
+        this.userDNACache.set(userId, dna);
+      }
+
+      if (!dna || dna.sessionCount === 0) return "";
+      return formatUserDNAForInjection(dna);
+    } catch {
+      return "";
+    }
+  }
+
+  // --- Collective intelligence methods ---
+
+  private async processTraceForCollectiveSharing(params: {
+    sessionId: string;
+    sessionFile: string;
+    messages: AgentMessage[];
+  }): Promise<void> {
+    if (!this.collectiveEnabled || !this.config.apiKey || !this.config.baseUrl) return;
+
+    try {
+      if (!shouldCaptureCodingTrace(params.messages)) return;
+
+      const startTime = this.sessionStartTimes.get(params.sessionId) ?? Date.now() - 60000;
+      const payload = buildStructuredTrace({
+        sessionId: params.sessionId,
+        messages: params.messages,
+        toolsUsed: this.detectToolsUsed(params.messages),
+        filesModified: this.detectFilesModified(params.sessionFile, params.messages),
+        workspaceRoot: this.detectWorkspaceRoot(params.sessionFile),
+        startTime,
+        endTime: Date.now(),
+      });
+
+      if (!payload) return;
+
+      const traceData: TraceData = {
+        type: payload.type,
+        problem: payload.problem,
+        context: {
+          technologies: payload.context.technologies,
+          errorMessages: payload.context.errorMessages,
+        },
+        reasoning: payload.reasoning,
+        solution: payload.solution,
+        outcome: payload.outcome,
+        retryCount: payload.retryCount,
+        filesModified: payload.filesModified,
+      };
+
+      // Fire-and-forget — don't block on this
+      processTraceForCollective(
+        traceData,
+        { sharedLearningEnabled: this.config.shareEligibleByDefault !== false },
+        { apiKey: this.config.apiKey, baseUrl: this.config.baseUrl || "https://fathippo.ai/api" },
+      ).catch((error) => {
+        console.error("[FatHippo] Collective trace submission error:", error);
+      });
+    } catch (error) {
+      console.error("[FatHippo] Collective processing error:", error);
+    }
+  }
+
+  private async getCollectiveWisdomBlock(
+    lastUserMessage: string,
+    messages: AgentMessage[],
+  ): Promise<string> {
+    if (!this.collectiveEnabled || !this.config.apiKey || !this.config.baseUrl) return "";
+
+    try {
+      // Detect if there's an error in recent messages
+      const recentText = messages.slice(-5).map(getMessageText).join(" ");
+      const errorMatch = recentText.match(/(?:TypeError|ReferenceError|SyntaxError|Error|SQLITE_\w+|MODULE_NOT_FOUND|ENOENT|ECONNREFUSED)[\s:]*([^\n]{0,100})/i);
+      if (!errorMatch) return "";
+
+      const errorType = errorMatch[0].split(/[\s:]/)[0];
+      // Detect framework from recent messages
+      const combined = recentText + " " + lastUserMessage;
+      let framework = "";
+      if (/next\.?js|app\s+router/i.test(combined)) framework = "next.js";
+      else if (/react|useState|useEffect/i.test(combined)) framework = "react";
+      else if (/express/i.test(combined)) framework = "express";
+      else if (/turso|libsql/i.test(combined)) framework = "sqlite";
+      else if (/typescript|tsc/i.test(combined)) framework = "typescript";
+
+      return await getCollectiveWisdom(
+        errorType,
+        framework,
+        { apiKey: this.config.apiKey, baseUrl: this.config.baseUrl || "https://fathippo.ai/api" },
+      );
+    } catch {
+      return "";
+    }
   }
 
   // --- Helper methods ---

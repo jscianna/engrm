@@ -92,6 +92,102 @@ function parseArgs(argv) {
     }
     return options;
 }
+async function promptForRepo() {
+    const rl = await import("node:readline");
+    const iface = rl.createInterface({ input: process.stdin, output: process.stdout });
+    return new Promise((resolve) => {
+        console.log("");
+        console.log("What repo should FatHippo learn? (optional)");
+        console.log("  Paste a GitHub URL or local path, or press Enter to skip.");
+        console.log("");
+        iface.question("> ", (answer) => {
+            iface.close();
+            const trimmed = answer.trim();
+            resolve(trimmed || null);
+        });
+    });
+}
+async function profileRepo(repoInput) {
+    const { execSync } = await import("node:child_process");
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const os = await import("node:os");
+    let workDir = repoInput;
+    let tempDir = null;
+    // If it looks like a URL, clone it to a temp dir
+    const isUrl = repoInput.startsWith("http://") || repoInput.startsWith("https://") || repoInput.startsWith("git@");
+    if (isUrl) {
+        tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "fathippo-profile-"));
+        console.log("Cloning repository...");
+        try {
+            execSync(`git clone --depth 50 "${repoInput}" "${tempDir}/repo"`, { stdio: "pipe" });
+            workDir = path.join(tempDir, "repo");
+        }
+        catch (err) {
+            console.error("Failed to clone repository. Check the URL and try again.");
+            if (tempDir)
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            return;
+        }
+    }
+    // Resolve to absolute path
+    workDir = path.resolve(workDir);
+    // Verify it's a git repo
+    if (!fs.existsSync(path.join(workDir, ".git"))) {
+        console.error("Not a git repository. Please provide a path to a git project.");
+        if (tempDir)
+            fs.rmSync(tempDir, { recursive: true, force: true });
+        return;
+    }
+    console.log("Profiling codebase...");
+    try {
+        // Try to use the installed context engine's profiler
+        let profileFn = null;
+        // Look for the installed extension
+        const extensionPaths = [
+            path.join(process.env.HOME || "~", ".openclaw/extensions/fathippo-context-engine/dist/profiler/index.js"),
+        ];
+        for (const extPath of extensionPaths) {
+            if (fs.existsSync(extPath)) {
+                const mod = await import(extPath);
+                profileFn = mod.profileCodebase || mod.default?.profileCodebase;
+                break;
+            }
+        }
+        if (profileFn) {
+            const profile = await profileFn(workDir, { force: true });
+            const techStack = profile.techStack;
+            const structure = profile.structure;
+            const languages = techStack?.languages || [];
+            const frameworks = techStack?.frameworks || [];
+            const totalFiles = structure?.totalFiles || 0;
+            const langStr = languages.slice(0, 3).map(l => `${l.name} ${l.percentage}%`).join(", ");
+            const fwStr = frameworks.length > 0 ? `, ${frameworks.join(", ")}` : "";
+            console.log(`✅ Profiled: ${langStr}${fwStr} · ${totalFiles} files`);
+        }
+        else {
+            // Fallback: basic profile without the full engine
+            const pkgJsonPath = path.join(workDir, "package.json");
+            if (fs.existsSync(pkgJsonPath)) {
+                const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, "utf-8"));
+                const deps = Object.keys(pkg.dependencies || {}).slice(0, 5).join(", ");
+                console.log(`✅ Detected project with deps: ${deps}`);
+            }
+            else {
+                console.log("✅ Repo registered. Profile will be generated on first agent session.");
+            }
+        }
+    }
+    catch (err) {
+        // Profile failed but install still succeeded
+        console.log("⚠ Profiling skipped — profile will be generated on first agent session.");
+    }
+    // Clean up temp clone
+    if (tempDir) {
+        const fs2 = await import("node:fs");
+        fs2.rmSync(tempDir, { recursive: true, force: true });
+    }
+}
 async function promptForMode() {
     const rl = await import("node:readline");
     const iface = rl.createInterface({ input: process.stdin, output: process.stdout });
@@ -220,6 +316,11 @@ export async function main(argv = process.argv.slice(2)) {
             return;
         }
         console.log("FatHippo is connected to OpenClaw in local-only mode.");
+        // Ask if they want to profile a repo
+        const repo = await promptForRepo();
+        if (repo) {
+            await profileRepo(repo);
+        }
         return;
     }
     let apiKey = options.apiKey?.trim();
@@ -264,5 +365,10 @@ export async function main(argv = process.argv.slice(2)) {
         return;
     }
     console.log(options.noRestart ? "FatHippo is configured for OpenClaw." : "FatHippo is connected to OpenClaw.");
+    // Ask if they want to profile a repo
+    const repo = await promptForRepo();
+    if (repo) {
+        await profileRepo(repo);
+    }
 }
 //# sourceMappingURL=cli.js.map

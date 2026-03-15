@@ -756,6 +756,31 @@ async function ensureInitialized(): Promise<void> {
   // Persisted reusable signatures are cleared to reduce cross-session linkability.
   await client.execute(`UPDATE coding_traces SET shared_signature = NULL WHERE shared_signature IS NOT NULL`).catch(() => {});
   await client.execute(`UPDATE cognitive_patterns SET shared_signature = NULL WHERE scope = 'global'`).catch(() => {});
+
+  // Collective intelligence table
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS collective_patterns (
+      id TEXT PRIMARY KEY,
+      pattern_hash TEXT NOT NULL UNIQUE,
+      category TEXT NOT NULL DEFAULT 'error-fix',
+      error_type TEXT NOT NULL,
+      framework TEXT NOT NULL DEFAULT '',
+      trigger_context TEXT NOT NULL,
+      resolution_approach TEXT NOT NULL,
+      confidence REAL NOT NULL DEFAULT 0.5,
+      success_count INTEGER NOT NULL DEFAULT 1,
+      total_attempts INTEGER NOT NULL DEFAULT 1,
+      contributor_count INTEGER NOT NULL DEFAULT 1,
+      difficulty REAL NOT NULL DEFAULT 0.5,
+      first_seen TEXT NOT NULL,
+      last_confirmed TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+  await client.execute(`CREATE INDEX IF NOT EXISTS idx_collective_error_type ON collective_patterns(error_type)`).catch(() => {});
+  await client.execute(`CREATE INDEX IF NOT EXISTS idx_collective_framework ON collective_patterns(framework)`).catch(() => {});
+
   await ensureCognitiveIndexes(client);
 
   initialized = true;

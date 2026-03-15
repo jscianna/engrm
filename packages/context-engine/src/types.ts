@@ -37,6 +37,10 @@ export interface FatHippoConfig {
   codebaseProfilingEnabled?: boolean;
   /** Max token budget for profile in context. Default: 1400 */
   codebaseProfileTokenBudget?: number;
+  /** Enable User DNA behavioral profiling. Default: true */
+  userDNAEnabled?: boolean;
+  /** Enable collective intelligence pattern sharing. Default: true for hosted */
+  collectiveEnabled?: boolean;
 }
 
 export interface Memory {
