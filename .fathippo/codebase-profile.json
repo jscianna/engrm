@@ -1,0 +1,136 @@
+{
+  "version": 1,
+  "generatedAt": "2026-03-15T08:45:00.138Z",
+  "generatedFromCommit": "492087bd5a28be9cbef5848e291f2c5da6a4e699",
+  "workspaceRoot": "/Users/clawdaddy/clawd/projects/fathippo",
+  "techStack": {
+    "languages": [
+      {
+        "name": "typescript",
+        "percentage": 53
+      },
+      {
+        "name": "json",
+        "percentage": 34
+      },
+      {
+        "name": "markdown",
+        "percentage": 5
+      },
+      {
+        "name": "yaml",
+        "percentage": 5
+      },
+      {
+        "name": "javascript",
+        "percentage": 2
+      },
+      {
+        "name": "shell",
+        "percentage": 1
+      }
+    ],
+    "frameworks": [
+      "next.js",
+      "react",
+      "tailwind",
+      "shadcn/ui"
+    ],
+    "runtime": "node",
+    "packageManager": "npm",
+    "buildTools": [],
+    "testing": [
+      "vitest"
+    ],
+    "database": [
+      "turso/libsql",
+      "drizzle"
+    ],
+    "deployment": [
+      "vercel"
+    ]
+  },
+  "structure": {
+    "type": "workspace",
+    "entryPoints": [
+      "src/",
+      "packages/cognition/src/index.ts"
+    ],
+    "workspaces": [
+      "packages/cli",
+      "packages/cognition",
+      "packages/cognitive-engine",
+      "packages/connect",
+      "packages/context-engine",
+      "packages/hosted",
+      "packages/local",
+      "packages/mcp-server",
+      "packages/openclaw-plugin"
+    ],
+    "totalFiles": 509,
+    "totalDirectories": 221,
+    "fileTreeSummary": "docs/ (11 items)\n  api/ (6 items)\n    context/ (1 items)\n  architecture/ (3 items)\n  operations/ (7 items)\n    nightly/ (5 items)\n      history/ (1 items)\n  packages/ (4 items)\n  roadmap/ (3 items)\nexamples/ (6 items)\n  env/ (3 items)\n  tsconfig.json\nmigrations/ (4 items)\npackages/ (9 items)\n  cli/ (4 items)\n    bin/ (1 items)\n    lib/ (6 items)\n  cognition/ (3 items)\n    src/ (1 items)\n  cognitive-engine/ (8 items)\n    src/ (30 items)\n      api/ (1 items)\n      constraints/ (1 items)\n      eval/ (2 items)\n      extraction/ (1 items)\n      hooks/ (1 items)\n      utils/ (1 items)\n  connect/ (3 items)\n    src/ (3 items)\n  context-engine/ (7 items)\n    src/ (9 items)\n      api/ (1 items)\n      cognitive/ (2 items)\n      profiler/ (8 items)\n      utils/ (2 items)\n  hosted/ (3 items)\n    src/ (6 items)\n  local/ (3 items)\n    src/ (4 items)\n  mcp-server/ (6 items)"
+  },
+  "hotspots": [
+    {
+      "path": "package-lock.json",
+      "reason": "largest",
+      "metric": 22313
+    },
+    {
+      "path": "packages/context-engine/package-lock.json",
+      "reason": "largest",
+      "metric": 10083
+    },
+    {
+      "path": "packages/cognitive-engine/pnpm-lock.yaml",
+      "reason": "largest",
+      "metric": 5854
+    },
+    {
+      "path": "src/lib/cognitive-db.ts",
+      "reason": "largest",
+      "metric": 4708
+    },
+    {
+      "path": "src/lib/db.ts",
+      "reason": "largest",
+      "metric": 4648
+    },
+    {
+      "path": "@/lib/errors",
+      "reason": "most-imported",
+      "metric": 84
+    },
+    {
+      "path": "@/lib/api-auth",
+      "reason": "most-imported",
+      "metric": 73
+    },
+    {
+      "path": "@/lib/db",
+      "reason": "most-imported",
+      "metric": 64
+    }
+  ],
+  "dependencies": {
+    "topDirect": [
+      "next",
+      "react",
+      "lucide-react",
+      "@clerk/nextjs",
+      "vitest"
+    ]
+  },
+  "git": {
+    "totalCommits": 336,
+    "activeContributors": 4,
+    "mostActiveDirectories": [],
+    "branchingModel": "trunk"
+  },
+  "architecture": {
+    "summary": "Profile generated with free-data analysis. Run with LLM summarization for architectural insights.",
+    "patterns": [],
+    "conventions": []
+  }
+}

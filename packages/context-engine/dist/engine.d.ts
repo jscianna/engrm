@@ -21,6 +21,8 @@ export declare class FatHippoContextEngine implements ContextEngine {
     private sessionLocalProfiles;
     private sessionHippoNodState;
     private cognitiveEnabled;
+    private sessionCodebaseProfiles;
+    private codebaseProfilingEnabled;
     private static readonly TRIVIAL_ACKS;
     private static readonly HIPPO_NOD_COOLDOWN_MS;
     private static readonly HIPPO_NOD_MIN_MESSAGE_GAP;
@@ -115,6 +117,8 @@ export declare class FatHippoContextEngine implements ContextEngine {
      * Cleanup resources
      */
     dispose(): Promise<void>;
+    private profileCodebaseAsync;
+    private getCodebaseProfileBlock;
     private extractContent;
     private buildHostedRuntimeMetadata;
     private toRuntimeMessages;

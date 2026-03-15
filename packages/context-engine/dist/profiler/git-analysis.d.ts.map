@@ -1,0 +1,1 @@
+{"version":3,"file":"git-analysis.d.ts","sourceRoot":"","sources":["../../src/profiler/git-analysis.ts"],"names":[],"mappings":"AAAA;;GAEG;AAKH,OAAO,KAAK,EAAE,iBAAiB,EAAE,MAAM,YAAY,CAAC;AAgBpD,wBAAsB,iBAAiB,CAAC,aAAa,EAAE,MAAM,GAAG,OAAO,CAAC,iBAAiB,CAAC,CAkDzF;AAED,wBAAgB,aAAa,CAAC,aAAa,EAAE,MAAM,GAAG,MAAM,GAAG,SAAS,CAIvE"}

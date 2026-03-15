@@ -11,6 +11,7 @@ import { buildStructuredTrace, getMessageText, shouldCaptureCodingTrace } from "
 import { CONTEXT_ENGINE_ID, CONTEXT_ENGINE_VERSION } from "./version.js";
 import { formatMemoriesForInjection, dedupeMemories, estimateTokens, } from "./utils/formatting.js";
 import { detectPromptInjection, matchesCapturePatterns, sanitizeContent, } from "./utils/filtering.js";
+import { profileCodebase, loadCodebaseProfile, formatCodebaseProfileForInjection } from "./profiler/index.js";
 /**
  * FatHippo Context Engine implementation
  */
@@ -32,6 +33,9 @@ export class FatHippoContextEngine {
     sessionLocalProfiles = new Map();
     sessionHippoNodState = new Map();
     cognitiveEnabled;
+    // Codebase profiling state
+    sessionCodebaseProfiles = new Map();
+    codebaseProfilingEnabled;
     static TRIVIAL_ACKS = new Set([
         "ok",
         "thanks",
@@ -70,6 +74,8 @@ export class FatHippoContextEngine {
                 : null;
         // Enable cognitive features if configured (default: true)
         this.cognitiveEnabled = this.mode === "hosted" && config.cognitiveEnabled !== false;
+        // Enable codebase profiling (default: true)
+        this.codebaseProfilingEnabled = config.codebaseProfilingEnabled !== false;
     }
     /**
      * Initialize engine state for a session
@@ -78,6 +84,12 @@ export class FatHippoContextEngine {
         try {
             this.sessionStartTimes.set(params.sessionId, Date.now());
             const workspaceRoot = this.detectWorkspaceRoot(params.sessionFile);
+            // Trigger codebase profiling in background
+            if (this.codebaseProfilingEnabled && workspaceRoot) {
+                this.profileCodebaseAsync(workspaceRoot).catch((err) => {
+                    console.error("[FatHippo] Background codebase profiling error:", err);
+                });
+            }
             if (this.mode === "local") {
                 this.sessionLocalProfiles.set(params.sessionId, this.deriveLocalProfileId(params.sessionId, params.sessionFile));
                 return {
@@ -279,16 +291,18 @@ export class FatHippoContextEngine {
             lastUserMessage,
             cue,
         });
+        const profileBlock = await this.getCodebaseProfileBlock(hostedSession.workspaceRoot);
         const fullContext = typeof params.tokenBudget === "number" && params.tokenBudget > 0
             ? this.fitContextToBudget({
                 sections: [
                     runtimeAwareness,
+                    profileBlock,
                     hostedContext,
                     hippoNodInstruction,
                 ],
                 contextBudget: Math.max(0, params.tokenBudget - baseMessageTokens),
             })
-            : runtimeAwareness + hostedContext + hippoNodInstruction;
+            : runtimeAwareness + profileBlock + hostedContext + hippoNodInstruction;
         const tokens = estimateTokens(fullContext) + baseMessageTokens;
         return {
             messages: params.messages,
@@ -380,10 +394,13 @@ export class FatHippoContextEngine {
                         }
                         : null,
         });
+        const localProfileId = this.getLocalProfileId(params.sessionId);
+        const profileBlock = await this.getCodebaseProfileBlock(localProfileId !== "openclaw-local-default" ? localProfileId : undefined);
         const fullContext = typeof params.tokenBudget === "number" && params.tokenBudget > 0
             ? this.fitContextToBudget({
                 sections: [
                     runtimeAwareness,
+                    profileBlock,
                     workflowBlock,
                     patternBlock,
                     memoryBlock ? `${memoryBlock}\n` : "",
@@ -392,7 +409,7 @@ export class FatHippoContextEngine {
                 ],
                 contextBudget: Math.max(0, params.tokenBudget - baseTokens),
             })
-            : runtimeAwareness + workflowBlock + patternBlock + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + hippoNodInstruction;
+            : runtimeAwareness + profileBlock + workflowBlock + patternBlock + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + hippoNodInstruction;
         return {
             messages: params.messages,
             estimatedTokens: baseTokens + estimateTokens(fullContext),
@@ -667,6 +684,47 @@ export class FatHippoContextEngine {
         this.sessionLocalProfiles.clear();
         this.sessionStartTimes.clear();
         this.sessionHippoNodState.clear();
+        this.sessionCodebaseProfiles.clear();
+    }
+    // --- Codebase profiling methods ---
+    async profileCodebaseAsync(workspaceRoot) {
+        if (!this.codebaseProfilingEnabled)
+            return;
+        if (this.sessionCodebaseProfiles.has(workspaceRoot))
+            return;
+        // Check for existing profile on disk first
+        const existing = await loadCodebaseProfile(workspaceRoot);
+        if (existing) {
+            this.sessionCodebaseProfiles.set(workspaceRoot, existing);
+            return;
+        }
+        // Profile in background
+        try {
+            const profile = await profileCodebase(workspaceRoot, { force: true });
+            this.sessionCodebaseProfiles.set(workspaceRoot, profile);
+        }
+        catch (error) {
+            console.error("[FatHippo] Codebase profiling failed:", error);
+            this.sessionCodebaseProfiles.set(workspaceRoot, null);
+        }
+    }
+    async getCodebaseProfileBlock(workspaceRoot) {
+        if (!this.codebaseProfilingEnabled || !workspaceRoot)
+            return "";
+        // Check cache
+        if (this.sessionCodebaseProfiles.has(workspaceRoot)) {
+            const cached = this.sessionCodebaseProfiles.get(workspaceRoot);
+            if (!cached)
+                return "";
+            return formatCodebaseProfileForInjection(cached);
+        }
+        // Try loading from disk
+        const profile = await loadCodebaseProfile(workspaceRoot);
+        if (profile) {
+            this.sessionCodebaseProfiles.set(workspaceRoot, profile);
+            return formatCodebaseProfileForInjection(profile);
+        }
+        return "";
     }
     // --- Helper methods ---
     extractContent(message) {

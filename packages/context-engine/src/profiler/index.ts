@@ -29,13 +29,37 @@ const PROFILE_DIR = ".fathippo";
 const PROFILE_FILE = "codebase-profile.json";
 
 /**
+ * Check whether a directory is safe and useful to profile.
+ * Only profile git repos — skip home dirs, system dirs, and non-project paths.
+ */
+function isSafeToProfile(dir: string): boolean {
+  // Must have a .git directory (it's a real project)
+  if (!existsSync(path.join(dir, ".git"))) return false;
+
+  // Reject home directory itself (even if it has .git)
+  const home = process.env.HOME || process.env.USERPROFILE || "";
+  if (home && path.resolve(dir) === path.resolve(home)) return false;
+
+  // Reject root or system directories
+  if (dir === "/" || dir === "C:\\" || dir === "C:/") return false;
+
+  return true;
+}
+
+/**
  * Profile a codebase. If a cached profile exists on disk and `force` is false,
- * returns the cached version.
+ * returns the cached version. Only profiles git repositories — skips home dirs
+ * and non-project paths for security.
  */
 export async function profileCodebase(
   workspaceRoot: string,
   options?: ProfileConfig,
 ): Promise<CodebaseProfile> {
+  // Safety check: only profile actual git projects
+  if (!isSafeToProfile(workspaceRoot)) {
+    throw new Error(`Skipping profile: ${workspaceRoot} is not a git repository or is a protected directory`);
+  }
+
   // Check for cached profile unless force
   if (!options?.force) {
     const cached = await loadCodebaseProfile(workspaceRoot);
