@@ -71,6 +71,14 @@ import { prioritizeForTask, type ContextPriority } from "./context-prioritizer.j
 
 type RuntimeMode = "hosted" | "local";
 
+interface InjectedCognitiveContext {
+  pattern_ids: string[];
+  skill_ids: string[];
+  trace_ids: string[];
+  application_id?: string;
+  injected_at: number;
+}
+
 type HippoHelpCue =
   | { kind: "workflow"; reason: string }
   | { kind: "learned_fix"; reason: string }
@@ -117,6 +125,9 @@ export class FatHippoContextEngine implements ContextEngine {
 
   // Dynamic prioritization state
   private dynamicPrioritizationEnabled: boolean;
+
+  // Cognitive feedback tracking
+  private sessionInjectedContext: Map<string, InjectedCognitiveContext> = new Map();
   
   private static readonly TRIVIAL_ACKS = new Set([
     "ok",
@@ -356,6 +367,12 @@ export class FatHippoContextEngine implements ContextEngine {
       console.error("[FatHippo] Record turn error:", error);
     }
 
+    // Automatic feedback for injected patterns/skills
+    await this.submitCognitiveFeedback({
+      sessionId: params.sessionId,
+      messages: params.messages,
+    });
+
     // User DNA analysis (hosted mode)
     await this.updateUserDNA({
       sessionId: params.sessionId,
@@ -373,6 +390,104 @@ export class FatHippoContextEngine implements ContextEngine {
     }
   }
   
+  private async submitCognitiveFeedback(params: {
+    sessionId: string;
+    messages: AgentMessage[];
+  }): Promise<void> {
+    const injected = this.sessionInjectedContext.get(params.sessionId);
+    if (!injected || injected.pattern_ids.length === 0) return;
+
+    // Don't submit feedback too quickly — wait for at least 2 turns after injection
+    // (the turn where context was injected + at least 1 follow-up)
+    if (Date.now() - injected.injected_at < 30_000) return;
+
+    try {
+      const outcome = this.detectTurnOutcome(params.messages);
+      if (!outcome) return; // Inconclusive — don't submit noise
+
+      const client = this.client;
+      if (!client) return;
+
+      // Submit feedback for each injected pattern
+      // Use Promise.allSettled to not block on failures
+      const feedback_promises = injected.pattern_ids.map(pattern_id => {
+        // Find a trace ID that was injected alongside this pattern
+        const trace_id = injected.trace_ids[0] ?? params.sessionId;
+        return client.submitPatternFeedback({
+          patternId: pattern_id,
+          traceId: trace_id,
+          outcome,
+        }).catch(err => {
+          console.error(`[FatHippo] Pattern feedback error for ${pattern_id}:`, err instanceof Error ? err.message : 'unknown');
+        });
+      });
+
+      await Promise.allSettled(feedback_promises);
+
+      // Clear injected context after feedback is submitted
+      this.sessionInjectedContext.delete(params.sessionId);
+    } catch (error) {
+      console.error("[FatHippo] Cognitive feedback error:", error);
+    }
+  }
+
+  private detectTurnOutcome(messages: AgentMessage[]): 'success' | 'failure' | null {
+    // Look at the last few messages for outcome signals
+    const recent_messages = messages.slice(-6);
+    const recent_text = recent_messages.map(m => getMessageText(m)).join(' ').toLowerCase();
+
+    // Strong success signals
+    const success_signals = [
+      'fixed', 'resolved', 'working now', 'that worked', 'works now',
+      'solved', 'solution worked', 'problem solved', 'issue resolved',
+      'successfully', 'tests pass', 'builds successfully', 'compiles',
+      'lgtm', 'looks good', 'confirmed working', 'verified',
+    ];
+
+    // Strong failure signals
+    const failure_signals = [
+      'still broken', 'still failing', 'didn\'t work', 'doesn\'t work',
+      'same error', 'still getting', 'not working', 'wrong approach',
+      'that\'s wrong', 'incorrect', 'made it worse', 'still see the error',
+      'different approach', 'try something else', 'that didn\'t help',
+    ];
+
+    let success_score = 0;
+    let failure_score = 0;
+
+    for (const signal of success_signals) {
+      if (recent_text.includes(signal)) success_score++;
+    }
+    for (const signal of failure_signals) {
+      if (recent_text.includes(signal)) failure_score++;
+    }
+
+    // Need a clear signal — at least 2 points of evidence
+    if (success_score >= 2 && success_score > failure_score) return 'success';
+    if (failure_score >= 2 && failure_score > success_score) return 'failure';
+
+    // Check for tool results that indicate success/failure
+    for (const msg of recent_messages) {
+      const raw = msg as unknown as Record<string, unknown>;
+      if (raw.role === 'toolResult' || raw.type === 'toolResult') {
+        const text = getMessageText(msg).toLowerCase();
+        // Successful test/build tool results
+        if (/(?:tests?\s+passed|build\s+succeeded|exit\s+code\s*:?\s*0)/.test(text)) {
+          success_score += 2;
+        }
+        // Failed test/build tool results
+        if (/(?:tests?\s+failed|build\s+failed|exit\s+code\s*:?\s*[1-9])/.test(text)) {
+          failure_score += 2;
+        }
+      }
+    }
+
+    if (success_score >= 2 && success_score > failure_score) return 'success';
+    if (failure_score >= 2 && failure_score > success_score) return 'failure';
+
+    return null; // Inconclusive
+  }
+
   private detectToolsUsed(messages: AgentMessage[]): string[] {
     const tools = new Set<string>();
     
@@ -449,6 +564,18 @@ export class FatHippoContextEngine implements ContextEngine {
         }),
       });
       hostedContext = context.systemPromptAddition ?? "";
+
+      // Capture injected cognitive IDs for feedback loop
+      if (context.injectedPatternIds?.length || context.injectedSkillIds?.length || context.injectedTraceIds?.length) {
+        this.sessionInjectedContext.set(params.sessionId, {
+          pattern_ids: context.injectedPatternIds ?? [],
+          skill_ids: context.injectedSkillIds ?? [],
+          trace_ids: context.injectedTraceIds ?? [],
+          application_id: context.cognitiveApplicationId,
+          injected_at: Date.now(),
+        });
+      }
+
       if (hostedContext.includes("## Recommended Workflow")) {
         cue = {
           kind: "workflow",
@@ -1018,6 +1145,7 @@ export class FatHippoContextEngine implements ContextEngine {
     this.sessionHippoNodState.clear();
     this.sessionCodebaseProfiles.clear();
     this.userDNACache.clear();
+    this.sessionInjectedContext.clear();
   }
 
   // --- Codebase profiling methods ---

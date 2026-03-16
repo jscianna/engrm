@@ -597,4 +597,21 @@ export class FatHippoClient {
       body: JSON.stringify(params ?? {}),
     });
   }
+
+  async submitPatternFeedback(params: {
+    patternId: string;
+    traceId: string;
+    outcome: 'success' | 'failure';
+    notes?: string;
+  }): Promise<{ updated: boolean }> {
+    return this.request<{ updated: boolean }>("/v1/cognitive/patterns/feedback", {
+      method: "POST",
+      body: JSON.stringify({
+        patternId: params.patternId,
+        traceId: params.traceId,
+        outcome: params.outcome,
+        notes: params.notes,
+      }),
+    });
+  }
 }

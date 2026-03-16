@@ -80,6 +80,14 @@ export interface FatHippoBuildContextOutput {
   sensitiveOmitted?: number;
   evaluationId?: string;
   retrievalConfidence?: number;
+  /** IDs of cognitive patterns injected into this context */
+  injectedPatternIds?: string[];
+  /** IDs of synthesized skills injected into this context */
+  injectedSkillIds?: string[];
+  /** IDs of traces injected into this context */
+  injectedTraceIds?: string[];
+  /** Application ID for this cognitive context retrieval */
+  cognitiveApplicationId?: string;
 }
 
 export interface FatHippoRecordTurnInput {
@@ -536,6 +544,10 @@ export class FatHippoHostedRuntimeClient implements FatHippoHostedRuntimeClientC
       cognitivePromise,
     ]);
 
+    const injected_pattern_ids = (cognitive?.patterns ?? []).map(p => p.id);
+    const injected_skill_ids = (cognitive?.skills ?? []).map(s => s.id);
+    const injected_trace_ids = (cognitive?.traces ?? []).map(t => t.id);
+
     return {
       systemPromptAddition: joinContextSections([
         response.text,
@@ -547,6 +559,10 @@ export class FatHippoHostedRuntimeClient implements FatHippoHostedRuntimeClientC
       sensitiveOmitted: parseNumberHeader(response.headers, "X-FatHippo-Sensitive-Omitted"),
       evaluationId: response.headers.get("X-FatHippo-Eval-Id") ?? undefined,
       retrievalConfidence: parseNumberHeader(response.headers, "X-FatHippo-Retrieval-Confidence"),
+      injectedPatternIds: injected_pattern_ids.length > 0 ? injected_pattern_ids : undefined,
+      injectedSkillIds: injected_skill_ids.length > 0 ? injected_skill_ids : undefined,
+      injectedTraceIds: injected_trace_ids.length > 0 ? injected_trace_ids : undefined,
+      cognitiveApplicationId: cognitive?.applicationId ?? undefined,
     };
   }
 
