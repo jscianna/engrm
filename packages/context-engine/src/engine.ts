@@ -128,6 +128,10 @@ export class FatHippoContextEngine implements ContextEngine {
 
   // Cognitive feedback tracking
   private sessionInjectedContext: Map<string, InjectedCognitiveContext> = new Map();
+
+  // Cognitive run interval tracking (Break 1)
+  private turnsSinceLastCognitiveRun = 0;
+  private static readonly COGNITIVE_RUN_INTERVAL = 5; // Run every 5th turn
   
   private static readonly TRIVIAL_ACKS = new Set([
     "ok",
@@ -314,10 +318,18 @@ export class FatHippoContextEngine implements ContextEngine {
     tokenBudget?: number;
     legacyCompactionParams?: Record<string, unknown>;
   }): Promise<void> {
-    if (params.isHeartbeat) {
-      if (this.cognitiveEnabled && this.config.cognitiveHeartbeatEnabled !== false) {
-        await this.runCognitiveHeartbeat();
+    // Run cognitive heartbeat periodically, not just on heartbeat turns
+    this.turnsSinceLastCognitiveRun++;
+    if (this.cognitiveEnabled && this.config.cognitiveHeartbeatEnabled !== false) {
+      if (params.isHeartbeat || this.turnsSinceLastCognitiveRun >= FatHippoContextEngine.COGNITIVE_RUN_INTERVAL) {
+        this.turnsSinceLastCognitiveRun = 0;
+        // Fire and forget — don't block the turn
+        this.runCognitiveHeartbeat().catch((err) => {
+          console.error("[FatHippo] Background cognitive run error:", err);
+        });
       }
+    }
+    if (params.isHeartbeat) {
       return;
     }
 
@@ -369,6 +381,12 @@ export class FatHippoContextEngine implements ContextEngine {
 
     // Automatic feedback for injected patterns/skills
     await this.submitCognitiveFeedback({
+      sessionId: params.sessionId,
+      messages: params.messages,
+    });
+
+    // Update application outcome for cognitively-tracked applications
+    await this.updateApplicationOutcome({
       sessionId: params.sessionId,
       messages: params.messages,
     });
@@ -428,6 +446,38 @@ export class FatHippoContextEngine implements ContextEngine {
       this.sessionInjectedContext.delete(params.sessionId);
     } catch (error) {
       console.error("[FatHippo] Cognitive feedback error:", error);
+    }
+  }
+
+  private async updateApplicationOutcome(params: {
+    sessionId: string;
+    messages: AgentMessage[];
+  }): Promise<void> {
+    // Check if there's a cognitive application ID tracked for this session
+    const injected = this.sessionInjectedContext.get(params.sessionId);
+    if (!injected?.application_id) return;
+
+    // Don't update too early
+    if (Date.now() - injected.injected_at < 30_000) return;
+
+    try {
+      const outcome = this.detectTurnOutcome(params.messages);
+      if (!outcome) return;
+
+      const client = this.client;
+      if (!client) return;
+
+      // Map engine outcome to API outcome (API uses 'failed' not 'failure')
+      const api_outcome: 'success' | 'failed' = outcome === 'success' ? 'success' : 'failed';
+
+      await client.updateApplicationOutcome({
+        applicationId: injected.application_id,
+        outcome: api_outcome,
+      }).catch((err: unknown) => {
+        console.error("[FatHippo] Application outcome update error:", err instanceof Error ? err.message : "unknown");
+      });
+    } catch {
+      // Fire and forget
     }
   }
 

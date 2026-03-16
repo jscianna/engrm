@@ -584,7 +584,10 @@ export class FatHippoClient {
   }): Promise<CognitivePatternExtractionResponse> {
     return this.request<CognitivePatternExtractionResponse>("/v1/cognitive/patterns/extract", {
       method: "POST",
-      body: JSON.stringify(params ?? {}),
+      body: JSON.stringify({
+        intervalMs: params?.intervalMs ?? 30 * 60 * 1000, // 30 minutes instead of 6 hours
+        leaseMs: params?.leaseMs ?? 5 * 60 * 1000,
+      }),
     });
   }
 
@@ -594,7 +597,10 @@ export class FatHippoClient {
   }): Promise<CognitiveSkillSynthesisResponse> {
     return this.request<CognitiveSkillSynthesisResponse>("/v1/cognitive/skills/synthesize", {
       method: "POST",
-      body: JSON.stringify(params ?? {}),
+      body: JSON.stringify({
+        intervalMs: params?.intervalMs ?? 60 * 60 * 1000, // 1 hour instead of 12 hours
+        leaseMs: params?.leaseMs ?? 5 * 60 * 1000,
+      }),
     });
   }
 
@@ -613,5 +619,21 @@ export class FatHippoClient {
         notes: params.notes,
       }),
     });
+  }
+
+  async updateApplicationOutcome(params: {
+    applicationId: string;
+    outcome: 'success' | 'failed';
+  }): Promise<{ updated: boolean }> {
+    const response = await this.request<{ trace?: { id: string } }>(
+      `/v1/cognitive/traces/${encodeURIComponent(params.applicationId)}/outcome`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          outcome: params.outcome,
+        }),
+      },
+    );
+    return { updated: Boolean(response.trace?.id) };
   }
 }

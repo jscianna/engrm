@@ -319,5 +319,11 @@ export declare class FatHippoClient {
     }): Promise<{
         updated: boolean;
     }>;
+    updateApplicationOutcome(params: {
+        applicationId: string;
+        outcome: 'success' | 'failed';
+    }): Promise<{
+        updated: boolean;
+    }>;
 }
 //# sourceMappingURL=client.d.ts.map

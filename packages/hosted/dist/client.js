@@ -188,13 +188,19 @@ export class FatHippoClient {
     async extractCognitivePatterns(params) {
         return this.request("/v1/cognitive/patterns/extract", {
             method: "POST",
-            body: JSON.stringify(params ?? {}),
+            body: JSON.stringify({
+                intervalMs: params?.intervalMs ?? 30 * 60 * 1000, // 30 minutes instead of 6 hours
+                leaseMs: params?.leaseMs ?? 5 * 60 * 1000,
+            }),
         });
     }
     async synthesizeCognitiveSkills(params) {
         return this.request("/v1/cognitive/skills/synthesize", {
             method: "POST",
-            body: JSON.stringify(params ?? {}),
+            body: JSON.stringify({
+                intervalMs: params?.intervalMs ?? 60 * 60 * 1000, // 1 hour instead of 12 hours
+                leaseMs: params?.leaseMs ?? 5 * 60 * 1000,
+            }),
         });
     }
     async submitPatternFeedback(params) {
@@ -207,6 +213,15 @@ export class FatHippoClient {
                 notes: params.notes,
             }),
         });
+    }
+    async updateApplicationOutcome(params) {
+        const response = await this.request(`/v1/cognitive/traces/${encodeURIComponent(params.applicationId)}/outcome`, {
+            method: "POST",
+            body: JSON.stringify({
+                outcome: params.outcome,
+            }),
+        });
+        return { updated: Boolean(response.trace?.id) };
     }
 }
 //# sourceMappingURL=client.js.map
