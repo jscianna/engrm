@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { createApiKey } from "@/lib/db";
 import { jsonError } from "@/lib/api-v1";
-import { deviceCodes } from "../route";
+import { deviceCodes } from "@/lib/device-codes";
 
 export const runtime = "nodejs";
 

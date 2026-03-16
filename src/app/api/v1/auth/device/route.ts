@@ -1,29 +1,8 @@
 import { randomBytes, randomUUID } from "crypto";
 import { jsonError } from "@/lib/api-v1";
+import { deviceCodes, type DeviceCodeEntry } from "@/lib/device-codes";
 
 export const runtime = "nodejs";
-
-// In-memory store (TTL: 15 minutes). Fine for MVP — move to Redis/DB later if needed.
-// Export so the verify endpoint can access it.
-export interface DeviceCodeEntry {
-  device_code: string;
-  user_code: string;
-  created_at: number;
-  expires_at: number;
-  status: "pending" | "authorized" | "expired";
-  user_id?: string;
-  api_key?: string;
-  agent_id?: string;
-}
-
-// TODO: For multi-instance deployments (multiple serverless instances or edge replicas),
-// move this store to Redis or a DB table so all instances share state.
-// Use a global Map so it persists across requests in the same serverless instance.
-const globalStore = globalThis as unknown as { _deviceCodes?: Map<string, DeviceCodeEntry> };
-if (!globalStore._deviceCodes) {
-  globalStore._deviceCodes = new Map();
-}
-export const deviceCodes = globalStore._deviceCodes;
 
 const EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
 const POLL_INTERVAL_S = 5;
