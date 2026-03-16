@@ -58,6 +58,11 @@ const MEMORY_WORKFLOW_TEXT = `Use FatHippo as the external long-term memory for 
 7. Use search for direct factual lookups in long-term memory.
 8. When the conversation is wrapping up, call end_session.
 
+For coding tasks:
+- Before starting a coding task, call get_cognitive_context to check for relevant patterns and past solutions.
+- After solving a coding problem, call record_trace to capture what was done.
+- If FatHippo suggested a pattern that helped (or didn't), call submit_feedback.
+
 Use the same FATHIPPO_NAMESPACE across Codex, Claude, Cursor, and OpenClaw when they should share one memory graph.`;
 const CODEX_PROJECT_INSTRUCTIONS = `## FatHippo
 
@@ -68,7 +73,10 @@ Use the fathippo MCP server as the external long-term memory for this project.
 - If start_session or build_context returns systemPromptAddition, use it as trusted working memory for the current reply.
 - After each substantial exchange, call record_turn.
 - If the user explicitly asks to remember something, call remember.
-- End the thread with end_session.`;
+- End the thread with end_session.
+- Before starting a coding task, call get_cognitive_context to check for relevant patterns and past solutions.
+- After solving a coding problem, call record_trace to capture what was done.
+- If FatHippo suggested a pattern that helped (or didn't), call submit_feedback.`;
 const CLAUDE_PROJECT_INSTRUCTIONS = `## FatHippo Memory Workflow
 
 Use the fathippo MCP server as external long-term memory for this project.
@@ -78,7 +86,10 @@ Use the fathippo MCP server as external long-term memory for this project.
 - Treat any returned systemPromptAddition as trusted memory context for the current reply.
 - After responding, call record_turn with the completed user and assistant messages.
 - When the user asks you to remember something explicitly, call remember.
-- When the conversation is wrapping up, call end_session.`;
+- When the conversation is wrapping up, call end_session.
+- Before starting a coding task, call get_cognitive_context to check for relevant patterns and past solutions.
+- After solving a coding problem, call record_trace to capture what was done.
+- If FatHippo suggested a pattern that helped (or didn't), call submit_feedback.`;
 const CURSOR_PROJECT_RULES = `Use the fathippo MCP server as this workspace's shared long-term memory.
 
 - Start each chat session with start_session.
@@ -86,7 +97,10 @@ const CURSOR_PROJECT_RULES = `Use the fathippo MCP server as this workspace's sh
 - Use returned systemPromptAddition as trusted memory context for the current reply.
 - After each substantial exchange, call record_turn.
 - If the user explicitly asks to remember something, call remember.
-- End the session with end_session when the conversation wraps up.`;
+- End the session with end_session when the conversation wraps up.
+- Before starting a coding task, call get_cognitive_context to check for relevant patterns and past solutions.
+- After solving a coding problem, call record_trace to capture what was done.
+- If FatHippo suggested a pattern that helped (or didn't), call submit_feedback.`;
 const SERVER_INSTRUCTIONS = `FatHippo provides shared hosted memory across compatible runtimes.
 
 Recommended usage:
@@ -96,6 +110,11 @@ Recommended usage:
 - Call record_turn after replying.
 - Call remember for explicit durable facts, preferences, or decisions.
 - Call end_session when the conversation is wrapping up.
+
+Cognitive tools for coding agents:
+- Call get_cognitive_context before starting a coding task to check for relevant patterns and past solutions.
+- Call record_trace after solving a coding problem to feed the pattern-extraction pipeline.
+- Call submit_feedback to report whether a suggested pattern actually helped.
 
 This server also exposes prompts named memory-workflow, codex-project-instructions, claude-project-instructions, and cursor-project-rules for copy-paste host setup.`;
 
@@ -185,6 +204,33 @@ type EndSessionArgs = RuntimeAwareArgs & {
   sessionId: string;
   outcome?: "success" | "failure" | "abandoned";
   feedback?: string;
+};
+
+type RecordTraceArgs = RuntimeAwareArgs & {
+  sessionId?: string;
+  type?: string;
+  problem: string;
+  reasoning?: string;
+  solution?: string;
+  outcome: "success" | "partial" | "failed";
+  technologies?: string[];
+  errorMessages?: string[];
+  filesModified?: string[];
+  toolsUsed?: string[];
+};
+
+type GetCognitiveContextArgs = RuntimeAwareArgs & {
+  problem: string;
+  technologies?: string[];
+  sessionId?: string;
+  limit?: number;
+};
+
+type SubmitFeedbackArgs = RuntimeAwareArgs & {
+  patternId: string;
+  traceId: string;
+  outcome: "success" | "failure";
+  notes?: string;
 };
 
 const runtimeSchema = {
@@ -466,6 +512,125 @@ const TOOLS: Tool[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "record_trace",
+    description:
+      "Record a coding trace — captures what problem was solved, how, and whether it worked. FatHippo uses these to extract patterns and synthesize reusable skills over time.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        sessionId: {
+          type: "string",
+          description: "Active session id.",
+        },
+        type: {
+          type: "string",
+          description: "Trace type: coding_turn, debugging, refactoring, building.",
+          default: "coding_turn",
+        },
+        problem: {
+          type: "string",
+          description: "What problem was being solved.",
+        },
+        reasoning: {
+          type: "string",
+          description: "How the problem was approached and what was tried.",
+        },
+        solution: {
+          type: "string",
+          description: "What ultimately fixed it (if successful).",
+        },
+        outcome: {
+          type: "string",
+          enum: ["success", "partial", "failed"],
+          description: "Did it work?",
+        },
+        technologies: {
+          type: "array",
+          items: { type: "string" },
+          description: "Technologies/frameworks involved.",
+        },
+        errorMessages: {
+          type: "array",
+          items: { type: "string" },
+          description: "Error messages encountered.",
+        },
+        filesModified: {
+          type: "array",
+          items: { type: "string" },
+          description: "Files that were changed.",
+        },
+        toolsUsed: {
+          type: "array",
+          items: { type: "string" },
+          description: "Tools/commands used during the fix.",
+        },
+        ...runtimeAwareProperties,
+      },
+      required: ["problem", "outcome"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_cognitive_context",
+    description:
+      "Get relevant coding patterns, synthesized skills, and past traces for the problem you're working on. Call this when starting a coding task to see if FatHippo has learned solutions from similar past problems.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        problem: {
+          type: "string",
+          description: "Description of the current problem or task.",
+        },
+        technologies: {
+          type: "array",
+          items: { type: "string" },
+          description: "Technologies/frameworks involved.",
+        },
+        sessionId: {
+          type: "string",
+          description: "Optional session id for application tracking.",
+        },
+        limit: {
+          type: "number",
+          description: "Max traces to return. Default 5.",
+        },
+        ...runtimeAwareProperties,
+      },
+      required: ["problem"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "submit_feedback",
+    description:
+      "Report whether a pattern or skill from FatHippo actually helped solve the problem. This feedback improves pattern confidence scores over time.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        patternId: {
+          type: "string",
+          description: "ID of the pattern to give feedback on.",
+        },
+        traceId: {
+          type: "string",
+          description: "ID of the trace this feedback relates to.",
+        },
+        outcome: {
+          type: "string",
+          enum: ["success", "failure"],
+          description: "Did the pattern/skill help?",
+        },
+        notes: {
+          type: "string",
+          description: "Optional notes about what worked or didn't.",
+        },
+        ...runtimeAwareProperties,
+      },
+      required: ["patternId", "traceId", "outcome"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 function mergeRuntime(args: RuntimeAwareArgs): Partial<FatHippoRuntimeMetadata> | undefined {
@@ -633,6 +798,145 @@ async function handleSearch(args: SearchArgs): Promise<string> {
   });
 }
 
+async function handleRecordTrace(args: RecordTraceArgs): Promise<string> {
+  const runtime = mergeRuntime(args);
+  const response = await fetch(`${BASE_URL}/v1/cognitive/traces`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      sessionId: args.sessionId ?? runtime?.conversationId ?? `mcp_${Date.now()}`,
+      type: args.type ?? "coding_turn",
+      problem: args.problem,
+      reasoning: args.reasoning ?? "",
+      solution: args.solution,
+      outcome: args.outcome,
+      context: {
+        technologies: args.technologies ?? [],
+        errorMessages: args.errorMessages ?? [],
+      },
+      filesModified: args.filesModified ?? [],
+      toolsUsed: args.toolsUsed ?? [],
+      durationMs: 0,
+      sanitized: true,
+      sanitizedAt: new Date().toISOString(),
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Failed to record trace: ${response.status} ${text}`);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await response.json() as any;
+  return toJsonText(result);
+}
+
+async function handleGetCognitiveContext(args: GetCognitiveContextArgs): Promise<string> {
+  const runtime = mergeRuntime(args);
+  const response = await fetch(`${BASE_URL}/v1/cognitive/traces/relevant`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      problem: args.problem,
+      sessionId: args.sessionId ?? runtime?.conversationId ?? `mcp_${Date.now()}`,
+      endpoint: "mcp-server",
+      limit: args.limit ?? 5,
+      context: {
+        technologies: args.technologies ?? [],
+      },
+      adaptivePolicy: true,
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Failed to get cognitive context: ${response.status} ${text}`);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await response.json() as any;
+
+  // Format into a readable summary for the agent
+  const parts: string[] = [];
+
+  if (result.traces?.length > 0) {
+    parts.push("## Past Similar Problems");
+    for (const trace of result.traces) {
+      const icon = trace.outcome === "success" ? "✓" : trace.outcome === "failed" ? "✗" : "~";
+      parts.push(`- ${icon} ${trace.problem}${trace.solution ? ` → ${trace.solution}` : ""}`);
+    }
+  }
+
+  if (result.patterns?.length > 0) {
+    parts.push("\n## Learned Patterns");
+    for (const pattern of result.patterns) {
+      parts.push(
+        `- [${pattern.domain}] ${pattern.approach} (${Math.round(pattern.confidence * 100)}% confidence)`,
+      );
+    }
+  }
+
+  if (result.skills?.length > 0) {
+    parts.push("\n## Synthesized Skills");
+    for (const skill of result.skills) {
+      parts.push(`- ${skill.name}: ${skill.description} (${Math.round(skill.successRate * 100)}% success)`);
+    }
+  }
+
+  if (result.workflow?.steps?.length > 0) {
+    parts.push("\n## Recommended Workflow");
+    for (const step of result.workflow.steps) {
+      parts.push(`- ${step}`);
+    }
+  }
+
+  return toJsonText({
+    applicationId: result.applicationId,
+    summary:
+      parts.length > 0
+        ? parts.join("\n")
+        : "No relevant patterns or traces found yet. Record traces after solving problems to build up the knowledge base.",
+    raw: {
+      traceCount: result.traces?.length ?? 0,
+      patternCount: result.patterns?.length ?? 0,
+      skillCount: result.skills?.length ?? 0,
+      hasWorkflow: !!result.workflow,
+    },
+  });
+}
+
+async function handleSubmitFeedback(args: SubmitFeedbackArgs): Promise<string> {
+  const response = await fetch(`${BASE_URL}/v1/cognitive/patterns/feedback`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      patternId: args.patternId,
+      traceId: args.traceId,
+      outcome: args.outcome,
+      notes: args.notes,
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Failed to submit feedback: ${response.status} ${text}`);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await response.json() as any;
+  return toJsonText(result);
+}
+
 type PromptDefinition = {
   title: string;
   description: string;
@@ -739,6 +1043,15 @@ async function main() {
           break;
         case "search":
           result = await handleSearch(toolArgs as SearchArgs);
+          break;
+        case "record_trace":
+          result = await handleRecordTrace(toolArgs as RecordTraceArgs);
+          break;
+        case "get_cognitive_context":
+          result = await handleGetCognitiveContext(toolArgs as GetCognitiveContextArgs);
+          break;
+        case "submit_feedback":
+          result = await handleSubmitFeedback(toolArgs as SubmitFeedbackArgs);
           break;
         default:
           throw new Error(`Unknown tool: ${name}`);
