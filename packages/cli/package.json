@@ -1,16 +1,33 @@
 {
   "name": "fathippo",
-  "version": "0.1.0",
-  "description": "CLI for FatHippo - The cognitive layer for AI agents",
+  "version": "0.2.0",
+  "description": "CLI for FatHippo — your coding agent gets smarter every session. One command connects 13 platforms.",
   "type": "module",
   "bin": {
     "fathippo": "./bin/fathippo.js"
   },
+  "files": [
+    "bin/",
+    "lib/",
+    "README.md"
+  ],
   "scripts": {
     "build": "echo 'No build needed'",
     "test": "node bin/fathippo.js --help"
   },
-  "keywords": ["ai", "memory", "agents", "llm", "context"],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "ai", "memory", "agents", "llm", "context", "mcp",
+    "cursor", "codex", "claude", "windsurf", "zed", "vscode",
+    "cognitive", "skills", "patterns", "coding-agent"
+  ],
+  "homepage": "https://fathippo.ai",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jscianna/fathippo"
+  },
   "author": "FatHippo",
   "license": "MIT",
   "dependencies": {

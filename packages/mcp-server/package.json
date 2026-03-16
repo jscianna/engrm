@@ -1,6 +1,6 @@
 {
   "name": "@fathippo/mcp-server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "FatHippo MCP server for Cursor, Claude Desktop, and other MCP clients",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
