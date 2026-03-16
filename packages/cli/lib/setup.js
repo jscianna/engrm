@@ -86,6 +86,20 @@ const PLATFORMS = [
     configPath: path.join(homedir, '.trae', 'mcp.json'),
     format: 'mcp-json',
   },
+  {
+    name: 'Qoder',
+    detect: () => {
+      // macOS: ~/Library/Application Support/Qoder
+      // Linux: ~/.config/Qoder
+      const macPath = path.join(homedir, 'Library', 'Application Support', 'Qoder');
+      const linuxPath = path.join(homedir, '.config', 'Qoder');
+      return existsSync(macPath) || existsSync(linuxPath) || commandExists('qoder');
+    },
+    configPath: process.platform === 'darwin'
+      ? path.join(homedir, 'Library', 'Application Support', 'Qoder', 'SharedClientCache', 'mcp.json')
+      : path.join(homedir, '.config', 'Qoder', 'SharedClientCache', 'mcp.json'),
+    format: 'mcp-json',
+  },
 ];
 
 // ─── MCP server entry for each format ────────────────────────────────────────
