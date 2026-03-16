@@ -4,6 +4,7 @@ import { Command } from "commander";
 import { init } from "../lib/init.js";
 import { store } from "../lib/store.js";
 import { search } from "../lib/search.js";
+import { setup } from "../lib/setup.js";
 
 const program = new Command();
 
@@ -34,5 +35,14 @@ program
   .option("-l, --limit <n>", "Max results", "5")
   .option("-k, --key <key>", "FatHippo API key")
   .action(search);
+
+program
+  .command("setup")
+  .description("Configure FatHippo MCP for all detected coding platforms")
+  .option("-k, --key <key>", "FatHippo API key (or set FATHIPPO_API_KEY)")
+  .option("--status", "Show current setup status")
+  .option("--remove", "Remove FatHippo from all platform configs")
+  .option("--platform <name>", "Only configure a specific platform")
+  .action(setup);
 
 program.parse();

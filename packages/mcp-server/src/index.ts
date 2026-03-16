@@ -15,6 +15,9 @@
  *   FATHIPPO_NAMESPACE - Shared project namespace (optional)
  */
 
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -38,8 +41,24 @@ import {
 } from "@fathippo/hosted";
 
 const SERVER_VERSION = "0.1.0";
-const API_KEY = process.env.FATHIPPO_API_KEY;
 const BASE_URL = process.env.FATHIPPO_BASE_URL || "https://fathippo.ai/api";
+
+function resolveApiKey(): string | undefined {
+  // 1. Environment variable (highest priority)
+  const envKey = process.env.FATHIPPO_API_KEY?.trim();
+  if (envKey) return envKey;
+
+  // 2. Config file fallback
+  try {
+    const configPath = path.join(os.homedir(), ".fathippo", "config.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    return config.apiKey?.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const API_KEY = resolveApiKey();
 const VALID_RUNTIME_NAMES: FatHippoRuntimeName[] = [
   "openclaw",
   "claude",
