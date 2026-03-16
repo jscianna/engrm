@@ -72,6 +72,13 @@ const PLATFORMS = [
     configPath: path.join(homedir, '.config', 'opencode', 'config.json'),
     format: 'mcp-json',
   },
+  {
+    name: 'Antigravity',
+    detect: () =>
+      existsSync(path.join(homedir, '.gemini', 'antigravity')),
+    configPath: path.join(homedir, '.gemini', 'antigravity', 'mcp_config.json'),
+    format: 'mcp-json',
+  },
 ];
 
 // ─── MCP server entry for each format ────────────────────────────────────────
