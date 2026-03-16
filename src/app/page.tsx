@@ -292,9 +292,9 @@ function BentoGrid() {
     },
     {
       icon: Zap,
-      title: "7 Platforms, One Command",
+      title: "13 Platforms, One Command",
       description:
-        "Claude Code, Cursor, Codex, Windsurf, Zed, VS Code, OpenCode. npx fathippo setup. Done.",
+        "Claude Code, Cursor, Codex, Windsurf, Zed, VS Code, OpenCode, Antigravity, Trae, Qoder, Hermes Agent, and OpenClaw. npx fathippo setup. Done.",
       iconColor: "text-[#8B5CF6]",
       iconBg: "bg-[#8B5CF6]/[0.08]",
     },
@@ -775,7 +775,7 @@ export default function Home() {
               className="mb-6 border-[#E5E7EB] bg-white text-[#6B7280] font-medium"
             >
               <Sparkles className="mr-1.5 h-3 w-3 text-[#0070F3]" />
-              Works with 7 coding platforms
+              Works with 13 coding platforms
             </Badge>
           </motion.div>
 
@@ -887,7 +887,7 @@ export default function Home() {
                 step: "01",
                 title: "Connect",
                 description:
-                  "Run npx fathippo setup. FatHippo detects Claude Code, Cursor, Codex, Windsurf, Zed, VS Code, and OpenCode — configures them all.",
+                  "Run npx fathippo setup. FatHippo detects Claude Code, Cursor, Codex, Windsurf, Zed, VS Code, OpenCode, Antigravity, Trae, Qoder, Hermes Agent, and OpenClaw — configures them all.",
                 icon: Layers,
                 color: "text-[#0070F3]",
                 bgColor: "bg-[#0070F3]/[0.08]",
@@ -1004,7 +1004,7 @@ export default function Home() {
             transition={{ delay: 0.1 }}
             className="text-[#6B7280] mb-10"
           >
-            One setup. Seven platforms. An agent that gets smarter every day.
+            One setup. 13 platforms. An agent that gets smarter every day.
           </motion.p>
           <motion.div
             initial={{ opacity: 0, y: 20 }}

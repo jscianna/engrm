@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Your coding agent gets smarter every session — across every platform.</strong><br/>
-  One setup command connects FatHippo to Claude Code, Cursor, Codex, Windsurf, Zed, VS Code, and OpenCode. Your agent remembers context, learns from coding patterns, and synthesizes reusable skills — automatically.
+  One setup command connects FatHippo to Claude Code, Cursor, Codex, Windsurf, Zed, VS Code, OpenCode, Antigravity, Trae, Qoder, Hermes Agent, and OpenClaw. Your agent remembers context, learns from coding patterns, and synthesizes reusable skills — automatically.
 </p>
 
 <p align="center">
@@ -40,16 +40,20 @@ npx @fathippo/connect openclaw
 
 ## Works Everywhere
 
-| Platform      | Setup Method                     | Status |
-|---------------|----------------------------------|--------|
-| Claude Code   | `npx fathippo setup`             | ✅     |
-| Cursor        | `npx fathippo setup`             | ✅     |
-| Codex         | `npx fathippo setup`             | ✅     |
-| Windsurf      | `npx fathippo setup`             | ✅     |
-| Zed           | `npx fathippo setup`             | ✅     |
-| VS Code       | `npx fathippo setup`             | ✅     |
-| OpenCode      | `npx fathippo setup`             | ✅     |
-| OpenClaw      | `npx @fathippo/connect openclaw` | ✅     |
+| Platform               | Setup Method                     | Status |
+|------------------------|----------------------------------|--------|
+| Claude Code            | `npx fathippo setup`             | ✅     |
+| Cursor                 | `npx fathippo setup`             | ✅     |
+| Codex                  | `npx fathippo setup`             | ✅     |
+| Windsurf               | `npx fathippo setup`             | ✅     |
+| Zed                    | `npx fathippo setup`             | ✅     |
+| VS Code                | `npx fathippo setup`             | ✅     |
+| OpenCode               | `npx fathippo setup`             | ✅     |
+| Antigravity (Google)   | `npx fathippo setup`             | ✅     |
+| Trae (ByteDance)       | `npx fathippo setup`             | ✅     |
+| Qoder (Alibaba)        | `npx fathippo setup`             | ✅     |
+| Hermes Agent (Nous Research) | `npx fathippo setup`       | ✅     |
+| OpenClaw               | `npx @fathippo/connect openclaw` | ✅     |
 
 ---
 
@@ -179,7 +183,7 @@ This repo is split into installable package boundaries. These are developer/pack
 | Package | Purpose |
 | --- | --- |
 | `fathippo` | CLI — setup, store, search, init |
-| `@fathippo/mcp-server` | MCP server for Claude Code, Cursor, Codex, etc. (10 tools) |
+| `@fathippo/mcp-server` | MCP server for Claude Code, Cursor, Codex, etc. (13 tools) |
 | `@fathippo/fathippo-context-engine` | OpenClaw plugin |
 | `@fathippo/hosted` | Hosted sync and retrieval helpers |
 | `@fathippo/local` | Local-first retrieval and cache |
@@ -196,11 +200,36 @@ Example quickstarts live in [examples/README.md](examples/README.md):
 
 ## MCP Tools
 
-The MCP server (`@fathippo/mcp-server`) exposes 10 tools for any connected coding agent:
+The MCP server (`@fathippo/mcp-server`) exposes 13 tools for any connected coding agent:
 
 **Memory:** `start_session`, `build_context`, `record_turn`, `end_session`, `remember`, `recall`, `search`
 
-**Cognitive:** `record_trace`, `get_cognitive_context`, `submit_feedback`
+**Cognitive:** `record_trace`, `get_cognitive_context`, `submit_feedback`, `get_skill_detail`, `create_skill`
+
+- `get_skill_detail` — Load full skill content on demand (progressive disclosure)
+- `create_skill` — Agent explicitly saves reusable skills (with guardrails)
+- `submit_feedback` — Report whether a pattern or skill helped
+
+---
+
+### Security & Guardrails
+
+- **Skill quarantine**: Agent-created skills start as `pending_review` — only surface in context after validation
+- **Content scanning**: Skills are scanned for exfiltration patterns (curl pipes, suspicious URLs, eval/exec, base64 decode)
+- **Rate limiting**: Max 3 agent-created skills per session
+- **No system prompt modification**: Skills inject as context suggestions, never as instructions
+- **Encryption**: AES-256-GCM at rest, frequency-based anonymization for shared patterns
+
+---
+
+### Intelligent Learning
+
+- **6 trace types**: Automatically classifies traces as coding, debugging, user corrections, knowledge gaps, best practices, or feature requests
+- **User correction detection**: "No, that's wrong" and "Actually, it should be..." are captured as the highest-signal learning events
+- **Recurrence tracking**: Patterns deduplicate via stable keys — recurrence count grows, confidence increases automatically
+- **Prevention rules**: Patterns inject as concise DO/DON'T rules, not verbose docs
+- **Progressive disclosure**: Only skill summaries in context (~100 tokens each) — full content loaded on demand
+- **Cross-linking**: Related patterns reference each other via "see also"
 
 ---
 
