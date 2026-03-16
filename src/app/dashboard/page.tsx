@@ -2,6 +2,9 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { Suspense } from "react";
 import { auth } from "@clerk/nextjs/server";
+
+// Force dynamic rendering — dashboard should always show fresh data
+export const fetchCache = "force-no-store";
 import { ArrowRight, CheckCircle2, Database, HardDrive, PlusCircle, PlugZap, Sparkles } from "lucide-react";
 import { MemoryCard } from "@/components/memory-card";
 import { Badge } from "@/components/ui/badge";
