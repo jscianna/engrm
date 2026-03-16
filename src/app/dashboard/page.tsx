@@ -1,10 +1,11 @@
 import Link from "next/link";
-import dynamic from "next/dynamic";
+import nextDynamic from "next/dynamic";
 import { Suspense } from "react";
 import { auth } from "@clerk/nextjs/server";
 
 // Force dynamic rendering — dashboard should always show fresh data
-export const fetchCache = "force-no-store";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 import { ArrowRight, CheckCircle2, Database, HardDrive, PlusCircle, PlugZap, Sparkles } from "lucide-react";
 import { MemoryCard } from "@/components/memory-card";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +17,7 @@ import { listApiKeys } from "@/lib/db";
 import { getCachedMemories, getCachedMemoryStats } from "@/lib/memories";
 import { getOpenClawPluginStatus, pickPreferredOpenClawKey } from "@/lib/openclaw-plugin";
 
-const DreamCycleCard = dynamic(
+const DreamCycleCard = nextDynamic(
   () => import("@/components/dream-cycle-card").then((module) => module.DreamCycleCard),
   {
     loading: () => (
@@ -27,7 +28,7 @@ const DreamCycleCard = dynamic(
   },
 );
 
-const AnalyticsWidget = dynamic(
+const AnalyticsWidget = nextDynamic(
   () => import("@/components/analytics-widget").then((module) => module.AnalyticsWidget),
   {
     loading: () => (
