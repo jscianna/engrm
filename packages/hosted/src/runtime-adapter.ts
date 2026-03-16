@@ -434,14 +434,17 @@ function formatCognitiveContext(data: CognitiveContextResponse | null): string {
   const localPatterns = (data.patterns ?? []).filter((pattern) => pattern.scope !== "global");
   const globalPatterns = (data.patterns ?? []).filter((pattern) => pattern.scope === "global");
 
+  // Prevention-oriented pattern formatting
+  function formatPatternAsPreventionRule(pattern: { domain: string; approach: string; confidence: number; id?: string }): string {
+    const confidence_pct = Math.round(pattern.confidence * 100);
+    return `  - ✓ DO: ${pattern.approach.slice(0, 160)} [${pattern.domain}, ${confidence_pct}% confidence]`;
+  }
+
   if (localPatterns.length > 0) {
     sections.set(
       "local_patterns",
-      `## Learned Coding Patterns\n${localPatterns
-        .map((pattern) => {
-          const score = typeof pattern.score === "number" ? `, score ${pattern.score.toFixed(1)}` : "";
-          return `- [${pattern.domain}] ${pattern.approach.slice(0, 200)} (${Math.round(pattern.confidence * 100)}% confidence${score})`;
-        })
+      `## Prevention Rules (from past experience)\n${localPatterns
+        .map((pattern) => formatPatternAsPreventionRule(pattern))
         .join("\n")}`,
     );
   }
@@ -449,11 +452,8 @@ function formatCognitiveContext(data: CognitiveContextResponse | null): string {
   if (globalPatterns.length > 0) {
     sections.set(
       "global_patterns",
-      `## Shared Global Patterns\n${globalPatterns
-        .map((pattern) => {
-          const score = typeof pattern.score === "number" ? `, score ${pattern.score.toFixed(1)}` : "";
-          return `- [${pattern.domain}] ${pattern.approach.slice(0, 200)} (${Math.round(pattern.confidence * 100)}% confidence${score})`;
-        })
+      `## Global Prevention Rules\n${globalPatterns
+        .map((pattern) => formatPatternAsPreventionRule(pattern))
         .join("\n")}`,
     );
   }
@@ -474,8 +474,8 @@ function formatCognitiveContext(data: CognitiveContextResponse | null): string {
   if ((data.skills?.length ?? 0) > 0) {
     sections.set(
       "skills",
-      `## Synthesized Skills\n${(data.skills ?? [])
-        .map((skill) => `- [${skill.scope}] ${skill.name}: ${skill.description} (${Math.round(skill.successRate * 100)}% success)`)
+      `## Available Skills (call get_skill_detail for full procedure)\n${(data.skills ?? [])
+        .map((skill) => `- [${skill.id}] ${skill.name}: ${skill.description} (${Math.round(skill.successRate * 100)}% success)`)
         .join("\n")}`,
     );
   }

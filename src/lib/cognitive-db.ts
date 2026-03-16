@@ -746,6 +746,12 @@ async function ensureInitialized(): Promise<void> {
   // Migrate existing users from 30-day default to unlimited (0)
   await client.execute(`UPDATE cognitive_user_settings SET trace_retention_days = 0 WHERE trace_retention_days = 30`).catch(() => {});
 
+  // Recurrence tracking and cross-linking for cognitive_patterns
+  await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN recurrence_count INTEGER DEFAULT 1`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN first_seen_at TEXT`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN last_seen_at TEXT`).catch(() => {});
+  await client.execute(`ALTER TABLE cognitive_patterns ADD COLUMN related_pattern_ids TEXT`).catch(() => {});
+
   // Add eval trace fields
   await client.execute(`ALTER TABLE coding_traces ADD COLUMN model_id TEXT`).catch(() => {});
   await client.execute(`ALTER TABLE coding_traces ADD COLUMN token_cost_cents REAL`).catch(() => {});
@@ -3188,6 +3194,7 @@ async function upsertPatternCandidate(candidate: {
   });
 
   if (existing.rows[0]) {
+    const existing_id = String((existing.rows[0] as Record<string, unknown>).id);
     await client.execute({
       sql: `
         UPDATE cognitive_patterns
@@ -3206,6 +3213,8 @@ async function upsertPatternCandidate(candidate: {
             source_trace_count = ?,
             source_trace_ids_json = ?,
             status = ?,
+            recurrence_count = COALESCE(recurrence_count, 0) + 1,
+            last_seen_at = ?,
             updated_at = ?
         WHERE pattern_key = ?
       `,
@@ -3225,6 +3234,7 @@ async function upsertPatternCandidate(candidate: {
         JSON.stringify(candidate.scope === "local" ? candidate.sourceTraceIds : []),
         candidate.status,
         now,
+        now,
         candidate.key,
       ],
     });
@@ -3233,10 +3243,15 @@ async function upsertPatternCandidate(candidate: {
       sql: `SELECT * FROM cognitive_patterns WHERE pattern_key = ? LIMIT 1`,
       args: [candidate.key],
     });
-    return rowToPattern(refreshed.rows[0] as Record<string, unknown>);
+    const updated_pattern = rowToPattern(refreshed.rows[0] as Record<string, unknown>);
+    // Fire-and-forget: link related patterns after update
+    if (candidate.userId) {
+      linkRelatedPatterns(candidate.userId, existing_id, candidate.domain).catch(() => {});
+    }
+    return updated_pattern;
   }
 
-  return createPattern({
+  const new_pattern = await createPattern({
     userId: candidate.userId,
     scope: candidate.scope,
     provenance,
@@ -3254,6 +3269,16 @@ async function upsertPatternCandidate(candidate: {
     sourceTraceCount: candidate.sourceTraceCount,
     status: candidate.status,
   });
+  // Set first_seen_at and last_seen_at on new patterns
+  await client.execute({
+    sql: `UPDATE cognitive_patterns SET first_seen_at = ?, last_seen_at = ?, recurrence_count = 1 WHERE id = ?`,
+    args: [now, now, new_pattern.id],
+  }).catch(() => {});
+  // Fire-and-forget: link related patterns
+  if (candidate.userId) {
+    linkRelatedPatterns(candidate.userId, new_pattern.id, candidate.domain).catch(() => {});
+  }
+  return new_pattern;
 }
 
 export async function synthesizeEligibleSkills(params: { userId: string }): Promise<SynthesizedSkill[]> {
@@ -4299,6 +4324,82 @@ export async function refreshSkillDraftById(params: {
     args: [params.skillId],
   });
   return refreshed.rows[0] ? rowToSkill(refreshed.rows[0] as Record<string, unknown>) : skill;
+}
+
+// ─── Agent-explicit skill creation ────────────────────────────────────────────
+
+function generatePatternKey(domain: string, approach: string): string {
+  const normalized = `${domain.toLowerCase().trim()}.${approach.toLowerCase().trim().replace(/\s+/g, '_').slice(0, 50)}`;
+  return normalized;
+}
+
+async function linkRelatedPatterns(userId: string, patternId: string, domain: string): Promise<void> {
+  try {
+    const client = getDb();
+    const related = await client.execute({
+      sql: `SELECT id FROM cognitive_patterns WHERE user_id = ? AND id != ? AND domain = ? AND scope = 'local' LIMIT 5`,
+      args: [userId, patternId, domain],
+    });
+    if (related.rows.length > 0) {
+      const related_ids = related.rows.map(r => String((r as Record<string, unknown>).id));
+      await client.execute({
+        sql: `UPDATE cognitive_patterns SET related_pattern_ids = ? WHERE id = ?`,
+        args: [JSON.stringify(related_ids), patternId],
+      });
+    }
+  } catch {
+    // Non-critical — don't fail pattern creation
+  }
+}
+
+export interface CreateAgentSkillInput {
+  userId: string;
+  name: string;
+  description: string;
+  contentJson: string;
+  category?: string;
+  technologies?: string[];
+  source?: string;
+  status?: string;
+}
+
+export async function createAgentSkill(input: CreateAgentSkillInput): Promise<SynthesizedSkill> {
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+  const id = crypto.randomUUID();
+  const pattern_key = `local:${input.userId}:agent-created:${id.slice(0, 8)}`;
+
+  await client.execute({
+    sql: `
+      INSERT INTO synthesized_skills (
+        id, user_id, scope, pattern_id, pattern_key, name, description, markdown,
+        content_json, quality_score, usage_count, success_rate, status, published,
+        published_to, clawhub_id, source_trace_count, source_pattern_ids_json, source_trace_ids_json,
+        created_at, updated_at
+      ) VALUES (?, ?, 'local', ?, ?, ?, ?, ?, ?, 0.5, 0, 0.5, ?, 0, NULL, NULL, 0, '[]', '[]', ?, ?)
+    `,
+    args: [
+      id,
+      input.userId,
+      id,          // pattern_id = own id for agent-created skills
+      pattern_key,
+      input.name,
+      input.description,
+      // Generate minimal markdown from content
+      `# ${input.name}\n\n${input.description}\n\n${input.contentJson}`,
+      input.contentJson,
+      input.status ?? "pending_review",
+      now,
+      now,
+    ],
+  });
+
+  const result = await client.execute({
+    sql: `SELECT * FROM synthesized_skills WHERE id = ? LIMIT 1`,
+    args: [id],
+  });
+  return rowToSkill(result.rows[0] as Record<string, unknown>);
 }
 
 export async function getSkills(userId: string): Promise<SynthesizedSkill[]> {

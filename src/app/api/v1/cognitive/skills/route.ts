@@ -1,6 +1,6 @@
 import { validateApiKey } from "@/lib/api-auth";
 import { errorResponse } from "@/lib/errors";
-import { getSkills } from "@/lib/cognitive-db";
+import { getSkills, createAgentSkill } from "@/lib/cognitive-db";
 
 export const runtime = "nodejs";
 
@@ -33,6 +33,39 @@ export async function GET(request: Request) {
       })),
       count: skills.length,
     });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const identity = await validateApiKey(request, "cognitive.skills.create");
+    const body = await request.json() as Record<string, unknown>;
+
+    if (!body.name || !body.description || !Array.isArray(body.procedure) || body.procedure.length === 0) {
+      return Response.json({ error: "name, description, and procedure are required" }, { status: 400 });
+    }
+
+    const content = {
+      whenToUse: typeof body.whenToUse === "string" ? body.whenToUse : "",
+      procedure: body.procedure as string[],
+      commonPitfalls: Array.isArray(body.pitfalls) ? body.pitfalls : [],
+      verification: typeof body.verification === "string" ? body.verification : "",
+    };
+
+    const skill = await createAgentSkill({
+      userId: identity.userId,
+      name: body.name as string,
+      description: body.description as string,
+      contentJson: JSON.stringify(content),
+      category: typeof body.category === "string" ? body.category : "agent-created",
+      technologies: Array.isArray(body.technologies) ? body.technologies as string[] : [],
+      source: typeof body.source === "string" ? body.source : "agent-explicit",
+      status: typeof body.status === "string" ? body.status : "pending_review",
+    });
+
+    return Response.json({ created: true, skill });
   } catch (error) {
     return errorResponse(error);
   }

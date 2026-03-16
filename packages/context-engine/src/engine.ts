@@ -486,6 +486,20 @@ export class FatHippoContextEngine implements ContextEngine {
     const recent_messages = messages.slice(-6);
     const recent_text = recent_messages.map(m => getMessageText(m)).join(' ').toLowerCase();
 
+    // User correction signals (indicates the agent was wrong — treat as failure for feedback)
+    const correction_signals = [
+      "no, that's wrong", "that's not right", "that's incorrect",
+      "actually, it should", "you're wrong", "that's not how",
+      "wrong approach", "not what i asked", "that's outdated",
+      "no that's wrong", "actually it should",
+    ];
+
+    let correction_score = 0;
+    for (const signal of correction_signals) {
+      if (recent_text.includes(signal)) correction_score++;
+    }
+    if (correction_score >= 1) return 'failure';
+
     // Strong success signals
     const success_signals = [
       'fixed', 'resolved', 'working now', 'that worked', 'works now',

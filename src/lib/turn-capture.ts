@@ -543,6 +543,65 @@ function looksLikeCodingTurn(messages: TurnCaptureMessage[]): boolean {
   return CODING_KEYWORDS.some((keyword) => combined.includes(keyword));
 }
 
+type CognitiveTraceType = 'coding_turn' | 'debugging' | 'user_correction' | 'knowledge_gap' | 'best_practice' | 'feature_request';
+
+function detectTraceType(messages: TurnCaptureMessage[]): CognitiveTraceType | null {
+  const recent = messages.slice(-6);
+  const user_messages = recent
+    .filter(m => (m.role ?? '').toLowerCase() === 'user')
+    .map(m => getMessageContent(m).toLowerCase());
+  const all_text = recent.map(m => getMessageContent(m).toLowerCase()).join(' ');
+
+  // User correction detection (highest signal)
+  const correction_patterns = [
+    "no, that's wrong", "no that's wrong", "that's not right", "that's incorrect",
+    "actually, it should", "actually it should", "you're wrong",
+    "that's outdated", "that's not how", "not what i asked",
+    "wrong approach", "that's the wrong", "no, use", "no, do it",
+    "i said", "i meant", "that's not correct",
+  ];
+  for (const pattern of correction_patterns) {
+    if (user_messages.some(m => m.includes(pattern))) return 'user_correction';
+  }
+
+  // Feature request detection
+  const feature_patterns = [
+    "can you also", "i wish you could", "is there a way to",
+    "why can't you", "it would be nice if", "could you add",
+    "we need a", "we should add", "missing feature",
+  ];
+  for (const pattern of feature_patterns) {
+    if (user_messages.some(m => m.includes(pattern))) return 'feature_request';
+  }
+
+  // Knowledge gap (agent admits uncertainty or user provides unknown info)
+  const knowledge_patterns = [
+    "i didn't know", "wasn't aware", "that's new to me",
+    "my knowledge", "i was wrong about", "outdated information",
+    "actually the api", "the docs say", "according to",
+  ];
+  if (knowledge_patterns.some(p => all_text.includes(p))) return 'knowledge_gap';
+
+  // Debugging (error-focused)
+  const debug_patterns = [
+    "error", "exception", "stack trace", "failed", "crash",
+    "bug", "broken", "not working", "fix this", "debug",
+  ];
+  if (debug_patterns.some(p => all_text.includes(p))) return 'debugging';
+
+  // Best practice (optimization, cleanup)
+  const practice_patterns = [
+    "better way", "best practice", "optimize", "clean up",
+    "refactor", "improve", "simplify", "more efficient",
+  ];
+  if (practice_patterns.some(p => all_text.includes(p))) return 'best_practice';
+
+  // Default coding turn
+  if (looksLikeCodingTurn(messages)) return 'coding_turn';
+
+  return null;
+}
+
 function detectTraceOutcome(messages: TurnCaptureMessage[]): "success" | "partial" | "failed" {
   const combined = messages
     .slice(-6)
@@ -597,7 +656,8 @@ export async function captureCodingTraceFromTurn(params: {
   sessionId: string;
   userId: string;
 }): Promise<boolean> {
-  if (!looksLikeCodingTurn(params.messages)) {
+  const trace_type = detectTraceType(params.messages);
+  if (!trace_type) {
     return false;
   }
 
@@ -629,7 +689,7 @@ export async function captureCodingTraceFromTurn(params: {
   const trace = await createTrace({
     userId: params.userId,
     sessionId: params.sessionId,
-    type: "coding_turn",
+    type: trace_type,
     problem,
     context: {
       technologies,

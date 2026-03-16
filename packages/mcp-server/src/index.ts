@@ -252,6 +252,57 @@ type SubmitFeedbackArgs = RuntimeAwareArgs & {
   notes?: string;
 };
 
+type GetSkillDetailArgs = RuntimeAwareArgs & {
+  skillId: string;
+  section?: "full" | "procedure" | "pitfalls" | "verification" | "whenToUse";
+};
+
+type CreateSkillArgs = RuntimeAwareArgs & {
+  sessionId?: string;
+  name: string;
+  description: string;
+  whenToUse?: string;
+  procedure: string[];
+  pitfalls?: string[];
+  verification?: string;
+  technologies?: string[];
+  category?: string;
+};
+
+// Session-scoped rate limiting for create_skill
+const session_skill_counts = new Map<string, number>();
+const MAX_SKILLS_PER_SESSION = 3;
+
+function scanSkillContent(skill: CreateSkillArgs): string | null {
+  const all_text = [
+    skill.name,
+    skill.description,
+    skill.whenToUse ?? '',
+    ...(skill.procedure ?? []),
+    ...(skill.pitfalls ?? []),
+    skill.verification ?? '',
+  ].join(' ');
+
+  if (/curl\s+.*\|/.test(all_text)) return "Suspicious: pipe to curl detected";
+  if (/wget\s+.*-O/.test(all_text)) return "Suspicious: wget output redirect detected";
+  if (/https?:\/\//i.test(all_text)) {
+    const urls = all_text.match(/https?:\/\/[^\s"')]+/gi) ?? [];
+    const safe_domains = ['github.com', 'stackoverflow.com', 'docs.', 'developer.mozilla.org', 'npmjs.com', 'pypi.org', 'fathippo.ai'];
+    const suspicious = urls.filter(u => !safe_domains.some(d => u.includes(d)));
+    if (suspicious.length > 0) return `Suspicious URLs: ${suspicious.join(', ')}`;
+  }
+  if (/(?:env|process\.env|os\.environ)\s*\[.*(?:key|token|secret|password)/i.test(all_text)) {
+    return "Suspicious: environment variable access pattern";
+  }
+  if (/(?:eval|exec|Function)\s*\(/.test(all_text)) {
+    return "Suspicious: code execution pattern";
+  }
+  if (/base64/i.test(all_text) && /decode/i.test(all_text)) {
+    return "Suspicious: base64 decode pattern";
+  }
+  return null;
+}
+
 const runtimeSchema = {
   type: "object",
   description:
@@ -621,6 +672,76 @@ const TOOLS: Tool[] = [
     },
   },
   {
+    name: "get_skill_detail",
+    description:
+      "Load the full content of a FatHippo skill. Call when you see a relevant skill in context and want the full procedure, pitfalls, and verification.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        skillId: {
+          type: "string",
+          description: "ID of the skill.",
+        },
+        section: {
+          type: "string",
+          enum: ["full", "procedure", "pitfalls", "verification", "whenToUse"],
+          description: "Load specific section. Default: full.",
+        },
+        ...runtimeAwareProperties,
+      },
+      required: ["skillId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "create_skill",
+    description:
+      "Save a reusable skill from what you just learned. Call after solving complex problems (5+ steps), finding working paths through dead ends, or discovering non-trivial workflows. Skills are shared across all connected platforms.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        name: {
+          type: "string",
+          description: "Short name (e.g., 'Fix Turso connection pool exhaustion').",
+        },
+        description: {
+          type: "string",
+          description: "One-line description.",
+        },
+        whenToUse: {
+          type: "string",
+          description: "Trigger conditions.",
+        },
+        procedure: {
+          type: "array",
+          items: { type: "string" },
+          description: "Steps that worked.",
+        },
+        pitfalls: {
+          type: "array",
+          items: { type: "string" },
+          description: "What didn't work.",
+        },
+        verification: {
+          type: "string",
+          description: "How to verify it worked.",
+        },
+        technologies: {
+          type: "array",
+          items: { type: "string" },
+          description: "Tech involved.",
+        },
+        category: {
+          type: "string",
+          description: "Category (debugging, deployment, database, etc.).",
+        },
+        ...runtimeAwareProperties,
+      },
+      required: ["name", "description", "procedure"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "submit_feedback",
     description:
       "Report whether a pattern or skill from FatHippo actually helped solve the problem. This feedback improves pattern confidence scores over time.",
@@ -956,6 +1077,108 @@ async function handleSubmitFeedback(args: SubmitFeedbackArgs): Promise<string> {
   return toJsonText(result);
 }
 
+async function handleGetSkillDetail(args: GetSkillDetailArgs): Promise<string> {
+  const response = await fetch(`${BASE_URL}/v1/cognitive/skills/${encodeURIComponent(args.skillId)}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Failed to get skill: ${response.status} ${text}`);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await response.json() as any;
+  const skill = result.skill;
+  if (!skill) {
+    throw new Error("Skill not found");
+  }
+
+  const section = args.section ?? "full";
+  const content = skill.content ?? {};
+
+  if (section === "full") {
+    const parts: string[] = [
+      `# ${skill.name}`,
+      `**Description:** ${skill.description}`,
+      `**Success Rate:** ${Math.round((skill.successRate ?? 0) * 100)}%`,
+      `**Status:** ${skill.status}`,
+    ];
+    if (content.whenToUse) parts.push(`\n## When To Use\n${content.whenToUse}`);
+    if (content.procedure?.length) {
+      parts.push(`\n## Procedure\n${(content.procedure as string[]).map((s, i) => `${i + 1}. ${s}`).join("\n")}`);
+    }
+    if (content.commonPitfalls?.length) {
+      parts.push(`\n## Common Pitfalls\n${(content.commonPitfalls as string[]).map((s: string) => `- ${s}`).join("\n")}`);
+    }
+    if (content.verification) parts.push(`\n## Verification\n${content.verification}`);
+    return toJsonText({ skillId: skill.id, name: skill.name, content: parts.join("\n") });
+  }
+
+  // Return a specific section
+  const sectionMap: Record<string, unknown> = {
+    procedure: content.procedure,
+    pitfalls: content.commonPitfalls,
+    verification: content.verification,
+    whenToUse: content.whenToUse,
+  };
+  return toJsonText({ skillId: skill.id, name: skill.name, section, content: sectionMap[section] ?? null });
+}
+
+async function handleCreateSkill(args: CreateSkillArgs): Promise<string> {
+  // Rate limit
+  const session_key = args.sessionId ?? args.conversationId ?? "default";
+  const count = session_skill_counts.get(session_key) ?? 0;
+  if (count >= MAX_SKILLS_PER_SESSION) {
+    return toJsonText({ error: "Rate limit: max 3 skills per session. Existing skills can be improved via feedback instead." });
+  }
+
+  // Content scan
+  const scan_result = scanSkillContent(args);
+  if (scan_result) {
+    return toJsonText({ error: `Skill rejected: ${scan_result}` });
+  }
+
+  const response = await fetch(`${BASE_URL}/v1/cognitive/skills`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: args.name,
+      description: args.description,
+      whenToUse: args.whenToUse,
+      procedure: args.procedure,
+      pitfalls: args.pitfalls,
+      verification: args.verification,
+      technologies: args.technologies,
+      category: args.category ?? "agent-created",
+      source: "agent-explicit",
+      status: "pending_review",
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Failed to create skill: ${response.status} ${text}`);
+  }
+
+  session_skill_counts.set(session_key, count + 1);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await response.json() as any;
+  return toJsonText({
+    created: true,
+    skillId: result.skill?.id,
+    status: "pending_review",
+    message: `Skill "${args.name}" saved in review status. It will be suggested across platforms once validated by successful usage.`,
+  });
+}
+
 type PromptDefinition = {
   title: string;
   description: string;
@@ -1071,6 +1294,12 @@ async function main() {
           break;
         case "submit_feedback":
           result = await handleSubmitFeedback(toolArgs as SubmitFeedbackArgs);
+          break;
+        case "get_skill_detail":
+          result = await handleGetSkillDetail(toolArgs as GetSkillDetailArgs);
+          break;
+        case "create_skill":
+          result = await handleCreateSkill(toolArgs as CreateSkillArgs);
           break;
         default:
           throw new Error(`Unknown tool: ${name}`);
