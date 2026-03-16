@@ -202,44 +202,66 @@ function OpenClawCodePreview() {
         <div className="p-6 font-mono text-base leading-8 bg-[#0D1117]">
           {/* Line 1: Comment */}
           <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.4 }}>
-            <span className={colors.comment}># One command to connect</span>
+            <span className={colors.comment}># One command. Every platform.</span>
           </motion.div>
           
           {/* Line 2: npx command */}
           <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.46 }}>
             <span className={colors.command}>npx</span>{" "}
-            <span className={colors.package}>@fathippo/connect</span>{" "}
-            <span className={colors.action}>openclaw</span>
+            <span className={colors.package}>fathippo</span>{" "}
+            <span className={colors.action}>setup</span>
           </motion.div>
           
           {/* Empty line */}
           <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ delay: 0.52 }}>&nbsp;</motion.div>
           
-          {/* Line 3: Prompt output */}
+          {/* Line 3: Output header */}
           <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.58 }}>
-            <span className={colors.comment}>How do you want to use FatHippo?</span>
-          </motion.div>
-          
-          {/* Line 4: Option 1 */}
-          <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.64 }}>
-            <span className={colors.comment}>{"  "}</span>
-            <span className={colors.key}>[1]</span>{" "}
-            <span className={colors.value}>Free (local-only)</span>
-          </motion.div>
-          
-          {/* Line 5: Option 2 */}
-          <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.7 }}>
-            <span className={colors.comment}>{"  "}</span>
-            <span className={colors.key}>[2]</span>{" "}
-            <span className={colors.value}>Hosted ($4.99/mo)</span>
+            <span className={colors.value}>🦛 FatHippo Setup</span>
           </motion.div>
           
           {/* Empty line */}
-          <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ delay: 0.76 }}>&nbsp;</motion.div>
+          <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ delay: 0.61 }}>&nbsp;</motion.div>
           
-          {/* Line 6: Done */}
+          {/* Line 4: Detected */}
+          <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.64 }}>
+            <span className={colors.comment}>Detected coding platforms:</span>
+          </motion.div>
+          
+          {/* Line 5: Claude Code */}
+          <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.7 }}>
+            <span className={colors.action}>{"  ✔"}</span>{" "}
+            <span className={colors.value}>Claude Code</span>{" "}
+            <span className={colors.comment}>— configured</span>
+          </motion.div>
+          
+          {/* Line 6: Cursor */}
+          <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.74 }}>
+            <span className={colors.action}>{"  ✔"}</span>{" "}
+            <span className={colors.value}>Cursor</span>{" "}
+            <span className={colors.comment}>— configured</span>
+          </motion.div>
+          
+          {/* Line 7: Codex */}
+          <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.78 }}>
+            <span className={colors.action}>{"  ✔"}</span>{" "}
+            <span className={colors.value}>Codex</span>{" "}
+            <span className={colors.comment}>— configured</span>
+          </motion.div>
+          
+          {/* Line 8: Windsurf */}
           <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.82 }}>
-            <span className={colors.comment}># That&apos;s it. Your agent remembers now.</span>
+            <span className={colors.action}>{"  ✔"}</span>{" "}
+            <span className={colors.value}>Windsurf</span>{" "}
+            <span className={colors.comment}>— configured</span>
+          </motion.div>
+          
+          {/* Empty line */}
+          <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ delay: 0.86 }}>&nbsp;</motion.div>
+          
+          {/* Line 9: Done */}
+          <motion.div initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.9 }}>
+            <span className={colors.comment}># That&apos;s it. Every agent learns now.</span>
           </motion.div>
         </div>
       </div>
@@ -253,50 +275,50 @@ function OpenClawCodePreview() {
 function BentoGrid() {
   const features = [
     {
-      icon: Zap,
-      title: "Smaller Context, Smarter Agent",
+      icon: Plug,
+      title: "Cross-Platform Learning",
       description:
-        "Only relevant memories load. Your 50KB MEMORY.md becomes surgical 2KB injections. Fewer tokens, faster responses.",
+        "Fix a bug in Cursor. Claude Code gets the pattern. Codex gets the skill. One brain, every agent.",
       iconColor: "text-[#0070F3]",
       iconBg: "bg-[#0070F3]/[0.08]",
     },
     {
-      icon: Lock,
-      title: "Your Memories Stay Yours",
+      icon: Sparkles,
+      title: "Automatic Skill Synthesis",
       description:
-        "AES-256-GCM encryption at rest. Not even we can read your data. Your agent's memory is private.",
+        "Repeated successful patterns become reusable skills — procedure steps, pitfalls, verification. No manual curation.",
       iconColor: "text-[#00B8D9]",
       iconBg: "bg-[#00B8D9]/[0.08]",
     },
     {
-      icon: Brain,
-      title: "Tiered Importance",
+      icon: Zap,
+      title: "7 Platforms, One Command",
       description:
-        "Critical memories always injected. Important ones on-demand. The rest only when relevant. You control the tiers.",
+        "Claude Code, Cursor, Codex, Windsurf, Zed, VS Code, OpenCode. npx fathippo setup. Done.",
       iconColor: "text-[#8B5CF6]",
       iconBg: "bg-[#8B5CF6]/[0.08]",
     },
     {
-      icon: Target,
-      title: "Auto-Consolidation",
+      icon: Lock,
+      title: "Your Data Stays Yours",
       description:
-        "Duplicate decisions merge. Stale context prunes. Repeated mentions strengthen. Your memory stays lean.",
+        "AES-256-GCM encryption at rest. Frequency-based anonymization for shared patterns. Privacy by default.",
       iconColor: "text-[#0070F3]",
       iconBg: "bg-[#0070F3]/[0.08]",
     },
     {
-      icon: Plug,
-      title: "Works Everywhere",
+      icon: Target,
+      title: "Built-in Feedback Loop",
       description:
-        "OpenClaw plugin or REST API. Telegram, Discord, CLI—same memories across all your surfaces.",
+        "FatHippo detects whether patterns helped. Success increases confidence. Failure demotes. Quality improves automatically.",
       iconColor: "text-[#00B8D9]",
       iconBg: "bg-[#00B8D9]/[0.08]",
     },
     {
       icon: BarChart3,
-      title: "See the Savings",
+      title: "Dashboard & Control",
       description:
-        "Dashboard shows tokens saved, memories accessed, and context efficiency. Know your ROI.",
+        "See synthesized skills, edit them, submit feedback. View traces, patterns, and impact stats. You're always in control.",
       iconColor: "text-[#8B5CF6]",
       iconBg: "bg-[#8B5CF6]/[0.08]",
     },
@@ -753,7 +775,7 @@ export default function Home() {
               className="mb-6 border-[#E5E7EB] bg-white text-[#6B7280] font-medium"
             >
               <Sparkles className="mr-1.5 h-3 w-3 text-[#0070F3]" />
-              OpenClaw&apos;s pluggable memory layer
+              Works with 7 coding platforms
             </Badge>
           </motion.div>
 
@@ -763,9 +785,9 @@ export default function Home() {
             transition={{ duration: 0.6, delay: 0.1, ease: [0.21, 0.47, 0.32, 0.98] }}
             className="text-5xl font-bold tracking-tight sm:text-6xl lg:text-7xl text-[#111827] leading-[1.1]"
           >
-            Memory that
+            Your agent gets
             <br />
-            <span className="text-[#6B7280]">just works.</span>
+            <span className="text-[#6B7280]">smarter every session.</span>
           </motion.h1>
 
           <motion.p
@@ -774,8 +796,7 @@ export default function Home() {
             transition={{ duration: 0.6, delay: 0.2, ease: [0.21, 0.47, 0.32, 0.98] }}
             className="mx-auto mt-6 max-w-xl text-lg text-[#6B7280] leading-relaxed"
           >
-            Stop managing bloated MEMORY.md files. Your agent stores what matters,
-            recalls it when needed, and saves tokens every session.
+            FatHippo learns from real coding sessions across Claude Code, Cursor, Codex, and more. Patterns extracted. Skills synthesized. Context that compounds.
           </motion.p>
 
           <motion.div
@@ -833,10 +854,10 @@ export default function Home() {
             className="text-center mb-12"
           >
             <h2 className="text-3xl font-semibold text-[#111827] mb-3 tracking-tight">
-              Your agent just knows
+              Install once. Every agent learns.
             </h2>
             <p className="text-lg text-[#6B7280] max-w-xl mx-auto">
-              Install the plugin. Your agent automatically searches, stores, and retrieves—shrinking your MEMORY.md and saving tokens.
+              One command connects FatHippo to all your coding tools. Patterns learned in Cursor help Claude Code. Skills from Codex improve VS Code. Memory that flows everywhere.
             </p>
           </motion.div>
           <CommandPalettePreview />
@@ -864,27 +885,27 @@ export default function Home() {
             {[
               {
                 step: "01",
-                title: "Chat Starts",
+                title: "Connect",
                 description:
-                  "Your agent wakes up with context. Relevant memories are injected before the first reply—no MEMORY.md loading required.",
+                  "Run npx fathippo setup. FatHippo detects Claude Code, Cursor, Codex, Windsurf, Zed, VS Code, and OpenCode — configures them all.",
                 icon: Layers,
                 color: "text-[#0070F3]",
                 bgColor: "bg-[#0070F3]/[0.08]",
               },
               {
                 step: "02",
-                title: "You Talk",
+                title: "Learn",
                 description:
-                  "Mid-conversation context surfaces automatically. Your agent captures new insights without you asking.",
+                  "Your agent captures coding traces automatically. Successful patterns cluster. High-confidence patterns become reusable skills.",
                 icon: GitBranch,
                 color: "text-[#00B8D9]",
                 bgColor: "bg-[#00B8D9]/[0.08]",
               },
               {
                 step: "03",
-                title: "Session Ends",
+                title: "Compound",
                 description:
-                  "Learnings stored, duplicates merged, weak memories pruned. Next session starts smarter.",
+                  "Every session makes the next one smarter. Patterns improve with feedback. Skills get better with use. Your agent compounds experience.",
                 icon: Shield,
                 color: "text-[#8B5CF6]",
                 bgColor: "bg-[#8B5CF6]/[0.08]",
@@ -932,10 +953,10 @@ export default function Home() {
               Native Integration
             </Badge>
             <h2 className="text-3xl font-semibold text-[#111827] mb-3 tracking-tight">
-              Built for OpenClaw
+              Works everywhere you code
             </h2>
             <p className="text-lg text-[#6B7280] max-w-lg mx-auto">
-              Consistent memory across all your agents and chats. Install in seconds, configure once, remember forever.
+              One command configures Claude Code, Cursor, Codex, Windsurf, Zed, VS Code, OpenCode, and OpenClaw. Every agent learns from the same cognitive layer.
             </p>
           </motion.div>
           <OpenClawCodePreview />
@@ -974,7 +995,7 @@ export default function Home() {
             viewport={{ once: true }}
             className="text-3xl font-semibold text-[#111827] mb-4 tracking-tight"
           >
-            Ditch the bloated MEMORY.md
+            Make every coding session count
           </motion.h2>
           <motion.p
             initial={{ opacity: 0, y: 20 }}
@@ -983,7 +1004,7 @@ export default function Home() {
             transition={{ delay: 0.1 }}
             className="text-[#6B7280] mb-10"
           >
-            Three commands. Your agent remembers everything, loads only what&apos;s relevant, and costs less to run.
+            One setup. Seven platforms. An agent that gets smarter every day.
           </motion.p>
           <motion.div
             initial={{ opacity: 0, y: 20 }}

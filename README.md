@@ -5,8 +5,8 @@
 <h1 align="center">FatHippo</h1>
 
 <p align="center">
-  <strong>Persistent memory and cognition layer for OpenClaw and AI coding agents.</strong><br/>
-  Connect it once, then let your agent get better by the day.
+  <strong>Your coding agent gets smarter every session — across every platform.</strong><br/>
+  One setup command connects FatHippo to Claude Code, Cursor, Codex, Windsurf, Zed, VS Code, and OpenCode. Your agent remembers context, learns from coding patterns, and synthesizes reusable skills — automatically.
 </p>
 
 <p align="center">
@@ -24,21 +24,62 @@
 
 ---
 
+## Quick Start
+
+The fastest way to get started — connects all your coding agents in one command:
+
+```bash
+# Connect to all your coding agents in one command
+npx fathippo setup
+
+# Or connect to OpenClaw specifically
+npx @fathippo/connect openclaw
+```
+
+---
+
+## Works Everywhere
+
+| Platform      | Setup Method                     | Status |
+|---------------|----------------------------------|--------|
+| Claude Code   | `npx fathippo setup`             | ✅     |
+| Cursor        | `npx fathippo setup`             | ✅     |
+| Codex         | `npx fathippo setup`             | ✅     |
+| Windsurf      | `npx fathippo setup`             | ✅     |
+| Zed           | `npx fathippo setup`             | ✅     |
+| VS Code       | `npx fathippo setup`             | ✅     |
+| OpenCode      | `npx fathippo setup`             | ✅     |
+| OpenClaw      | `npx @fathippo/connect openclaw` | ✅     |
+
+---
+
 ## What FatHippo Is
 
-FatHippo started as memory infrastructure. It is now a cognitive substrate for coding agents.
+FatHippo is a cognitive layer for AI coding agents. When connected:
 
-When connected to an existing OpenClaw install, FatHippo can:
+- Your agent learns from real coding sessions — not pre-trained data
+- Repeated fix patterns are automatically extracted and reused
+- Successful approaches become synthesized skills
+- Memory, patterns, and skills flow across all connected platforms
+- Everything improves with a built-in feedback loop
 
-- remember relevant project context across sessions
-- capture coding traces from real work
-- extract repeated fix patterns
-- synthesize reusable skills
-- learn better retrieval mixes over time
-- learn better debugging workflows over time
-- show lightweight proof that it helped, without interrupting the session
+The goal is simple: connect it once, then let your agent become more capable every week.
 
-The goal is simple: install it once, then let your agent become more useful every week.
+---
+
+## How The Learning Loop Works
+
+```
+Coding Session → Trace Capture → Pattern Extraction → Skill Synthesis
+     ↑                                                        |
+     └──────── Better context + suggestions ←──── Feedback ←──┘
+```
+
+1. You code. FatHippo captures structured traces (problem, approach, outcome).
+2. Repeated successful traces cluster into patterns.
+3. High-confidence patterns synthesize into reusable skills.
+4. Next session: your agent gets relevant patterns and skills injected before it starts.
+5. Automatic feedback detection improves pattern confidence over time.
 
 ---
 
@@ -48,8 +89,6 @@ FatHippo currently has two customer-facing offers:
 
 - **Free (Local-Only) - $0/month**: private on-device memory plus lightweight local workflow/fix reuse, without hosted sync/imports or account-backed cognition. No account required.
 - **Hosted - $4.99/month or $49.99/year (save 17%)**: the full FatHippo experience with cloud sync across devices, cognitive traces & pattern extraction, skill synthesis, dashboard with receipts & analytics, plugin version management, and priority support.
-
-OpenClaw users only install one package: `@fathippo/fathippo-context-engine`.
 
 ---
 
@@ -133,59 +172,17 @@ OpenClaw guide: [docs/api/openclaw-integration.md](docs/api/openclaw-integration
 
 ---
 
-## Better By The Day
-
-FatHippo does not require end users to run RL hardware jobs.
-
-Instead, it improves the agent with a safe private learning loop:
-
-1. A real coding session happens.
-2. FatHippo captures the problem, tools used, reasoning, verification, and outcome.
-3. Repeated successful traces become patterns.
-4. Strong patterns become reusable skills.
-5. Future sessions get better retrieval, better workflow suggestions, and better context.
-
-Today that learning loop includes:
-
-- structured trace capture
-- adaptive retrieval policy learning
-- adaptive tool-workflow learning
-- pattern promotion and decay
-- skill synthesis
-- benchmark and attribution plumbing
-- lightweight in-product receipts so users notice the value
-
----
-
-## Product Shape
-
-FatHippo is designed to be:
-
-- `silent by default` in the session itself
-- `visible in hindsight` through receipts and dashboards
-- `private by default` for raw traces and learning data
-- `OpenClaw-first` for the easiest install path
-
-The ideal experience is:
-
-1. User already has OpenClaw
-2. User connects FatHippo once
-3. FatHippo quietly starts helping
-4. The agent gets better on repeated bug classes and workflows
-5. The user can see proof without having to manage training
-
----
-
 ## Packages
 
 This repo is split into installable package boundaries. These are developer/package surfaces, not separate end-user plans:
 
 | Package | Purpose |
 | --- | --- |
-| `@fathippo/fathippo-context-engine` | OpenClaw plugin and easiest way to connect FatHippo |
-| `@fathippo/local` | Local-first retrieval, cache, and edge helpers |
-| `@fathippo/hosted` | Hosted sync and retrieval-upgrade helpers |
-| `@fathippo/cognition` | Cognitive substrate APIs and learning helpers |
+| `fathippo` | CLI — setup, store, search, init |
+| `@fathippo/mcp-server` | MCP server for Claude Code, Cursor, Codex, etc. (10 tools) |
+| `@fathippo/fathippo-context-engine` | OpenClaw plugin |
+| `@fathippo/hosted` | Hosted sync and retrieval helpers |
+| `@fathippo/local` | Local-first retrieval and cache |
 
 There are also internal/supporting packages in this monorepo, including the web app, dashboards, examples, and test harnesses.
 
@@ -194,6 +191,16 @@ Example quickstarts live in [examples/README.md](examples/README.md):
 - [examples/local-only.ts](examples/local-only.ts)
 - [examples/hosted-hybrid.ts](examples/hosted-hybrid.ts)
 - [examples/cognition-enabled.ts](examples/cognition-enabled.ts)
+
+---
+
+## MCP Tools
+
+The MCP server (`@fathippo/mcp-server`) exposes 10 tools for any connected coding agent:
+
+**Memory:** `start_session`, `build_context`, `record_turn`, `end_session`, `remember`, `recall`, `search`
+
+**Cognitive:** `record_trace`, `get_cognitive_context`, `submit_feedback`
 
 ---
 
@@ -241,10 +248,14 @@ Users do not need to babysit FatHippo.
 
 They should mainly notice:
 
-- OpenClaw already knows what to try on repeated issues
-- the suggested workflow is better than before
-- fewer retries are needed on familiar bug classes
-- the dashboard shows short "FatHippo helped" receipts
+- Their agent already knows what to try on repeated issues
+- The suggested workflow is better than before
+- Fewer retries are needed on familiar bug classes
+- Skill detail pages where they can view and edit synthesized skills
+- Manual feedback on patterns (did this help? yes/no)
+- Impact stats: success rates, usage counts, verification pass rates
+- Clean trace display showing real coding problems solved
+- The dashboard shows short "FatHippo helped" receipts
 
 That means the product stays low-friction while still making the value legible.
 
