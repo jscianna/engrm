@@ -491,6 +491,81 @@ async function promptApiKey() {
   });
 }
 
+// ─── Device code authentication flow ─────────────────────────────────────────
+
+// Node 18+ has global fetch. This flow opens a browser for the user to authorize
+// the CLI without manually copying an API key from the dashboard.
+async function authenticateWithDeviceFlow() {
+  const spinner = ora('Generating device code...').start();
+
+  try {
+    // Request device code
+    const res = await fetch('https://fathippo.ai/api/v1/auth/device', {
+      method: 'POST',
+    });
+
+    if (!res.ok) {
+      spinner.fail('Failed to generate device code');
+      return null;
+    }
+
+    const data = await res.json();
+    spinner.stop();
+
+    console.log();
+    console.log(chalk.bold('  To authenticate, visit:'));
+    console.log(chalk.cyan(`  ${data.verification_uri}`));
+    console.log();
+    console.log(chalk.bold('  And enter this code:'));
+    console.log(chalk.cyan.bold(`  ${data.user_code}`));
+    console.log();
+
+    // Try to open browser automatically
+    const open_cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+    try {
+      execSync(`${open_cmd} ${data.verification_uri}`, { stdio: 'pipe' });
+      console.log(chalk.dim('  (Browser opened automatically)'));
+    } catch {
+      // Browser didn't open — user will navigate manually
+    }
+    console.log();
+
+    // Poll for completion
+    const poll_spinner = ora('Waiting for authorization...').start();
+    const poll_interval = (data.interval ?? 5) * 1000;
+    const max_attempts = Math.ceil((data.expires_in ?? 900) / (data.interval ?? 5));
+
+    for (let i = 0; i < max_attempts; i++) {
+      await new Promise(resolve => setTimeout(resolve, poll_interval));
+
+      try {
+        const poll_res = await fetch(`https://fathippo.ai/api/v1/auth/device?device_code=${data.device_code}`);
+        const poll_data = await poll_res.json();
+
+        if (poll_data.status === 'authorized') {
+          poll_spinner.succeed('Authenticated!');
+          return poll_data.api_key;
+        }
+
+        if (poll_res.status === 410) {
+          poll_spinner.fail('Code expired. Please try again.');
+          return null;
+        }
+
+        // Still pending — continue polling
+      } catch {
+        // Network error — retry
+      }
+    }
+
+    poll_spinner.fail('Timed out waiting for authorization.');
+    return null;
+  } catch (err) {
+    spinner.fail(`Device auth error: ${err.message}`);
+    return null;
+  }
+}
+
 // ─── Status command ───────────────────────────────────────────────────────────
 
 function showStatus() {
@@ -621,8 +696,17 @@ export async function setup(options) {
   }
 
   if (!apiKey) {
-    console.log(chalk.dim('Get your API key at https://fathippo.ai/dashboard/settings\n'));
-    apiKey = await promptApiKey();
+    // 4. Device code flow (preferred — opens browser for seamless auth)
+    console.log(chalk.yellow('\nNo API key found. Starting device authentication...\n'));
+    apiKey = await authenticateWithDeviceFlow();
+
+    // 5. Fall back to manual entry if device flow fails or is unavailable
+    // (e.g., SSH sessions without a browser, or self-hosted instances)
+    if (!apiKey) {
+      console.log(chalk.dim('\nDevice auth unavailable. Enter key manually:'));
+      console.log(chalk.dim('Get your API key at https://fathippo.ai/dashboard/settings\n'));
+      apiKey = await promptApiKey();
+    }
   }
 
   if (!apiKey) {
