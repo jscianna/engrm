@@ -170,6 +170,17 @@ function classifyImportance(text: string): MemoryImportanceTier {
   return "normal";
 }
 
+/** Map importance tier to numeric score (1-10) for vector storage and display */
+function importanceTierToScore(tier: MemoryImportanceTier): number {
+  switch (tier) {
+    case "critical": return 9;
+    case "working": return 8;
+    case "high": return 7;
+    case "normal": return 5;
+    default: return 5;
+  }
+}
+
 function getMessageContent(message: TurnCaptureMessage): string {
   return typeof message.content === "string" ? message.content.trim() : "";
 }
@@ -359,7 +370,7 @@ export async function storeAutoMemory(params: {
               title: existing.title,
               sourceType: existing.sourceType,
               memoryType: existing.memoryType,
-              importance: 5,
+              importance: importanceTierToScore(importanceTier),
               vector: newEmbedding,
             });
           } catch {
@@ -399,7 +410,7 @@ export async function storeAutoMemory(params: {
         title: memory.title,
         sourceType: memory.sourceType,
         memoryType: memory.memoryType,
-        importance: 5,
+        importance: importanceTierToScore(importanceTier),
         vector: embedding,
       });
     } catch {

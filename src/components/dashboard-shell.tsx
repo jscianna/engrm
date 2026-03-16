@@ -11,7 +11,7 @@ import { FeedbackWidget } from "@/components/feedback-widget";
 
 const baseLinks = [
   { href: "/dashboard/search", label: "Memories", icon: Search },
-  { href: "/dashboard/cognitive", label: "Cognition", icon: Brain },
+  { href: "/dashboard/cognition", label: "Cognition", icon: Brain },
   { href: "/vault", label: "Vault", icon: KeyRound },
   { href: "/dashboard/analytics", label: "Analytics", icon: Activity },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
