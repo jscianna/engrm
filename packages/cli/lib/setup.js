@@ -87,6 +87,13 @@ const PLATFORMS = [
     format: 'mcp-json',
   },
   {
+    name: 'Hermes Agent',
+    detect: () =>
+      existsSync(path.join(homedir, '.hermes')) || commandExists('hermes'),
+    configPath: path.join(homedir, '.hermes', 'config.yaml'),
+    format: 'hermes-yaml',
+  },
+  {
     name: 'Qoder',
     detect: () => {
       // macOS: ~/Library/Application Support/Qoder
@@ -234,6 +241,53 @@ function writeToml(configPath, apiKey) {
   }
 }
 
+/**
+ * Write fathippo MCP config into Hermes Agent's ~/.hermes/config.yaml.
+ * Hermes uses YAML with mcp_servers key. We append/replace the fathippo block.
+ */
+function writeHermesYaml(configPath, apiKey) {
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+
+  const section = [
+    '  fathippo:',
+    '    command: npx',
+    '    args:',
+    '      - "-y"',
+    '      - "@fathippo/mcp-server"',
+    '    env:',
+    `      FATHIPPO_API_KEY: "${apiKey}"`,
+  ].join('\n');
+
+  let content = '';
+  if (fs.existsSync(configPath)) {
+    content = fs.readFileSync(configPath, 'utf-8');
+  }
+
+  // Check if mcp_servers section exists
+  if (/^mcp_servers:/m.test(content)) {
+    // Check if fathippo already exists under mcp_servers
+    if (/^  fathippo:/m.test(content)) {
+      // Replace existing fathippo block (from "  fathippo:" to next "  <name>:" or end of mcp_servers)
+      content = content.replace(
+        /^  fathippo:[\s\S]*?(?=\n  \w|\n[^ \n]|\n*$)/m,
+        section
+      );
+    } else {
+      // Append fathippo to mcp_servers section
+      content = content.replace(
+        /^(mcp_servers:)/m,
+        `$1\n${section}`
+      );
+    }
+  } else {
+    // Add mcp_servers section
+    const separator = content.length > 0 && !content.endsWith('\n') ? '\n' : '';
+    content += `${separator}mcp_servers:\n${section}\n`;
+  }
+
+  fs.writeFileSync(configPath, content, 'utf-8');
+}
+
 // ─── Remove helpers ───────────────────────────────────────────────────────────
 
 function removeMcpJson(configPath) {
@@ -260,6 +314,17 @@ function removeZedJson(configPath) {
   if (!existing || !existing.context_servers?.fathippo) return false;
   delete existing.context_servers.fathippo;
   writeJson(configPath, existing);
+  return true;
+}
+
+function removeHermesYaml(configPath) {
+  if (!fs.existsSync(configPath)) return false;
+  let content = fs.readFileSync(configPath, 'utf-8');
+  if (!/^  fathippo:/m.test(content)) return false;
+  content = content.replace(/^  fathippo:[\s\S]*?(?=\n  \w|\n[^ \n]|\n*$)/m, '');
+  // Clean up double newlines
+  content = content.replace(/\n{3,}/g, '\n\n');
+  fs.writeFileSync(configPath, content, 'utf-8');
   return true;
 }
 
@@ -302,6 +367,10 @@ function isPlatformConfigured(platform) {
       case 'toml': {
         const content = fs.readFileSync(platform.configPath, 'utf-8');
         return /\[mcp\.fathippo\]/.test(content);
+      }
+      case 'hermes-yaml': {
+        const yamlContent = fs.readFileSync(platform.configPath, 'utf-8');
+        return /^\s+fathippo:/m.test(yamlContent);
       }
       default:
         return false;
@@ -494,6 +563,9 @@ function removeFromAll(platformFilter) {
         case 'toml':
           ok = removeToml(platform.configPath);
           break;
+        case 'hermes-yaml':
+          ok = removeHermesYaml(platform.configPath);
+          break;
       }
       if (ok) {
         console.log(chalk.green(`  ✔ ${platform.name} — removed`));
@@ -611,6 +683,9 @@ export async function setup(options) {
           break;
         case 'toml':
           writeToml(platform.configPath, apiKey);
+          break;
+        case 'hermes-yaml':
+          writeHermesYaml(platform.configPath, apiKey);
           break;
         default:
           throw new Error(`Unknown format: ${platform.format}`);
