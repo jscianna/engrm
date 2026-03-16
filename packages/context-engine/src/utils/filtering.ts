@@ -87,6 +87,15 @@ const SYSTEM_METADATA_PATTERNS = [
   /\bHEARTBEAT_OK\b/,
   /\bExec\s+(?:completed|failed)\b/i,
   /\bcode\s+\d+\)\s*::/,
+  // Internal agent routing instructions
+  /\b(?:main|parent|child)\s+agent\s+should\b/i,
+  /\bforward\s+(?:this|the)\s+(?:report|message|result)\b/i,
+  /\b(?:send|deliver|route)\s+(?:to|this)\s+(?:the\s+)?(?:user|channel|telegram|discord|slack)\b/i,
+  /\b(?:announce|notify|alert)\s+(?:the\s+)?(?:user|human|operator)\b/i,
+  // Raw tool result JSON
+  /^\s*\{\s*"(?:status|error|tool|result)":/,
+  // Instruction fragments (numbered steps without context)
+  /^\s*\d+\.\s*$/m,
 ];
 
 /**
