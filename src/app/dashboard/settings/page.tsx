@@ -2,12 +2,70 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiKeysCard } from "@/components/api-keys-card";
 import { BillingCard } from "@/components/billing-card";
-import { OpenClawConnectCard } from "@/components/openclaw-connect-card";
+import { ConnectedPlatformsCard } from "@/components/connected-platforms-card";
 import { UsageCard } from "@/components/usage-card";
 import { hasClerkAdminAccess } from "@/lib/admin-auth";
 import { isOpenClawAgentName } from "@/lib/cognitive-receipts";
 import { getUserEntitlementPlan, listApiKeys } from "@/lib/db";
 import { getOpenClawPluginStatus, pickPreferredOpenClawKey } from "@/lib/openclaw-plugin";
+
+const ALL_PLATFORMS = [
+  { name: "OpenClaw", icon: "🦞", source: "plugin" as const },
+  { name: "Claude Code", icon: "🤖", source: "mcp" as const },
+  { name: "Cursor", icon: "⌨️", source: "mcp" as const },
+  { name: "Codex", icon: "📦", source: "mcp" as const },
+  { name: "Windsurf", icon: "🏄", source: "mcp" as const },
+  { name: "Zed", icon: "⚡", source: "mcp" as const },
+  { name: "VS Code", icon: "💻", source: "mcp" as const },
+  { name: "OpenCode", icon: "🔓", source: "mcp" as const },
+  { name: "Antigravity", icon: "🚀", source: "mcp" as const },
+  { name: "Trae", icon: "🌊", source: "mcp" as const },
+  { name: "Qoder", icon: "🔮", source: "mcp" as const },
+  { name: "Hermes Agent", icon: "🪽", source: "mcp" as const },
+];
+
+function formatRelativeDate(date: string | null): string | null {
+  if (!date) return null;
+  const d = new Date(date);
+  const now = new Date();
+  const diff = now.getTime() - d.getTime();
+
+  if (diff < 60000) return "just now";
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
+  return d.toLocaleDateString();
+}
+
+function buildPlatformData(
+  apiKeys: Array<{ agentName: string | null; lastUsed: string | null; isActive: boolean }>,
+  pluginStatus: { hasConnectedPlugin: boolean; lastSeenAt: string | null },
+) {
+  return ALL_PLATFORMS.map(p => {
+    if (p.name === "OpenClaw") {
+      return {
+        ...p,
+        connected: pluginStatus.hasConnectedPlugin,
+        lastActive: formatRelativeDate(pluginStatus.lastSeenAt),
+      };
+    }
+
+    // Check if any API key's agentName hints at this platform
+    const matchingKey = apiKeys.find(k => {
+      const name = (k.agentName ?? "").toLowerCase();
+      return (
+        name.includes(p.name.toLowerCase()) ||
+        name.includes(p.name.toLowerCase().replace(" ", ""))
+      );
+    });
+
+    if (matchingKey?.isActive && matchingKey.lastUsed) {
+      return { ...p, connected: true, lastActive: formatRelativeDate(matchingKey.lastUsed) };
+    }
+
+    return { ...p, connected: false, lastActive: null };
+  });
+}
 
 export default async function SettingsPage() {
   const [{ userId }, user] = await Promise.all([auth(), currentUser()]);
@@ -23,6 +81,11 @@ export default async function SettingsPage() {
     apiKeys.filter((key) => isOpenClawAgentName(key.agentName)),
   );
   const pluginStatus = await getOpenClawPluginStatus(openClawKey ?? null);
+
+  const platformData = buildPlatformData(
+    apiKeys.map(k => ({ agentName: k.agentName, lastUsed: k.lastUsed, isActive: k.isActive })),
+    { hasConnectedPlugin: pluginStatus.hasConnectedPlugin, lastSeenAt: pluginStatus.lastSeenAt },
+  );
 
   const primaryEmail = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress ?? null;
   const isAdmin = hasClerkAdminAccess({
@@ -44,17 +107,11 @@ export default async function SettingsPage() {
         priceAnnual={process.env.STRIPE_PRICE_ANNUAL ?? ""}
       />
 
-      <OpenClawConnectCard
-        hasExistingOpenClawKey={Boolean(openClawKey)}
-        isActive={openClawKey?.isActive ?? false}
-        lastUsed={openClawKey?.lastUsed ?? null}
-        currentPluginVersion={pluginStatus.currentVersion}
-        publishedPluginVersion={pluginStatus.publishedVersion}
-        lastSeenPluginVersion={pluginStatus.lastSeenVersion}
-        lastSeenPluginMode={pluginStatus.lastSeenMode}
-        lastSeenPluginAt={pluginStatus.lastSeenAt}
-        updateAvailable={pluginStatus.updateAvailable}
-        hasConnectedPlugin={pluginStatus.hasConnectedPlugin}
+      {/* Connected Platforms */}
+      <ConnectedPlatformsCard
+        platforms={platformData}
+        totalConnections={platformData.filter(p => p.connected).length}
+        setupCommand="npx fathippo setup"
       />
 
       {/* Profile */}
