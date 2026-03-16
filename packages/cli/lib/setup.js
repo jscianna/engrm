@@ -399,11 +399,17 @@ function isOpenClawConfigured() {
 }
 
 function configureOpenClaw(apiKey) {
-  // Install the context engine plugin
-  execSync('openclaw plugins install @fathippo/fathippo-context-engine', {
-    stdio: 'pipe',
-    timeout: 60000,
-  });
+  // Install the context engine plugin (skip if already installed)
+  try {
+    execSync('openclaw plugins install @fathippo/fathippo-context-engine', {
+      stdio: 'pipe',
+      timeout: 60000,
+    });
+  } catch (e) {
+    const msg = e.stderr?.toString() || e.message || '';
+    if (!msg.includes('already exists')) throw e;
+    // Already installed — continue with configuration
+  }
 
   // Set it as the active context engine
   execSync('openclaw config set plugins.slots.contextEngine fathippo-context-engine', {

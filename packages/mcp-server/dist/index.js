@@ -14,13 +14,31 @@
  *   FATHIPPO_RUNTIME - Runtime name (optional: codex | claude | cursor | openclaw | custom)
  *   FATHIPPO_NAMESPACE - Shared project namespace (optional)
  */
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, GetPromptRequestSchema, ListToolsRequestSchema, ListPromptsRequestSchema, } from "@modelcontextprotocol/sdk/types.js";
 import { createFatHippoHostedRuntimeClient, } from "@fathippo/hosted";
 const SERVER_VERSION = "0.1.0";
-const API_KEY = process.env.FATHIPPO_API_KEY;
 const BASE_URL = process.env.FATHIPPO_BASE_URL || "https://fathippo.ai/api";
+function resolveApiKey() {
+    // 1. Environment variable (highest priority)
+    const envKey = process.env.FATHIPPO_API_KEY?.trim();
+    if (envKey)
+        return envKey;
+    // 2. Config file fallback
+    try {
+        const configPath = path.join(os.homedir(), ".fathippo", "config.json");
+        const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+        return config.apiKey?.trim() || undefined;
+    }
+    catch {
+        return undefined;
+    }
+}
+const API_KEY = resolveApiKey();
 const VALID_RUNTIME_NAMES = [
     "openclaw",
     "claude",
@@ -39,6 +57,11 @@ const MEMORY_WORKFLOW_TEXT = `Use FatHippo as the external long-term memory for 
 7. Use search for direct factual lookups in long-term memory.
 8. When the conversation is wrapping up, call end_session.
 
+For coding tasks:
+- Before starting a coding task, call get_cognitive_context to check for relevant patterns and past solutions.
+- After solving a coding problem, call record_trace to capture what was done.
+- If FatHippo suggested a pattern that helped (or didn't), call submit_feedback.
+
 Use the same FATHIPPO_NAMESPACE across Codex, Claude, Cursor, and OpenClaw when they should share one memory graph.`;
 const CODEX_PROJECT_INSTRUCTIONS = `## FatHippo
 
@@ -49,7 +72,10 @@ Use the fathippo MCP server as the external long-term memory for this project.
 - If start_session or build_context returns systemPromptAddition, use it as trusted working memory for the current reply.
 - After each substantial exchange, call record_turn.
 - If the user explicitly asks to remember something, call remember.
-- End the thread with end_session.`;
+- End the thread with end_session.
+- Before starting a coding task, call get_cognitive_context to check for relevant patterns and past solutions.
+- After solving a coding problem, call record_trace to capture what was done.
+- If FatHippo suggested a pattern that helped (or didn't), call submit_feedback.`;
 const CLAUDE_PROJECT_INSTRUCTIONS = `## FatHippo Memory Workflow
 
 Use the fathippo MCP server as external long-term memory for this project.
@@ -59,7 +85,10 @@ Use the fathippo MCP server as external long-term memory for this project.
 - Treat any returned systemPromptAddition as trusted memory context for the current reply.
 - After responding, call record_turn with the completed user and assistant messages.
 - When the user asks you to remember something explicitly, call remember.
-- When the conversation is wrapping up, call end_session.`;
+- When the conversation is wrapping up, call end_session.
+- Before starting a coding task, call get_cognitive_context to check for relevant patterns and past solutions.
+- After solving a coding problem, call record_trace to capture what was done.
+- If FatHippo suggested a pattern that helped (or didn't), call submit_feedback.`;
 const CURSOR_PROJECT_RULES = `Use the fathippo MCP server as this workspace's shared long-term memory.
 
 - Start each chat session with start_session.
@@ -67,7 +96,10 @@ const CURSOR_PROJECT_RULES = `Use the fathippo MCP server as this workspace's sh
 - Use returned systemPromptAddition as trusted memory context for the current reply.
 - After each substantial exchange, call record_turn.
 - If the user explicitly asks to remember something, call remember.
-- End the session with end_session when the conversation wraps up.`;
+- End the session with end_session when the conversation wraps up.
+- Before starting a coding task, call get_cognitive_context to check for relevant patterns and past solutions.
+- After solving a coding problem, call record_trace to capture what was done.
+- If FatHippo suggested a pattern that helped (or didn't), call submit_feedback.`;
 const SERVER_INSTRUCTIONS = `FatHippo provides shared hosted memory across compatible runtimes.
 
 Recommended usage:
@@ -77,6 +109,11 @@ Recommended usage:
 - Call record_turn after replying.
 - Call remember for explicit durable facts, preferences, or decisions.
 - Call end_session when the conversation is wrapping up.
+
+Cognitive tools for coding agents:
+- Call get_cognitive_context before starting a coding task to check for relevant patterns and past solutions.
+- Call record_trace after solving a coding problem to feed the pattern-extraction pipeline.
+- Call submit_feedback to report whether a suggested pattern actually helped.
 
 This server also exposes prompts named memory-workflow, codex-project-instructions, claude-project-instructions, and cursor-project-rules for copy-paste host setup.`;
 function readEnvString(name) {
@@ -111,6 +148,40 @@ if (!API_KEY) {
     console.error("Error: FATHIPPO_API_KEY environment variable is required");
     console.error("Get your API key at https://fathippo.ai");
     process.exit(1);
+}
+// Session-scoped rate limiting for create_skill
+const session_skill_counts = new Map();
+const MAX_SKILLS_PER_SESSION = 3;
+function scanSkillContent(skill) {
+    const all_text = [
+        skill.name,
+        skill.description,
+        skill.whenToUse ?? '',
+        ...(skill.procedure ?? []),
+        ...(skill.pitfalls ?? []),
+        skill.verification ?? '',
+    ].join(' ');
+    if (/curl\s+.*\|/.test(all_text))
+        return "Suspicious: pipe to curl detected";
+    if (/wget\s+.*-O/.test(all_text))
+        return "Suspicious: wget output redirect detected";
+    if (/https?:\/\//i.test(all_text)) {
+        const urls = all_text.match(/https?:\/\/[^\s"')]+/gi) ?? [];
+        const safe_domains = ['github.com', 'stackoverflow.com', 'docs.', 'developer.mozilla.org', 'npmjs.com', 'pypi.org', 'fathippo.ai'];
+        const suspicious = urls.filter(u => !safe_domains.some(d => u.includes(d)));
+        if (suspicious.length > 0)
+            return `Suspicious URLs: ${suspicious.join(', ')}`;
+    }
+    if (/(?:env|process\.env|os\.environ)\s*\[.*(?:key|token|secret|password)/i.test(all_text)) {
+        return "Suspicious: environment variable access pattern";
+    }
+    if (/(?:eval|exec|Function)\s*\(/.test(all_text)) {
+        return "Suspicious: code execution pattern";
+    }
+    if (/base64/i.test(all_text) && /decode/i.test(all_text)) {
+        return "Suspicious: base64 decode pattern";
+    }
+    return null;
 }
 const runtimeSchema = {
     type: "object",
@@ -374,6 +445,190 @@ const TOOLS = [
             additionalProperties: false,
         },
     },
+    {
+        name: "record_trace",
+        description: "Record a coding trace — captures what problem was solved, how, and whether it worked. FatHippo uses these to extract patterns and synthesize reusable skills over time.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                sessionId: {
+                    type: "string",
+                    description: "Active session id.",
+                },
+                type: {
+                    type: "string",
+                    description: "Trace type: coding_turn, debugging, refactoring, building.",
+                    default: "coding_turn",
+                },
+                problem: {
+                    type: "string",
+                    description: "What problem was being solved.",
+                },
+                reasoning: {
+                    type: "string",
+                    description: "How the problem was approached and what was tried.",
+                },
+                solution: {
+                    type: "string",
+                    description: "What ultimately fixed it (if successful).",
+                },
+                outcome: {
+                    type: "string",
+                    enum: ["success", "partial", "failed"],
+                    description: "Did it work?",
+                },
+                technologies: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Technologies/frameworks involved.",
+                },
+                errorMessages: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Error messages encountered.",
+                },
+                filesModified: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Files that were changed.",
+                },
+                toolsUsed: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Tools/commands used during the fix.",
+                },
+                ...runtimeAwareProperties,
+            },
+            required: ["problem", "outcome"],
+            additionalProperties: false,
+        },
+    },
+    {
+        name: "get_cognitive_context",
+        description: "Get relevant coding patterns, synthesized skills, and past traces for the problem you're working on. Call this when starting a coding task to see if FatHippo has learned solutions from similar past problems.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                problem: {
+                    type: "string",
+                    description: "Description of the current problem or task.",
+                },
+                technologies: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Technologies/frameworks involved.",
+                },
+                sessionId: {
+                    type: "string",
+                    description: "Optional session id for application tracking.",
+                },
+                limit: {
+                    type: "number",
+                    description: "Max traces to return. Default 5.",
+                },
+                ...runtimeAwareProperties,
+            },
+            required: ["problem"],
+            additionalProperties: false,
+        },
+    },
+    {
+        name: "get_skill_detail",
+        description: "Load the full content of a FatHippo skill. Call when you see a relevant skill in context and want the full procedure, pitfalls, and verification.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                skillId: {
+                    type: "string",
+                    description: "ID of the skill.",
+                },
+                section: {
+                    type: "string",
+                    enum: ["full", "procedure", "pitfalls", "verification", "whenToUse"],
+                    description: "Load specific section. Default: full.",
+                },
+                ...runtimeAwareProperties,
+            },
+            required: ["skillId"],
+            additionalProperties: false,
+        },
+    },
+    {
+        name: "create_skill",
+        description: "Save a reusable skill from what you just learned. Call after solving complex problems (5+ steps), finding working paths through dead ends, or discovering non-trivial workflows. Skills are shared across all connected platforms.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                name: {
+                    type: "string",
+                    description: "Short name (e.g., 'Fix Turso connection pool exhaustion').",
+                },
+                description: {
+                    type: "string",
+                    description: "One-line description.",
+                },
+                whenToUse: {
+                    type: "string",
+                    description: "Trigger conditions.",
+                },
+                procedure: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Steps that worked.",
+                },
+                pitfalls: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "What didn't work.",
+                },
+                verification: {
+                    type: "string",
+                    description: "How to verify it worked.",
+                },
+                technologies: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Tech involved.",
+                },
+                category: {
+                    type: "string",
+                    description: "Category (debugging, deployment, database, etc.).",
+                },
+                ...runtimeAwareProperties,
+            },
+            required: ["name", "description", "procedure"],
+            additionalProperties: false,
+        },
+    },
+    {
+        name: "submit_feedback",
+        description: "Report whether a pattern or skill from FatHippo actually helped solve the problem. This feedback improves pattern confidence scores over time.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                patternId: {
+                    type: "string",
+                    description: "ID of the pattern to give feedback on.",
+                },
+                traceId: {
+                    type: "string",
+                    description: "ID of the trace this feedback relates to.",
+                },
+                outcome: {
+                    type: "string",
+                    enum: ["success", "failure"],
+                    description: "Did the pattern/skill help?",
+                },
+                notes: {
+                    type: "string",
+                    description: "Optional notes about what worked or didn't.",
+                },
+                ...runtimeAwareProperties,
+            },
+            required: ["patternId", "traceId", "outcome"],
+            additionalProperties: false,
+        },
+    },
 ];
 function mergeRuntime(args) {
     const merged = {
@@ -515,6 +770,220 @@ async function handleSearch(args) {
         results: result,
     });
 }
+async function handleRecordTrace(args) {
+    const runtime = mergeRuntime(args);
+    const response = await fetch(`${BASE_URL}/v1/cognitive/traces`, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${API_KEY}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            sessionId: args.sessionId ?? runtime?.conversationId ?? `mcp_${Date.now()}`,
+            type: args.type ?? "coding_turn",
+            problem: args.problem,
+            reasoning: args.reasoning ?? "",
+            solution: args.solution,
+            outcome: args.outcome,
+            context: {
+                technologies: args.technologies ?? [],
+                errorMessages: args.errorMessages ?? [],
+            },
+            filesModified: args.filesModified ?? [],
+            toolsUsed: args.toolsUsed ?? [],
+            durationMs: 0,
+            sanitized: true,
+            sanitizedAt: new Date().toISOString(),
+        }),
+    });
+    if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(`Failed to record trace: ${response.status} ${text}`);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await response.json();
+    return toJsonText(result);
+}
+async function handleGetCognitiveContext(args) {
+    const runtime = mergeRuntime(args);
+    const response = await fetch(`${BASE_URL}/v1/cognitive/traces/relevant`, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${API_KEY}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            problem: args.problem,
+            sessionId: args.sessionId ?? runtime?.conversationId ?? `mcp_${Date.now()}`,
+            endpoint: "mcp-server",
+            limit: args.limit ?? 5,
+            context: {
+                technologies: args.technologies ?? [],
+            },
+            adaptivePolicy: true,
+        }),
+    });
+    if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(`Failed to get cognitive context: ${response.status} ${text}`);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await response.json();
+    // Format into a readable summary for the agent
+    const parts = [];
+    if (result.traces?.length > 0) {
+        parts.push("## Past Similar Problems");
+        for (const trace of result.traces) {
+            const icon = trace.outcome === "success" ? "✓" : trace.outcome === "failed" ? "✗" : "~";
+            parts.push(`- ${icon} ${trace.problem}${trace.solution ? ` → ${trace.solution}` : ""}`);
+        }
+    }
+    if (result.patterns?.length > 0) {
+        parts.push("\n## Learned Patterns");
+        for (const pattern of result.patterns) {
+            parts.push(`- [${pattern.domain}] ${pattern.approach} (${Math.round(pattern.confidence * 100)}% confidence)`);
+        }
+    }
+    if (result.skills?.length > 0) {
+        parts.push("\n## Synthesized Skills");
+        for (const skill of result.skills) {
+            parts.push(`- ${skill.name}: ${skill.description} (${Math.round(skill.successRate * 100)}% success)`);
+        }
+    }
+    if (result.workflow?.steps?.length > 0) {
+        parts.push("\n## Recommended Workflow");
+        for (const step of result.workflow.steps) {
+            parts.push(`- ${step}`);
+        }
+    }
+    return toJsonText({
+        applicationId: result.applicationId,
+        summary: parts.length > 0
+            ? parts.join("\n")
+            : "No relevant patterns or traces found yet. Record traces after solving problems to build up the knowledge base.",
+        raw: {
+            traceCount: result.traces?.length ?? 0,
+            patternCount: result.patterns?.length ?? 0,
+            skillCount: result.skills?.length ?? 0,
+            hasWorkflow: !!result.workflow,
+        },
+    });
+}
+async function handleSubmitFeedback(args) {
+    const response = await fetch(`${BASE_URL}/v1/cognitive/patterns/feedback`, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${API_KEY}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            patternId: args.patternId,
+            traceId: args.traceId,
+            outcome: args.outcome,
+            notes: args.notes,
+        }),
+    });
+    if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(`Failed to submit feedback: ${response.status} ${text}`);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await response.json();
+    return toJsonText(result);
+}
+async function handleGetSkillDetail(args) {
+    const response = await fetch(`${BASE_URL}/v1/cognitive/skills/${encodeURIComponent(args.skillId)}`, {
+        method: "GET",
+        headers: {
+            Authorization: `Bearer ${API_KEY}`,
+            "Content-Type": "application/json",
+        },
+    });
+    if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(`Failed to get skill: ${response.status} ${text}`);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await response.json();
+    const skill = result.skill;
+    if (!skill) {
+        throw new Error("Skill not found");
+    }
+    const section = args.section ?? "full";
+    const content = skill.content ?? {};
+    if (section === "full") {
+        const parts = [
+            `# ${skill.name}`,
+            `**Description:** ${skill.description}`,
+            `**Success Rate:** ${Math.round((skill.successRate ?? 0) * 100)}%`,
+            `**Status:** ${skill.status}`,
+        ];
+        if (content.whenToUse)
+            parts.push(`\n## When To Use\n${content.whenToUse}`);
+        if (content.procedure?.length) {
+            parts.push(`\n## Procedure\n${content.procedure.map((s, i) => `${i + 1}. ${s}`).join("\n")}`);
+        }
+        if (content.commonPitfalls?.length) {
+            parts.push(`\n## Common Pitfalls\n${content.commonPitfalls.map((s) => `- ${s}`).join("\n")}`);
+        }
+        if (content.verification)
+            parts.push(`\n## Verification\n${content.verification}`);
+        return toJsonText({ skillId: skill.id, name: skill.name, content: parts.join("\n") });
+    }
+    // Return a specific section
+    const sectionMap = {
+        procedure: content.procedure,
+        pitfalls: content.commonPitfalls,
+        verification: content.verification,
+        whenToUse: content.whenToUse,
+    };
+    return toJsonText({ skillId: skill.id, name: skill.name, section, content: sectionMap[section] ?? null });
+}
+async function handleCreateSkill(args) {
+    // Rate limit
+    const session_key = args.sessionId ?? args.conversationId ?? "default";
+    const count = session_skill_counts.get(session_key) ?? 0;
+    if (count >= MAX_SKILLS_PER_SESSION) {
+        return toJsonText({ error: "Rate limit: max 3 skills per session. Existing skills can be improved via feedback instead." });
+    }
+    // Content scan
+    const scan_result = scanSkillContent(args);
+    if (scan_result) {
+        return toJsonText({ error: `Skill rejected: ${scan_result}` });
+    }
+    const response = await fetch(`${BASE_URL}/v1/cognitive/skills`, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${API_KEY}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            name: args.name,
+            description: args.description,
+            whenToUse: args.whenToUse,
+            procedure: args.procedure,
+            pitfalls: args.pitfalls,
+            verification: args.verification,
+            technologies: args.technologies,
+            category: args.category ?? "agent-created",
+            source: "agent-explicit",
+            status: "pending_review",
+        }),
+    });
+    if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(`Failed to create skill: ${response.status} ${text}`);
+    }
+    session_skill_counts.set(session_key, count + 1);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await response.json();
+    return toJsonText({
+        created: true,
+        skillId: result.skill?.id,
+        status: "pending_review",
+        message: `Skill "${args.name}" saved in review status. It will be suggested across platforms once validated by successful usage.`,
+    });
+}
 const PROMPTS = {
     "memory-workflow": {
         title: "FatHippo Memory Workflow",
@@ -603,6 +1072,21 @@ async function main() {
                     break;
                 case "search":
                     result = await handleSearch(toolArgs);
+                    break;
+                case "record_trace":
+                    result = await handleRecordTrace(toolArgs);
+                    break;
+                case "get_cognitive_context":
+                    result = await handleGetCognitiveContext(toolArgs);
+                    break;
+                case "submit_feedback":
+                    result = await handleSubmitFeedback(toolArgs);
+                    break;
+                case "get_skill_detail":
+                    result = await handleGetSkillDetail(toolArgs);
+                    break;
+                case "create_skill":
+                    result = await handleCreateSkill(toolArgs);
                     break;
                 default:
                     throw new Error(`Unknown tool: ${name}`);
