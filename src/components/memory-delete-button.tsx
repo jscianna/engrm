@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { deleteMemoryAction } from "@/app/dashboard/memory/actions";
 
 interface MemoryDeleteButtonProps {
   memoryId: string;
@@ -22,28 +23,16 @@ export function MemoryDeleteButton({ memoryId }: MemoryDeleteButtonProps) {
 
     setDeleting(true);
     try {
-      const response = await fetch(`/api/v1/memories/${memoryId}`, {
-        method: "DELETE",
-      });
-
-      const text = await response.text();
-      let payload: { error?: string } = {};
-
-      try {
-        payload = text ? JSON.parse(text) as { error?: string } : {};
-      } catch {
-        payload = {};
+      const result = await deleteMemoryAction(memoryId);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
+        toast.success("Memory deleted");
+        router.push("/dashboard");
+        router.refresh();
       }
-
-      if (!response.ok) {
-        throw new Error(payload.error || `Failed to delete (${response.status})`);
-      }
-
-      toast.success("Memory deleted");
-      router.push("/dashboard");
-      router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to delete");
+      toast.error(error instanceof Error ? error.message : "Failed to delete memory");
     } finally {
       setDeleting(false);
     }
