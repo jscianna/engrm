@@ -566,9 +566,25 @@ async function authenticateWithDeviceFlow() {
   }
 }
 
+async function validateApiKey(key) {
+  try {
+    const res = await fetch('https://fathippo.ai/api/v1/simple/context', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ message: 'ping' }),
+    });
+    return res.ok || res.status === 200;
+  } catch {
+    return false;
+  }
+}
+
 // ─── Status command ───────────────────────────────────────────────────────────
 
-function showStatus() {
+async function showStatus() {
   console.log(chalk.cyan('\n🦛 FatHippo Setup Status\n'));
 
   const config = readFathippoConfig();
@@ -577,7 +593,12 @@ function showStatus() {
       config.apiKey.length > 8
         ? config.apiKey.slice(0, 6) + '...' + config.apiKey.slice(-3)
         : config.apiKey;
-    console.log(chalk.green(`API Key: ✔ Configured (${masked})`));
+    const valid = await validateApiKey(config.apiKey);
+    if (valid) {
+      console.log(chalk.green(`API Key: ✔ Valid (${masked})`));
+    } else {
+      console.log(chalk.yellow(`API Key: ⚠ Invalid or expired (${masked}) — run 'npx fathippo setup' to re-authenticate`));
+    }
   } else {
     console.log(chalk.red('API Key: ✗ Not configured'));
   }
@@ -690,8 +711,14 @@ export async function setup(options) {
     // Try loading from existing config
     const existingConfig = readFathippoConfig();
     if (existingConfig.apiKey) {
-      apiKey = existingConfig.apiKey;
-      console.log(chalk.dim('Using API key from ~/.fathippo/config.json'));
+      // Validate the existing key before using it
+      const valid = await validateApiKey(existingConfig.apiKey);
+      if (valid) {
+        apiKey = existingConfig.apiKey;
+        console.log(chalk.green('✔ Existing API key is valid'));
+      } else {
+        console.log(chalk.yellow('Existing API key is invalid or expired. Re-authenticating...'));
+      }
     }
   }
 
