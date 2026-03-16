@@ -8,6 +8,7 @@ import { hasClerkAdminAccess } from "@/lib/admin-auth";
 import { isOpenClawAgentName } from "@/lib/cognitive-receipts";
 import { getUserEntitlementPlan, listApiKeys } from "@/lib/db";
 import { getOpenClawPluginStatus, pickPreferredOpenClawKey } from "@/lib/openclaw-plugin";
+import { RescoreButton } from "@/components/rescore-button";
 
 const ALL_PLATFORMS = [
   { name: "OpenClaw", icon: "🦞", source: "plugin" as const },
@@ -132,6 +133,19 @@ export default async function SettingsPage() {
             <span className="text-zinc-500">Admin access:</span>{" "}
             {isAdmin ? "Enabled" : "Not enabled"}
           </p>
+        </CardContent>
+      </Card>
+
+      {/* Memory Admin */}
+      <Card className="border-zinc-800 bg-zinc-900/60">
+        <CardHeader>
+          <CardTitle className="text-zinc-100">Memory Admin</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-zinc-400">
+            Re-score all memory importance values based on current classification rules.
+          </p>
+          <RescoreButton />
         </CardContent>
       </Card>
 
