@@ -4332,6 +4332,51 @@ export async function getSkillById(userId: string, skillId: string): Promise<Syn
   return row ? rowToSkill(row) : null;
 }
 
+export async function updateSkillFields(params: {
+  userId: string;
+  skillId: string;
+  description?: string;
+  contentJson?: string;
+  markdown?: string;
+}): Promise<SynthesizedSkill | null> {
+  await ensureInitialized();
+  const client = getDb();
+
+  // Verify ownership (only local skills are editable)
+  const existing = await client.execute({
+    sql: `SELECT id FROM synthesized_skills WHERE id = ? AND user_id = ? AND scope = 'local'`,
+    args: [params.skillId, params.userId],
+  });
+  if (!existing.rows[0]) return null;
+
+  const sets: string[] = [];
+  const args: (string | number | null)[] = [];
+
+  if (params.description !== undefined) {
+    sets.push("description = ?");
+    args.push(params.description);
+  }
+  if (params.contentJson !== undefined) {
+    sets.push("content_json = ?");
+    args.push(params.contentJson);
+  }
+  if (params.markdown !== undefined) {
+    sets.push("markdown = ?");
+    args.push(params.markdown);
+  }
+
+  sets.push("updated_at = ?");
+  args.push(new Date().toISOString());
+  args.push(params.skillId, params.userId);
+
+  await client.execute({
+    sql: `UPDATE synthesized_skills SET ${sets.join(", ")} WHERE id = ? AND user_id = ?`,
+    args,
+  });
+
+  return getSkillById(params.userId, params.skillId);
+}
+
 export async function promoteEligiblePatternsToOrg(userId: string): Promise<{
   orgId: string | null;
   promotedPatterns: number;

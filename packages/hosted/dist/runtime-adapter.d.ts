@@ -60,6 +60,14 @@ export interface FatHippoBuildContextOutput {
     sensitiveOmitted?: number;
     evaluationId?: string;
     retrievalConfidence?: number;
+    /** IDs of cognitive patterns injected into this context */
+    injectedPatternIds?: string[];
+    /** IDs of synthesized skills injected into this context */
+    injectedSkillIds?: string[];
+    /** IDs of traces injected into this context */
+    injectedTraceIds?: string[];
+    /** Application ID for this cognitive context retrieval */
+    cognitiveApplicationId?: string;
 }
 export interface FatHippoRecordTurnInput {
     sessionId: string;

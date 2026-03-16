@@ -1,6 +1,6 @@
 import { validateApiKey } from "@/lib/api-auth";
 import { FatHippoError, errorResponse } from "@/lib/errors";
-import { getSkillById } from "@/lib/cognitive-db";
+import { getSkillById, updateSkillFields } from "@/lib/cognitive-db";
 
 export const runtime = "nodejs";
 
@@ -45,6 +45,41 @@ export async function GET(
         updatedAt: skill.updatedAt,
       },
     });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export async function PATCH(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  try {
+    const identity = await validateApiKey(request, "cognitive.skills.update");
+    const { id } = await context.params;
+    const body = await request.json();
+
+    const description = typeof body.description === "string" ? body.description.trim() : undefined;
+    const content_json = body.content != null ? JSON.stringify(body.content) : undefined;
+    const markdown = typeof body.markdown === "string" ? body.markdown.trim() : undefined;
+
+    if (!description && !content_json && !markdown) {
+      return Response.json({ error: "No editable fields provided" }, { status: 400 });
+    }
+
+    const updated = await updateSkillFields({
+      userId: identity.userId,
+      skillId: id,
+      description,
+      contentJson: content_json,
+      markdown,
+    });
+
+    if (!updated) {
+      throw new FatHippoError("MEMORY_NOT_FOUND", { resource: "skill", id });
+    }
+
+    return Response.json({ updated: true, skill: updated });
   } catch (error) {
     return errorResponse(error);
   }

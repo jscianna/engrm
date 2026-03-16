@@ -311,5 +311,13 @@ export declare class FatHippoClient {
         intervalMs?: number;
         leaseMs?: number;
     }): Promise<CognitiveSkillSynthesisResponse>;
+    submitPatternFeedback(params: {
+        patternId: string;
+        traceId: string;
+        outcome: 'success' | 'failure';
+        notes?: string;
+    }): Promise<{
+        updated: boolean;
+    }>;
 }
 //# sourceMappingURL=client.d.ts.map

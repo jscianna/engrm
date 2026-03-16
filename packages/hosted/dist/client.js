@@ -197,5 +197,16 @@ export class FatHippoClient {
             body: JSON.stringify(params ?? {}),
         });
     }
+    async submitPatternFeedback(params) {
+        return this.request("/v1/cognitive/patterns/feedback", {
+            method: "POST",
+            body: JSON.stringify({
+                patternId: params.patternId,
+                traceId: params.traceId,
+                outcome: params.outcome,
+                notes: params.notes,
+            }),
+        });
+    }
 }
 //# sourceMappingURL=client.js.map

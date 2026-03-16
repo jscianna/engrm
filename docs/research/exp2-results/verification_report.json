@@ -1,0 +1,138 @@
+{
+  "summary": {
+    "total": 14,
+    "verified": 13,
+    "suspicious": 1,
+    "hallucinated": 0,
+    "skipped": 0,
+    "integrity_score": 0.929
+  },
+  "results": [
+    {
+      "cite_key": "sabouri2025effectiveness",
+      "title": "Effectiveness of LLMs in Temporal User Profiling for Recommendation",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "arxiv_id",
+      "details": "Confirmed via arXiv: 'Effectiveness of LLMs in Temporal User Profiling for Recommendation'",
+      "relevance_score": 0.8
+    },
+    {
+      "cite_key": "zheng2025supporting",
+      "title": "Supporting Data-Frame Dynamics in AI-assisted Decision Making",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "arxiv_id",
+      "details": "Confirmed via arXiv: 'Supporting Data-Frame Dynamics in AI-assisted Decision Making'",
+      "relevance_score": 0.5
+    },
+    {
+      "cite_key": "dissanayake2025navigating",
+      "title": "Navigating the State of Cognitive Flow: Context-Aware AI Interventions for Effective Reasoning Support",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "arxiv_id",
+      "details": "Confirmed via arXiv: 'Navigating the State of Cognitive Flow: Context-Aware AI Interventions for Effective Reasoning Support'",
+      "relevance_score": 0.4
+    },
+    {
+      "cite_key": "ma2024improving",
+      "title": "Improving Sequential Recommender Systems with Online and In-store User Behavior",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "openalex",
+      "details": "Confirmed via OpenAlex: 'Improving Sequential Recommender Systems with Online and In-store User Behavior'",
+      "relevance_score": 0.7
+    },
+    {
+      "cite_key": "purificato2024user",
+      "title": "User Modeling and User Profiling: A Comprehensive Survey",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "openalex",
+      "details": "Confirmed via OpenAlex: 'User Modeling and User Profiling: A Comprehensive Survey'",
+      "relevance_score": 0.6
+    },
+    {
+      "cite_key": "chen2024survey",
+      "title": "A Survey on Cross-Domain Sequential Recommendation",
+      "status": "suspicious",
+      "confidence": 0.125,
+      "method": "doi",
+      "details": "DOI resolves but title mismatch (sim=0.12): 'Sanitizing Backdoored Graph Neural Networks: A Multidimensional Approach'",
+      "relevance_score": 0.5
+    },
+    {
+      "cite_key": "sarkar2023will",
+      "title": "Will Code Remain a Relevant User Interface for End-User Programming with Generative AI Models?",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "doi",
+      "details": "Confirmed via CrossRef: 'Will Code Remain a Relevant User Interface for End-User Programming with Generative AI Models?'",
+      "relevance_score": 0.9
+    },
+    {
+      "cite_key": "zhao2023efficient",
+      "title": "Efficient Methods for Non-stationary Online Learning",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "openalex",
+      "details": "Confirmed via OpenAlex: 'Efficient Methods for Non-stationary Online Learning'",
+      "relevance_score": 0.7
+    },
+    {
+      "cite_key": "wang2022effectively",
+      "title": "Effectively Using Long and Short Sessions for Multi-Session-based Recommendations",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "openalex",
+      "details": "Confirmed via OpenAlex: 'Effectively Using Long and Short Sessions for Multi-Session-based Recommendations'",
+      "relevance_score": 0.8
+    },
+    {
+      "cite_key": "oh2022implicit",
+      "title": "Implicit Session Contexts for Next-Item Recommendations",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "doi",
+      "details": "Confirmed via CrossRef: 'Implicit Session Contexts for Next-Item Recommendations'",
+      "relevance_score": 0.7
+    },
+    {
+      "cite_key": "patel2021solution",
+      "title": "Solution of Physics-based Bayesian Inverse Problems with Deep Generative Priors",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "doi",
+      "details": "Confirmed via CrossRef: 'Solution of physics-based Bayesian inverse problems with deep generative priors'",
+      "relevance_score": 0.6
+    },
+    {
+      "cite_key": "qiu2021exploiting",
+      "title": "Exploiting Cross-Session Information for Session-based Recommendation with Graph Neural Networks",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "doi",
+      "details": "Confirmed via CrossRef: 'Exploiting Cross-session Information for Session-based Recommendation with Graph Neural Networks'",
+      "relevance_score": 0.8
+    },
+    {
+      "cite_key": "wang2019deep",
+      "title": "Deep Bayesian Multi-Target Learning for Recommender Systems",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "openalex",
+      "details": "Confirmed via OpenAlex: 'Deep Bayesian Multi-Target Learning for Recommender Systems'",
+      "relevance_score": 0.9
+    },
+    {
+      "cite_key": "kitazawa2016incremental",
+      "title": "Incremental Factorization Machines for Persistently Cold-starting Online Item Recommendation",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "openalex",
+      "details": "Confirmed via OpenAlex: 'Incremental Factorization Machines for Persistently Cold-starting Online Item Recommendation'",
+      "relevance_score": 0.9
+    }
+  ]
+}

@@ -1,0 +1,290 @@
+{
+  "summary": {
+    "total": 31,
+    "verified": 27,
+    "suspicious": 2,
+    "hallucinated": 2,
+    "skipped": 0,
+    "integrity_score": 0.871
+  },
+  "results": [
+    {
+      "cite_key": "nanayakkara2022visualizing",
+      "title": "Visualizing Privacy-Utility Trade-Offs in Differentially Private Data Releases",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "arxiv_id",
+      "details": "Confirmed via arXiv: 'Visualizing Privacy-Utility Trade-Offs in Differentially Private Data Releases'",
+      "relevance_score": 0.8
+    },
+    {
+      "cite_key": "srivastava2022privacy",
+      "title": "Privacy and Utility of X-Vector Based Speaker Anonymization",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "doi",
+      "details": "Confirmed via CrossRef: 'Privacy and Utility of X-Vector Based Speaker Anonymization'",
+      "relevance_score": 0.4
+    },
+    {
+      "cite_key": "miao2024benchmark",
+      "title": "A Benchmark for Multi-Speaker Anonymization",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "arxiv_id",
+      "details": "Confirmed via arXiv: 'A Benchmark for Multi-speaker Anonymization'",
+      "relevance_score": 0.2
+    },
+    {
+      "cite_key": "deutch2021optimizing",
+      "title": "On Optimizing the Trade-off between Privacy and Utility in Data Provenance",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "arxiv_id",
+      "details": "Confirmed via arXiv: 'On Optimizing the Trade-off between Privacy and Utility in Data Provenance'",
+      "relevance_score": 0.6
+    },
+    {
+      "cite_key": "chen2021communication",
+      "title": "Communication Ef\ufb01cient Federated Learning with Secure Aggregation and Differential Privacy",
+      "status": "hallucinated",
+      "confidence": 0.7,
+      "method": "openalex",
+      "details": "No results found via OpenAlex",
+      "relevance_score": 0.5
+    },
+    {
+      "cite_key": "packhauser2022deep",
+      "title": "Deep Learning-based Anonymization of Chest Radiographs: A Utility-preserving Measure for Patient Privacy",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "arxiv_id",
+      "details": "Confirmed via arXiv: 'Deep Learning-based Anonymization of Chest Radiographs: A Utility-preserving Measure for Patient Privacy'",
+      "relevance_score": 0.3
+    },
+    {
+      "cite_key": "zheng2025benchmarking",
+      "title": "Benchmarking Relaxed Differential Privacy in Private Learning: A Comparative Survey",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "doi",
+      "details": "Confirmed via CrossRef: 'Benchmarking Relaxed Differential Privacy in Private Learning: A Comparative Survey'",
+      "relevance_score": 0.6
+    },
+    {
+      "cite_key": "chung2025synthetic",
+      "title": "SoK: Can Synthetic Images Replace Real Data? A Survey of Utility and Privacy of Synthetic Image Generation",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "arxiv_id",
+      "details": "Confirmed via arXiv: 'SoK: Can Synthetic Images Replace Real Data? A Survey of Utility and Privacy of Synthetic Image Generation'",
+      "relevance_score": 0.3
+    },
+    {
+      "cite_key": "zhou2025smotedp",
+      "title": "SMOTE-DP: Improving Privacy-Utility Tradeoff with Synthetic Data",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "arxiv_id",
+      "details": "Confirmed via arXiv: 'SMOTE-DP: Improving Privacy-Utility Tradeoff with Synthetic Data'",
+      "relevance_score": 0.6
+    },
+    {
+      "cite_key": "jiang2025balancing",
+      "title": "Balancing Utility and Privacy: Dynamically Private SGD with Random Projection",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "arxiv_id",
+      "details": "Confirmed via arXiv: 'Balancing Utility and Privacy: Dynamically Private SGD with Random Projection'",
+      "relevance_score": 0.5
+    },
+    {
+      "cite_key": "wang2026privacyutility",
+      "title": "Privacy-Utility Trade-Off in Federated LLM Fine-Tuning: A Dynamic Game Approach",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "doi",
+      "details": "Confirmed via CrossRef: 'Privacy-Utility Trade-Off in Federated LLM Fine-Tuning: A Dynamic Game Approach'",
+      "relevance_score": 0.7
+    },
+    {
+      "cite_key": "domingoferrer2025actual",
+      "title": "How to Get Actual Privacy and Utility from Privacy Models: the k-Anonymity and Differential Privacy Families",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "arxiv_id",
+      "details": "Confirmed via arXiv: 'How to Get Actual Privacy and Utility from Privacy Models: the k-Anonymity and Differential Privacy Families'",
+      "relevance_score": 0.8
+    },
+    {
+      "cite_key": "khan2025clusterguided",
+      "title": "Cluster-guided LLM-Based Anonymization of Software Analytics Data: Studying Privacy-Utility Trade-offs in JIT Defect Prediction",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "doi",
+      "details": "Confirmed via DataCite: 'Cluster-guided LLM-Based Anonymization of Software Analytics Data: Studying Privacy-Utility Trade-offs in JIT Defect Prediction'",
+      "relevance_score": 1.0
+    },
+    {
+      "cite_key": "thees2025beyond",
+      "title": "Beyond the Trade-off Curve: Multivariate and Advanced Risk-Utility Maps for Evaluating Anonymized and Synthetic Data",
+      "status": "hallucinated",
+      "confidence": 0.7,
+      "method": "openalex",
+      "details": "No results found via OpenAlex",
+      "relevance_score": 0.9
+    },
+    {
+      "cite_key": "yang2024robust",
+      "title": "Robust Utility-Preserving Text Anonymization Based on Large Language Models",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "openalex",
+      "details": "Confirmed via OpenAlex: 'Robust Utility-Preserving Text Anonymization Based on Large Language Models'",
+      "relevance_score": 0.8
+    },
+    {
+      "cite_key": "cui2024aienhanced",
+      "title": "AI-enhanced Collective Intelligence",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "doi",
+      "details": "Confirmed via CrossRef: 'AI-enhanced collective intelligence'",
+      "relevance_score": 0.1
+    },
+    {
+      "cite_key": "boedihardjo2024metric",
+      "title": "Metric geometry of the privacy-utility tradeoff",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "openalex",
+      "details": "Confirmed via OpenAlex: 'Metric geometry of the privacy-utility tradeoff'",
+      "relevance_score": 0.5
+    },
+    {
+      "cite_key": "yermilov2023privacy",
+      "title": "Privacy- and Utility-Preserving NLP with Anonymized Data: A case study of Pseudonymization",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "openalex",
+      "details": "Confirmed via OpenAlex: 'Privacy- and Utility-Preserving NLP with Anonymized data: A case study of Pseudonymization'",
+      "relevance_score": 0.8
+    },
+    {
+      "cite_key": "elkoumy2022libra",
+      "title": "Libra: High-Utility Anonymization of Event Logs for Process Mining via Subsampling",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "openalex",
+      "details": "Confirmed via OpenAlex: 'Libra: High-Utility Anonymization of Event Logs for Process Mining via Subsampling'",
+      "relevance_score": 0.9
+    },
+    {
+      "cite_key": "sharma2020practical",
+      "title": "A Practical Approach to Navigating the Tradeoff Between Privacy and Precise Utility",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "openalex",
+      "details": "Confirmed via OpenAlex: 'A Practical Approach to Navigating the Tradeoff Between Privacy and Precise Utility'",
+      "relevance_score": 0.8
+    },
+    {
+      "cite_key": "zhao2020many",
+      "title": "Not one but many Tradeoffs: Privacy Vs. Utility in Differentially Private Machine Learning",
+      "status": "suspicious",
+      "confidence": 0.385,
+      "method": "doi",
+      "details": "DOI resolves but title mismatch (sim=0.38): 'Not one but many Tradeoffs'",
+      "relevance_score": 0.7
+    },
+    {
+      "cite_key": "desfontaines2019differential",
+      "title": "SoK: Differential Privacies",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "openalex",
+      "details": "Confirmed via OpenAlex: 'SoK: Differential privacies'",
+      "relevance_score": 0.6
+    },
+    {
+      "cite_key": "avent2019automatic",
+      "title": "Automatic Discovery of Privacy-Utility Pareto Fronts",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "openalex",
+      "details": "Confirmed via OpenAlex: 'Automatic Discovery of Privacy\u2013Utility Pareto Fronts'",
+      "relevance_score": 0.9
+    },
+    {
+      "cite_key": "li2019internet",
+      "title": "Internet of Intelligence: The Collective Advantage for Advancing Communications and Intelligence",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "openalex",
+      "details": "Confirmed via OpenAlex: 'Internet of Intelligence: The Collective Advantage for Advancing Communications and Intelligence'",
+      "relevance_score": 0.1
+    },
+    {
+      "cite_key": "mohammady2018preserving",
+      "title": "Preserving Both Privacy and Utility in Network Trace Anonymization",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "doi",
+      "details": "Confirmed via CrossRef: 'Preserving Both Privacy and Utility in Network Trace Anonymization'",
+      "relevance_score": 0.9
+    },
+    {
+      "cite_key": "nasr2018comprehensive",
+      "title": "Comprehensive Privacy Analysis of Deep Learning: Passive and Active White-box Inference Attacks against Centralized and Federated Learning",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "doi",
+      "details": "Confirmed via CrossRef: 'Comprehensive Privacy Analysis of Deep Learning: Passive and Active White-box Inference Attacks against Centralized and Federated Learning'",
+      "relevance_score": 0.8
+    },
+    {
+      "cite_key": "sakuma2017recommendation",
+      "title": "Recommendation with k-anonymized Ratings",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "openalex",
+      "details": "Confirmed via OpenAlex: 'Recommendation with k-anonymized Ratings'",
+      "relevance_score": 0.5
+    },
+    {
+      "cite_key": "wagner2015technical",
+      "title": "Technical Privacy Metrics: a Systematic Survey",
+      "status": "suspicious",
+      "confidence": 0.5,
+      "method": "doi",
+      "details": "DOI resolves but title differs (sim=0.50): 'Technical Privacy Metrics'",
+      "relevance_score": 0.8
+    },
+    {
+      "cite_key": "burkhart2009riskutility",
+      "title": "The Risk-Utility Tradeoff for IP Address Truncation",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "openalex",
+      "details": "Confirmed via OpenAlex: 'The risk-utility tradeoff for IP address truncation'",
+      "relevance_score": 0.8
+    },
+    {
+      "cite_key": "yurcik2007trusted",
+      "title": "Toward Trusted Sharing of Network Packet Traces Using Anonymization: Single-Field Privacy/Analysis Tradeoffs",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "openalex",
+      "details": "Confirmed via OpenAlex: 'Toward Trusted Sharing of Network Packet Traces Using Anonymization: Single-Field Privacy/Analysis Tradeoffs'",
+      "relevance_score": 0.9
+    },
+    {
+      "cite_key": "rastogi2006boundary",
+      "title": "The Boundary Between Privacy and Utility in Data Anonymization",
+      "status": "verified",
+      "confidence": 1.0,
+      "method": "openalex",
+      "details": "Confirmed via OpenAlex: 'The Boundary Between Privacy and Utility in Data Anonymization'"
+    }
+  ]
+}

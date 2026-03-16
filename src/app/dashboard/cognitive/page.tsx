@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { Brain, CheckCircle2, Clock3, Download, GitBranchPlus, ShieldAlert, Sparkles, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -417,7 +418,7 @@ export default async function CognitiveDashboardPage({
               <div key={skill.id} className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-medium text-zinc-100">{skill.name}</p>
+                    <Link href={`/dashboard/cognitive/skills/${skill.id}`} className="text-sm font-medium text-zinc-100 hover:text-cyan-300 transition-colors">{skill.name}</Link>
                     <p className="mt-1 text-xs text-zinc-400">{skill.description}</p>
                   </div>
                   <div className="flex gap-2">

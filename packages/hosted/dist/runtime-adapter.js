@@ -234,6 +234,9 @@ export class FatHippoHostedRuntimeClient {
             constraintsPromise,
             cognitivePromise,
         ]);
+        const injected_pattern_ids = (cognitive?.patterns ?? []).map(p => p.id);
+        const injected_skill_ids = (cognitive?.skills ?? []).map(s => s.id);
+        const injected_trace_ids = (cognitive?.traces ?? []).map(t => t.id);
         return {
             systemPromptAddition: joinContextSections([
                 response.text,
@@ -245,6 +248,10 @@ export class FatHippoHostedRuntimeClient {
             sensitiveOmitted: parseNumberHeader(response.headers, "X-FatHippo-Sensitive-Omitted"),
             evaluationId: response.headers.get("X-FatHippo-Eval-Id") ?? undefined,
             retrievalConfidence: parseNumberHeader(response.headers, "X-FatHippo-Retrieval-Confidence"),
+            injectedPatternIds: injected_pattern_ids.length > 0 ? injected_pattern_ids : undefined,
+            injectedSkillIds: injected_skill_ids.length > 0 ? injected_skill_ids : undefined,
+            injectedTraceIds: injected_trace_ids.length > 0 ? injected_trace_ids : undefined,
+            cognitiveApplicationId: cognitive?.applicationId ?? undefined,
         };
     }
     async recordTurn(input) {
