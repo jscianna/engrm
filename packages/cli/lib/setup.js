@@ -283,6 +283,75 @@ function isPlatformConfigured(platform) {
   }
 }
 
+// ─── OpenClaw integration ─────────────────────────────────────────────────────
+
+function detectOpenClaw() {
+  return existsSync(path.join(homedir, '.openclaw')) || commandExists('openclaw');
+}
+
+function isOpenClawConfigured() {
+  try {
+    const result = execSync('openclaw config get plugins.slots.contextEngine', {
+      stdio: 'pipe',
+      timeout: 10000,
+    }).toString().trim();
+    return result.includes('fathippo');
+  } catch {
+    return false;
+  }
+}
+
+function configureOpenClaw(apiKey) {
+  // Install the context engine plugin
+  execSync('openclaw plugins install @fathippo/fathippo-context-engine', {
+    stdio: 'pipe',
+    timeout: 60000,
+  });
+
+  // Set it as the active context engine
+  execSync('openclaw config set plugins.slots.contextEngine fathippo-context-engine', {
+    stdio: 'pipe',
+    timeout: 10000,
+  });
+
+  // Configure hosted mode with API key
+  execSync('openclaw config set plugins.entries.fathippo-context-engine.config.mode hosted', {
+    stdio: 'pipe',
+    timeout: 10000,
+  });
+  execSync(`openclaw config set plugins.entries.fathippo-context-engine.config.apiKey ${apiKey}`, {
+    stdio: 'pipe',
+    timeout: 10000,
+  });
+  execSync('openclaw config set plugins.entries.fathippo-context-engine.config.baseUrl https://fathippo.ai/api', {
+    stdio: 'pipe',
+    timeout: 10000,
+  });
+  execSync('openclaw config set plugins.entries.fathippo-context-engine.config.injectCritical true', {
+    stdio: 'pipe',
+    timeout: 10000,
+  });
+
+  // Restart the gateway
+  try {
+    execSync('openclaw gateway restart', { stdio: 'pipe', timeout: 15000 });
+  } catch {
+    // Gateway restart may fail if not running — that's fine
+  }
+}
+
+function removeOpenClaw() {
+  try {
+    execSync('openclaw config set plugins.slots.contextEngine ""', {
+      stdio: 'pipe',
+      timeout: 10000,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ─── Config storage ───────────────────────────────────────────────────────────
 
 const FATHIPPO_CONFIG_DIR = path.join(homedir, '.fathippo');
@@ -350,10 +419,22 @@ function showStatus() {
     }
     const configured = isPlatformConfigured(platform);
     if (configured) {
-      console.log(chalk.green(`  ✔ ${platform.name} — configured`));
+      console.log(chalk.green(`  ✔ ${platform.name} — configured (MCP)`));
     } else {
       console.log(chalk.yellow(`  ○ ${platform.name} — detected, not configured`));
     }
+  }
+
+  // OpenClaw status
+  if (detectOpenClaw()) {
+    const ocConfigured = isOpenClawConfigured();
+    if (ocConfigured) {
+      console.log(chalk.green(`  ✔ OpenClaw — configured (context engine plugin)`));
+    } else {
+      console.log(chalk.yellow(`  ○ OpenClaw — detected, not configured`));
+    }
+  } else {
+    console.log(chalk.dim(`  ✗ OpenClaw — not detected`));
   }
   console.log();
 }
@@ -394,6 +475,16 @@ function removeFromAll(platformFilter) {
       }
     } catch (err) {
       console.log(chalk.red(`  ✗ ${platform.name} — error: ${err.message}`));
+    }
+  }
+
+  // Remove OpenClaw if no filter or filtering for openclaw
+  if (!platformFilter || platformFilter.toLowerCase() === 'openclaw') {
+    if (removeOpenClaw()) {
+      console.log(chalk.green('  ✔ OpenClaw — removed'));
+      removed++;
+    } else {
+      console.log(chalk.dim('  ✗ OpenClaw — not configured, skipped'));
     }
   }
 
@@ -503,6 +594,22 @@ export async function setup(options) {
       console.log(chalk.red(`  ✗ ${platform.name} → ${configPathDisplay} (error: ${err.message})`));
       results.push({ platform, detected: true, configured: false, error: err.message });
     }
+  }
+
+  // OpenClaw integration (uses context engine plugin, not MCP)
+  const shouldConfigureOpenClaw = !options.platform || options.platform.toLowerCase() === 'openclaw';
+  if (shouldConfigureOpenClaw && detectOpenClaw()) {
+    const ocSpinner = ora('Installing OpenClaw context engine plugin...').start();
+    try {
+      configureOpenClaw(apiKey);
+      ocSpinner.succeed('OpenClaw → context engine plugin (installed + configured)');
+      configured.push('OpenClaw');
+    } catch (err) {
+      ocSpinner.fail(`OpenClaw — error: ${err.message}`);
+    }
+  } else if (!options.platform && !detectOpenClaw()) {
+    // Only show "not detected" if we're not filtering
+    // (already shown in the MCP platforms loop above)
   }
 
   // Save config with platform list
