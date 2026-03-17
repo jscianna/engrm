@@ -262,6 +262,7 @@ async function ensureInitialized(): Promise<void> {
       last_plugin_version TEXT,
       last_plugin_mode TEXT,
       last_plugin_seen_at TEXT,
+      last_seen_runtimes TEXT,
       revoked_at TEXT,
       expires_at TEXT
     );
@@ -517,6 +518,7 @@ async function ensureApiKeysColumns(client: Client): Promise<void> {
     { name: "last_plugin_version", ddl: "TEXT" },
     { name: "last_plugin_mode", ddl: "TEXT" },
     { name: "last_plugin_seen_at", ddl: "TEXT" },
+    { name: "last_seen_runtimes", ddl: "TEXT" },
   ];
 
   const tableInfo = await client.execute("PRAGMA table_info(api_keys)");
@@ -2051,6 +2053,7 @@ export async function listApiKeys(userId: string): Promise<Array<{
   lastPluginVersion: string | null;
   lastPluginMode: string | null;
   lastPluginSeenAt: string | null;
+  lastSeenRuntimes: Record<string, string>;
   revokedAt: string | null;
   expiresAt: string | null;
   isActive: boolean;
@@ -2061,7 +2064,7 @@ export async function listApiKeys(userId: string): Promise<Array<{
 
   const result = await client.execute({
     sql: `
-      SELECT id, agent_id, agent_name, key_suffix, scopes_json, created_at, last_used, last_plugin_id, last_plugin_version, last_plugin_mode, last_plugin_seen_at, revoked_at, expires_at
+      SELECT id, agent_id, agent_name, key_suffix, scopes_json, created_at, last_used, last_plugin_id, last_plugin_version, last_plugin_mode, last_plugin_seen_at, last_seen_runtimes, revoked_at, expires_at
       FROM api_keys
       WHERE user_id = ?
       ORDER BY created_at DESC
@@ -2089,6 +2092,13 @@ export async function listApiKeys(userId: string): Promise<Array<{
       lastPluginVersion: (row.last_plugin_version as string | null) ?? null,
       lastPluginMode: (row.last_plugin_mode as string | null) ?? null,
       lastPluginSeenAt: (row.last_plugin_seen_at as string | null) ?? null,
+      lastSeenRuntimes: (() => {
+        const raw = row.last_seen_runtimes;
+        if (typeof raw === "string" && raw.trim().length > 0) {
+          try { return JSON.parse(raw) as Record<string, string>; } catch { return {}; }
+        }
+        return {};
+      })(),
       revokedAt,
       expiresAt,
       isActive,
@@ -2127,6 +2137,38 @@ export async function recordApiKeyPluginMetadata(params: {
       WHERE id = ?
     `,
     args: [pluginId, pluginVersion, pluginMode, seenAt, params.keyId],
+  });
+}
+
+/**
+ * Record which runtime platform (codex, claude, cursor, etc.) was seen calling this API key.
+ * Stores a JSON map of { runtime_name: last_seen_iso } in last_seen_runtimes column.
+ */
+export async function recordApiKeyRuntime(keyId: string, runtime: string): Promise<void> {
+  const trimmed = runtime.trim().toLowerCase().slice(0, 32);
+  if (!trimmed || trimmed === "custom") return;
+
+  await ensureInitialized();
+  const client = getDb();
+  const now = new Date().toISOString();
+
+  // Read current runtimes
+  const row = await client.execute({
+    sql: `SELECT last_seen_runtimes FROM api_keys WHERE id = ?`,
+    args: [keyId],
+  });
+
+  let runtimes: Record<string, string> = {};
+  const raw = row.rows[0]?.last_seen_runtimes;
+  if (typeof raw === "string" && raw.trim().length > 0) {
+    try { runtimes = JSON.parse(raw); } catch { runtimes = {}; }
+  }
+
+  runtimes[trimmed] = now;
+
+  await client.execute({
+    sql: `UPDATE api_keys SET last_seen_runtimes = ? WHERE id = ?`,
+    args: [JSON.stringify(runtimes), keyId],
   });
 }
 

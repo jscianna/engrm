@@ -38,10 +38,37 @@ function formatRelativeDate(date: string | null): string | null {
   return d.toLocaleDateString();
 }
 
+// Map runtime header values to platform display names
+const RUNTIME_TO_PLATFORM: Record<string, string> = {
+  codex: "Codex",
+  claude: "Claude Code",
+  cursor: "Cursor",
+  windsurf: "Windsurf",
+  zed: "Zed",
+  vscode: "VS Code",
+  opencode: "OpenCode",
+  antigravity: "Antigravity",
+  trae: "Trae",
+  qoder: "Qoder",
+  hermes: "Hermes Agent",
+};
+
 function buildPlatformData(
-  apiKeys: Array<{ agentName: string | null; lastUsed: string | null; isActive: boolean }>,
+  apiKeys: Array<{ agentName: string | null; lastUsed: string | null; isActive: boolean; lastSeenRuntimes: Record<string, string> }>,
   pluginStatus: { hasConnectedPlugin: boolean; lastSeenAt: string | null },
 ) {
+  // Collect all seen runtimes across all active API keys
+  const all_seen_runtimes: Record<string, string> = {};
+  for (const key of apiKeys) {
+    if (!key.isActive) continue;
+    for (const [runtime, seen_at] of Object.entries(key.lastSeenRuntimes)) {
+      const existing = all_seen_runtimes[runtime];
+      if (!existing || seen_at > existing) {
+        all_seen_runtimes[runtime] = seen_at;
+      }
+    }
+  }
+
   return ALL_PLATFORMS.map(p => {
     if (p.name === "OpenClaw") {
       return {
@@ -51,8 +78,16 @@ function buildPlatformData(
       };
     }
 
-    // Check if any API key's agentName hints at this platform
-    const matchingKey = apiKeys.find(k => {
+    // Check runtime tracking first (most reliable)
+    for (const [runtime_key, seen_at] of Object.entries(all_seen_runtimes)) {
+      const platform_name = RUNTIME_TO_PLATFORM[runtime_key];
+      if (platform_name === p.name) {
+        return { ...p, connected: true, lastActive: formatRelativeDate(seen_at) };
+      }
+    }
+
+    // Fallback: check agentName matching
+    const matching_key = apiKeys.find(k => {
       const name = (k.agentName ?? "").toLowerCase();
       return (
         name.includes(p.name.toLowerCase()) ||
@@ -60,8 +95,8 @@ function buildPlatformData(
       );
     });
 
-    if (matchingKey?.isActive && matchingKey.lastUsed) {
-      return { ...p, connected: true, lastActive: formatRelativeDate(matchingKey.lastUsed) };
+    if (matching_key?.isActive && matching_key.lastUsed) {
+      return { ...p, connected: true, lastActive: formatRelativeDate(matching_key.lastUsed) };
     }
 
     return { ...p, connected: false, lastActive: null };
@@ -84,7 +119,7 @@ export default async function SettingsPage() {
   const pluginStatus = await getOpenClawPluginStatus(openClawKey ?? null);
 
   const platformData = buildPlatformData(
-    apiKeys.map(k => ({ agentName: k.agentName, lastUsed: k.lastUsed, isActive: k.isActive })),
+    apiKeys.map(k => ({ agentName: k.agentName, lastUsed: k.lastUsed, isActive: k.isActive, lastSeenRuntimes: k.lastSeenRuntimes ?? {} })),
     { hasConnectedPlugin: pluginStatus.hasConnectedPlugin, lastSeenAt: pluginStatus.lastSeenAt },
   );
 

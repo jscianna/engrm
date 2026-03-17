@@ -6,6 +6,7 @@ import {
   ensureOpenClawAvailable,
   installOpenClawContextEngine,
 } from "./openclaw.js";
+import { install_hooks, remove_hooks } from "./hooks.js";
 
 const CLI_VERSION = "0.1.0";
 const DEFAULT_BASE_URL = "https://fathippo.ai/api";
@@ -15,7 +16,7 @@ const DEFAULT_POLL_TIMEOUT_MS = 15 * 60 * 1000;
 type OpenClawConnectOptions = {
   apiKey?: string;
   baseUrl: string;
-  command: "openclaw" | "profile";
+  command: "openclaw" | "profile" | "hooks";
   installationName: string;
   json: boolean;
   local: boolean;
@@ -62,6 +63,8 @@ function printHelp(): void {
 Commands:
   openclaw                Connect FatHippo to OpenClaw
   profile [path-or-url]   Profile a codebase and generate .fathippo/codebase-profile.json
+  hooks install           Install git post-commit hook to auto-capture commits
+  hooks remove            Remove FatHippo git post-commit hook
 
 openclaw options:
   --local                 Configure local-only mode
@@ -95,17 +98,17 @@ function expectValue(
 
 function parseArgs(argv: string[]): OpenClawConnectOptions {
   const command = argv[0];
-  if (command !== "openclaw" && command !== "profile") {
+  if (command !== "openclaw" && command !== "profile" && command !== "hooks") {
     if (command === "--help" || command === "-h" || typeof command === "undefined") {
       printHelp();
       process.exit(0);
     }
-    throw new Error(`Unknown command '${command}'. Supported: openclaw, profile. Use --help for usage.`);
+    throw new Error(`Unknown command '${command}'. Supported: openclaw, profile, hooks. Use --help for usage.`);
   }
 
   const options: OpenClawConnectOptions = {
     baseUrl: DEFAULT_BASE_URL,
-    command: command as "openclaw" | "profile",
+    command: command as "openclaw" | "profile" | "hooks",
     installationName: defaultInstallationName(),
     json: false,
     local: false,
@@ -114,6 +117,10 @@ function parseArgs(argv: string[]): OpenClawConnectOptions {
 
   if (command === "profile") {
     return parseProfileArgs(argv, options);
+  }
+
+  if (command === "hooks") {
+    return options;
   }
 
   for (let index = 1; index < argv.length; index += 1) {
@@ -416,6 +423,19 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       quiet: options.quiet,
       json: options.json,
     });
+    return;
+  }
+
+  // Handle hooks command
+  if (options.command === "hooks") {
+    const sub_command = argv[1];
+    if (sub_command === "install") {
+      await install_hooks(process.cwd());
+    } else if (sub_command === "remove" || sub_command === "uninstall") {
+      await remove_hooks(process.cwd());
+    } else {
+      console.log("Usage: fathippo-connect hooks <install|remove>");
+    }
     return;
   }
 

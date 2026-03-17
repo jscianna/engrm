@@ -1,5 +1,6 @@
 import {
   recordApiKeyPluginMetadata,
+  recordApiKeyRuntime,
   validateApiKey as validateApiKeyInDb,
 } from "@/lib/db";
 import { FatHippoError, ApiAuthError, errorResponse } from "@/lib/errors";
@@ -86,6 +87,12 @@ export async function validateApiKey(
     } catch (error) {
       console.warn("[API Auth] Failed to persist plugin metadata:", error);
     }
+  }
+
+  // Track which runtime platform is calling (codex, claude, cursor, etc.)
+  const runtime_header = request.headers.get("x-fathippo-runtime");
+  if (runtime_header) {
+    recordApiKeyRuntime(identity.keyId, runtime_header).catch(() => {});
   }
 
   return identity;
