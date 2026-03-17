@@ -109,3 +109,4 @@ VAULT_SPEC.md
 scripts/autoresearch/
 packages/openclaw-plugin/node_modules/
 .gitnexus
+deck/
