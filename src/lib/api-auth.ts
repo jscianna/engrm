@@ -43,7 +43,7 @@ export async function validateApiKey(
   request: Request,
   endpoint: string = "unknown"
 ): Promise<ApiKeyIdentity> {
-  const header = request.headers.get("authorization") ?? request.headers.get("Authorization");
+  const header = request.headers.get("authorization");
   if (!header) {
     throw new FatHippoError("AUTH_MISSING");
   }
@@ -127,14 +127,29 @@ export async function validateApiKeyAnyScope(
     throw new FatHippoError("VALIDATION_ERROR", { reason: "No scopes provided" });
   }
 
-  let lastError: unknown;
-  for (const endpoint of endpoints) {
-    try {
-      return await validateApiKey(request, endpoint);
-    } catch (error) {
-      lastError = error;
-    }
+  // Find the first matching scope without triggering side effects,
+  // then call validateApiKey once with that scope.
+  const header = request.headers.get("authorization");
+  if (!header) {
+    throw new FatHippoError("AUTH_MISSING");
   }
 
-  throw (lastError ?? new FatHippoError("AUTH_FORBIDDEN"));
+  const [scheme, token] = header.trim().split(/\s+/, 2);
+  if (scheme?.toLowerCase() !== "bearer" || !token) {
+    throw new FatHippoError("AUTH_INVALID");
+  }
+
+  const identity = await validateApiKeyInDb(token);
+  if (!identity) {
+    throw new FatHippoError("AUTH_INVALID_KEY");
+  }
+
+  // Check which scope matches (no side effects)
+  const matched_endpoint = endpoints.find((ep) => apiKeyAllowsScope(identity.scopes, ep));
+  if (!matched_endpoint) {
+    throw new FatHippoError("AUTH_FORBIDDEN", { requiredScope: endpoints.join(" | ") });
+  }
+
+  // Now call full validateApiKey once with the matched scope (triggers rate limit + tracking)
+  return validateApiKey(request, matched_endpoint);
 }

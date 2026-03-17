@@ -91,7 +91,7 @@ function buildPlatformData(
       const name = (k.agentName ?? "").toLowerCase();
       return (
         name.includes(p.name.toLowerCase()) ||
-        name.includes(p.name.toLowerCase().replace(" ", ""))
+        name.includes(p.name.toLowerCase().replaceAll(" ", ""))
       );
     });
 

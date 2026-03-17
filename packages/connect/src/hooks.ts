@@ -44,10 +44,9 @@ function find_git_dir(start_dir: string): string | null {
 }
 
 function build_hook_script(): string {
-  const api_key = resolve_api_key();
   const base_url = resolve_base_url();
 
-  // The hook reads API key from env first, falls back to config, then to inline
+  // The hook reads API key from env first, falls back to config file only (never inline)
   return `${HOOK_MARKER_START}
 # Auto-capture commits to FatHippo memory (runs in background)
 (
@@ -55,7 +54,6 @@ function build_hook_script(): string {
   if [ -z "$_fh_key" ] && [ -f "$HOME/.fathippo/config.json" ]; then
     _fh_key=$(grep -o '"apiKey"[[:space:]]*:[[:space:]]*"[^"]*"' "$HOME/.fathippo/config.json" 2>/dev/null | head -1 | sed 's/.*"apiKey"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/')
   fi
-  ${api_key ? `[ -z "$_fh_key" ] && _fh_key="${api_key}"` : ""}
   [ -z "$_fh_key" ] && exit 0
 
   _fh_url="${base_url}/v1/simple/remember"
@@ -66,12 +64,15 @@ function build_hook_script(): string {
   _fh_files=$(git diff HEAD~1 --name-only 2>/dev/null | head -20 | tr '\\n' ', ')
   _fh_repo=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)")
 
-  _fh_text="[Git commit] $_fh_repo/$_fh_branch: $_fh_msg | Files: $_fh_files| Stats: $_fh_stat | Hash: \${_fh_hash:0:8}"
+  _fh_text="[Git commit] $_fh_repo/$_fh_branch: $_fh_msg | Files: $_fh_files | Stats: $_fh_stat | Hash: \${_fh_hash:0:8}"
+
+  # JSON-escape the text (shell-native, no python dependency)
+  _fh_escaped=$(printf '%s' "$_fh_text" | sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g; s/	/\\\\t/g' | tr '\\n' ' ')
 
   curl -s -X POST "$_fh_url" \\
     -H "Authorization: Bearer $_fh_key" \\
     -H "Content-Type: application/json" \\
-    -d "{\\"text\\": $(printf '%s' "$_fh_text" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))' 2>/dev/null || echo '\\"$_fh_text\\"')}" \\
+    -d "{\\"text\\": \\"$_fh_escaped\\"}" \\
     >/dev/null 2>&1
 ) &
 ${HOOK_MARKER_END}`;
@@ -109,18 +110,18 @@ export async function install_hooks(target_dir: string): Promise<void> {
       const before = existing.split(HOOK_MARKER_START)[0] ?? "";
       const after_marker = existing.split(HOOK_MARKER_END);
       const after = after_marker.length > 1 ? after_marker[1] : "";
-      fs.writeFileSync(hook_path, before + hook_script + after, { mode: 0o755 });
+      fs.writeFileSync(hook_path, before + hook_script + after, { mode: 0o700 });
       console.log("✅ FatHippo post-commit hook updated.");
       return;
     }
 
     // Existing hook without FatHippo — append
     const updated = existing.trimEnd() + "\n\n" + hook_script + "\n";
-    fs.writeFileSync(hook_path, updated, { mode: 0o755 });
+    fs.writeFileSync(hook_path, updated, { mode: 0o700 });
     console.log("✅ FatHippo post-commit hook appended to existing hook.");
   } else {
     // No existing hook — create new
-    fs.writeFileSync(hook_path, "#!/bin/sh\n\n" + hook_script + "\n", { mode: 0o755 });
+    fs.writeFileSync(hook_path, "#!/bin/sh\n\n" + hook_script + "\n", { mode: 0o700 });
     console.log("✅ FatHippo post-commit hook installed.");
   }
 
@@ -160,7 +161,7 @@ export async function remove_hooks(target_dir: string): Promise<void> {
     fs.unlinkSync(hook_path);
     console.log("✅ FatHippo post-commit hook removed (file deleted).");
   } else {
-    fs.writeFileSync(hook_path, cleaned + "\n", { mode: 0o755 });
+    fs.writeFileSync(hook_path, cleaned + "\n", { mode: 0o700 });
     console.log("✅ FatHippo post-commit hook removed (other hooks preserved).");
   }
 }

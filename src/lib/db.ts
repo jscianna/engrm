@@ -518,7 +518,7 @@ async function ensureApiKeysColumns(client: Client): Promise<void> {
     { name: "last_plugin_version", ddl: "TEXT" },
     { name: "last_plugin_mode", ddl: "TEXT" },
     { name: "last_plugin_seen_at", ddl: "TEXT" },
-    { name: "last_seen_runtimes", ddl: "TEXT" },
+    { name: "last_seen_runtimes", ddl: "TEXT DEFAULT '{}'" },
   ];
 
   const tableInfo = await client.execute("PRAGMA table_info(api_keys)");
@@ -2144,31 +2144,32 @@ export async function recordApiKeyPluginMetadata(params: {
  * Record which runtime platform (codex, claude, cursor, etc.) was seen calling this API key.
  * Stores a JSON map of { runtime_name: last_seen_iso } in last_seen_runtimes column.
  */
+const ALLOWED_RUNTIMES = new Set([
+  "codex", "claude", "cursor", "windsurf", "zed", "vscode",
+  "opencode", "antigravity", "trae", "qoder", "hermes", "openclaw",
+]);
+
 export async function recordApiKeyRuntime(keyId: string, runtime: string): Promise<void> {
   const trimmed = runtime.trim().toLowerCase().slice(0, 32);
   if (!trimmed || trimmed === "custom") return;
+  if (!ALLOWED_RUNTIMES.has(trimmed)) return;
 
   await ensureInitialized();
   const client = getDb();
   const now = new Date().toISOString();
 
-  // Read current runtimes
-  const row = await client.execute({
-    sql: `SELECT last_seen_runtimes FROM api_keys WHERE id = ?`,
-    args: [keyId],
-  });
-
-  let runtimes: Record<string, string> = {};
-  const raw = row.rows[0]?.last_seen_runtimes;
-  if (typeof raw === "string" && raw.trim().length > 0) {
-    try { runtimes = JSON.parse(raw); } catch { runtimes = {}; }
-  }
-
-  runtimes[trimmed] = now;
-
+  // Atomic single-query update using json_set to avoid read-modify-write race
   await client.execute({
-    sql: `UPDATE api_keys SET last_seen_runtimes = ? WHERE id = ?`,
-    args: [JSON.stringify(runtimes), keyId],
+    sql: `
+      UPDATE api_keys
+      SET last_seen_runtimes = json_set(
+        COALESCE(last_seen_runtimes, '{}'),
+        '$.' || ?,
+        ?
+      )
+      WHERE id = ?
+    `,
+    args: [trimmed, now, keyId],
   });
 }
 

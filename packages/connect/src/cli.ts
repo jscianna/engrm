@@ -245,7 +245,8 @@ async function profileRepo(repoInput: string, options?: { force?: boolean; quiet
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "fathippo-profile-"));
     log("Cloning repository...");
     try {
-      execSync(`git clone --depth 50 "${repoInput}" "${tempDir}/repo"`, { stdio: "pipe" });
+      const { execFileSync } = await import("node:child_process");
+      execFileSync("git", ["clone", "--depth", "50", repoInput, `${tempDir}/repo`], { stdio: "pipe" });
       workDir = path.join(tempDir, "repo");
     } catch (err) {
       console.error("⚠ Clone failed — the repo may be private or the URL is incorrect.");
