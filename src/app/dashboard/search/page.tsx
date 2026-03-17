@@ -87,7 +87,7 @@ export default function SearchPage() {
       }
       const nextResults = payload.results || [];
       setResults(nextResults);
-      toast.success(`Found ${nextResults.length} related memory${nextResults.length === 1 ? "" : "ies"}.`);
+      toast.success(`Found ${nextResults.length} related ${nextResults.length === 1 ? "memory" : "memories"}.`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Search failed";
       setError(message);

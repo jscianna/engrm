@@ -343,15 +343,33 @@ export async function searchMemories(userId: string, query: string): Promise<Mem
   const memories = await getMemoriesByIds(userId, ids);
   const memoryById = new Map(memories.map((memory) => [memory.id, memory]));
 
-  // Filter out low-relevance results so search only shows meaningful matches
-  const MIN_SEARCH_SIMILARITY = 0.55;
-  const results = hits
-    .filter((hit) => hit.score >= MIN_SEARCH_SIMILARITY)
+  // Also do a text search for exact matches the vector search may have missed
+  const query_lower = cleaned.toLowerCase();
+  const text_matches = await textSearchMemories(userId, query_lower);
+  for (const mem of text_matches) {
+    if (!memoryById.has(mem.id)) {
+      memoryById.set(mem.id, mem);
+    }
+  }
+
+  // Combine vector hits (filtered by relevance) with text matches
+  const MIN_SEARCH_SIMILARITY = 0.50;
+
+  const vector_results = hits
     .map((hit) => ({
       score: hit.score,
       memory: memoryById.get(hit.item.id),
     }))
-    .filter((result): result is { score: number; memory: MemoryListItem } => Boolean(result.memory));
+    .filter((result): result is { score: number; memory: MemoryListItem } => Boolean(result.memory))
+    .filter((result) => result.score >= MIN_SEARCH_SIMILARITY);
+
+  // Add text matches not already in vector results
+  const seen_ids = new Set(vector_results.map((r) => r.memory.id));
+  const text_only_results = text_matches
+    .filter((mem) => !seen_ids.has(mem.id))
+    .map((mem) => ({ score: 0.5, memory: mem }));
+
+  const results = [...vector_results, ...text_only_results];
 
   // "Memories that fire together, wire together"
   // Strengthen bonds between top co-retrieved results
@@ -362,6 +380,17 @@ export async function searchMemories(userId: string, query: string): Promise<Mem
   }
 
   return results;
+}
+
+/**
+ * Text-based search fallback: finds memories where title or content contains the query string.
+ * Uses getMemoriesByIds after finding matching IDs via LIKE query.
+ */
+async function textSearchMemories(userId: string, query: string): Promise<MemoryListItem[]> {
+  const { textSearchMemoryIds } = await import("@/lib/db");
+  const ids = await textSearchMemoryIds(userId, query, 10);
+  if (ids.length === 0) return [];
+  return getMemoriesByIds(userId, ids);
 }
 
 export async function getRelatedMemories(params: {

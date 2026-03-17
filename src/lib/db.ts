@@ -1175,6 +1175,25 @@ export async function getMemoriesByIds(userId: string, ids: string[]): Promise<M
   });
 }
 
+/**
+ * Text-based search: find memory IDs where title or content contains the query (case-insensitive).
+ */
+export async function textSearchMemoryIds(userId: string, query: string, limit = 10): Promise<string[]> {
+  await ensureInitialized();
+  const client = getDb();
+  const like_pattern = `%${query}%`;
+  const result = await client.execute({
+    sql: `
+      SELECT id FROM memories
+      WHERE user_id = ? AND (LOWER(title) LIKE ? OR LOWER(content_text) LIKE ?)
+      ORDER BY created_at DESC
+      LIMIT ?
+    `,
+    args: [userId, like_pattern, like_pattern, limit],
+  });
+  return result.rows.map((row) => row.id as string);
+}
+
 export async function createMemoryEdge(input: CreateMemoryEdgeInput): Promise<MemoryEdgeRecord> {
   await ensureInitialized();
   const client = getDb();
