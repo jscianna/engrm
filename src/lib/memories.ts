@@ -343,7 +343,10 @@ export async function searchMemories(userId: string, query: string): Promise<Mem
   const memories = await getMemoriesByIds(userId, ids);
   const memoryById = new Map(memories.map((memory) => [memory.id, memory]));
 
+  // Filter out low-relevance results so search only shows meaningful matches
+  const MIN_SEARCH_SIMILARITY = 0.55;
   const results = hits
+    .filter((hit) => hit.score >= MIN_SEARCH_SIMILARITY)
     .map((hit) => ({
       score: hit.score,
       memory: memoryById.get(hit.item.id),
