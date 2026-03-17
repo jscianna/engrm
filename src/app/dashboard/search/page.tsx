@@ -221,7 +221,23 @@ export default function SearchPage() {
         </CardContent>
       </Card>
 
-      {initialLoading ? (
+      {results.length > 0 ? (
+        <div className="space-y-4">
+          <p className="text-sm text-zinc-400">Found {results.length} {results.length === 1 ? "memory" : "memories"}</p>
+          <section className="memory-grid grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {results.map((result) => (
+              <div key={result.memory.id} className="space-y-2">
+                <p className="text-xs text-cyan-300">Similarity: {(result.score * 100).toFixed(2)}%</p>
+                <MemoryCard memory={result.memory} />
+              </div>
+            ))}
+          </section>
+        </div>
+      ) : hasSearched ? (
+        <div className="rounded-2xl border border-dashed border-zinc-700 bg-zinc-900/40 p-10 text-center text-sm text-zinc-400">
+          {loading ? "Searching your memories..." : "No matching memories found. Try a different query."}
+        </div>
+      ) : initialLoading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
         </div>
@@ -239,24 +255,6 @@ export default function SearchPage() {
           No memories yet. Add some to get started!
         </div>
       )}
-
-      {results.length > 0 ? (
-        <div className="space-y-4">
-          <p className="text-sm text-zinc-400">Semantic matches</p>
-          <section className="memory-grid grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {results.map((result) => (
-              <div key={result.memory.id} className="space-y-2">
-                <p className="text-xs text-cyan-300">Similarity: {(result.score * 100).toFixed(2)}%</p>
-                <MemoryCard memory={result.memory} />
-              </div>
-            ))}
-          </section>
-        </div>
-      ) : hasSearched ? (
-        <div className="rounded-2xl border border-dashed border-zinc-700 bg-zinc-900/40 p-10 text-center text-sm text-zinc-400">
-          {loading ? "Searching your memories..." : "No matching memories found. Try a different query."}
-        </div>
-      ) : null}
     </div>
   );
 }
