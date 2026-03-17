@@ -96,6 +96,12 @@ const SECRET_PATTERNS: SecretPattern[] = [
   },
   { name: "Mapbox key", category: "api_key", pattern: /\bpk\.[a-zA-Z0-9]{60,}\b/g },
   {
+    name: "Generic prefixed API key",
+    category: "api_key",
+    pattern: /\b[a-zA-Z]{2,8}_[a-zA-Z0-9]{20,}\b/g,
+    context: /\bapi[_ -]?key|token|secret|credential|password\b/i,
+  },
+  {
     name: "Firebase token",
     category: "token",
     pattern: /\b[a-zA-Z0-9_-]{40}\b/g,
