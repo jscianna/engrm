@@ -65,6 +65,23 @@ export default function ApiOverviewPage() {
         <Endpoint method="POST" path="/v1/simple/context" description="Get injectable string" />
       </div>
 
+      <H3>Cognitive (Coding)</H3>
+      <div className="space-y-2">
+        <Endpoint method="POST" path="/v1/cognitive/traces" description="Record coding trace" />
+        <Endpoint method="POST" path="/v1/cognitive/traces/relevant" description="Get cognitive context" />
+        <Endpoint method="GET" path="/v1/cognitive/skills/{id}" description="Get skill detail" />
+        <Endpoint method="POST" path="/v1/cognitive/skills" description="Create skill" />
+        <Endpoint method="POST" path="/v1/cognitive/patterns/feedback" description="Submit pattern feedback" />
+      </div>
+
+      <H3>MCP Server</H3>
+      <P>
+        The FatHippo MCP server wraps all session, memory, and cognitive endpoints into 12
+        tools for use with Codex, Claude Desktop, Cursor, and OpenClaw.
+        See the <a href="/docs/api/mcp-tools" className="text-cyan-400 hover:underline">MCP Tools Reference</a> for
+        full documentation.
+      </P>
+
       <H3>Analytics</H3>
       <div className="space-y-2">
         <Endpoint method="POST" path="/v1/analytics" description="Full analytics" />

@@ -178,6 +178,18 @@ print(memories)  # ["User is building a REST API with FastAPI"]`}</CodeBlock>
           Full documentation of all endpoints
         </li>
         <li>
+          <a href="/docs/api/mcp-tools" className="text-cyan-400 hover:underline">MCP Tools Reference</a> — 
+          All 12 tools for Codex, Claude, Cursor, and OpenClaw
+        </li>
+        <li>
+          <a href="/docs/guides/openclaw" className="text-cyan-400 hover:underline">OpenClaw Integration</a> — 
+          Deep integration via plugin and hooks
+        </li>
+        <li>
+          <a href="/docs/guides/git-hooks" className="text-cyan-400 hover:underline">Git Hooks</a> — 
+          Auto-capture commits to memory
+        </li>
+        <li>
           <a href="/docs/guides/openai" className="text-cyan-400 hover:underline">OpenAI Integration</a> — 
           Add memory to GPT-based agents
         </li>

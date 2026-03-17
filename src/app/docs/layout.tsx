@@ -21,6 +21,7 @@ const NAV_ITEMS = [
       { href: "/docs/api/context", label: "Context" },
       { href: "/docs/api/simple", label: "Simple API" },
       { href: "/docs/api/intelligence", label: "Intelligence" },
+      { href: "/docs/api/mcp-tools", label: "MCP Tools" },
       { href: "/docs/api/analytics", label: "Analytics" },
     ]
   },
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
       { href: "/docs/guides/anthropic", label: "Anthropic" },
       { href: "/docs/guides/langchain", label: "LangChain" },
       { href: "/docs/guides/openclaw", label: "OpenClaw" },
+      { href: "/docs/guides/git-hooks", label: "Git Hooks" },
     ]
   },
 ];
