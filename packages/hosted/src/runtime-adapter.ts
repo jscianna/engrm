@@ -3,6 +3,7 @@ import type {
   ConstraintListResponse,
   IndexedMemoriesResponse,
 } from "./client.js";
+import { detectModelFamily, formatTieredContextForModel } from "./model-adapter.js";
 
 type FatHippoFetch = typeof fetch;
 
@@ -539,9 +540,10 @@ export class FatHippoHostedRuntimeClient implements FatHippoHostedRuntimeClientC
       ...mapInjectedMemories(response.context?.high, "high"),
     ];
 
+    const model_family = detectModelFamily(input.runtime?.model);
     return {
       sessionId: response.sessionId,
-      systemPromptAddition: formatTieredContext(response.context ?? {}),
+      systemPromptAddition: formatTieredContextForModel(response.context ?? {}, model_family),
       injectedMemories,
       tokensInjected: response.stats?.tokensInjected,
       criticalCount: response.stats?.criticalCount,
@@ -649,8 +651,9 @@ export class FatHippoHostedRuntimeClient implements FatHippoHostedRuntimeClientC
       ...mapInjectedMemories(response.newContext?.critical, "refresh"),
       ...mapInjectedMemories(response.newContext?.high, "refresh"),
     ];
+    const turn_model_family = detectModelFamily(input.runtime?.model);
     const systemPromptAddition = response.newContext
-      ? formatTieredContext(response.newContext)
+      ? formatTieredContextForModel(response.newContext, turn_model_family)
       : undefined;
 
     return {
