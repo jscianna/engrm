@@ -10,6 +10,7 @@
     "build": "npm run build:packages && next build --webpack",
     "build:packages": "npm run build --workspaces --if-present --include-workspace-root=false",
     "db:migrate": "node scripts/db-migrate.mjs",
+    "preflight:deploy": "node scripts/preflight-deploy.mjs",
     "db:migrate:status": "node scripts/db-migrate.mjs --status",
     "embeddings:reindex": "node scripts/reindex-embeddings.mjs",
     "start": "next start",
