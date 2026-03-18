@@ -374,6 +374,7 @@ export async function POST(request: Request) {
     }
 
     let relevantMemories: typeof criticalMemories = [];
+    let search_degraded = false;
     let shadowOverlapAtK = 0;
     let edgeCandidateCount = 0;
     let hostedCandidateCount = 0;
@@ -615,8 +616,11 @@ export async function POST(request: Request) {
         const accessedIds = memories.map((m) => m.id);
         incrementAccessCounts(identity.userId, accessedIds).catch(() => {});
       }
-    } catch {
-      // Search failed, continue with critical only
+    } catch (searchError) {
+      // Search failed — log and continue with critical only (degraded mode)
+      console.error("[Context] Retrieval pipeline failed, returning critical-only:", searchError);
+      relevantMemories = [];
+      search_degraded = true;
     }
 
     // Dedupe and limit relevant memories
@@ -785,6 +789,9 @@ export async function POST(request: Request) {
       recordShadowSample(shadowOverlapAtK);
     }
 
+    if (search_degraded) {
+      headers["X-FatHippo-Degraded"] = "true";
+    }
     headers["X-FatHippo-Compaction-Risk"] = compactionRiskScore.toFixed(4);
     headers["X-FatHippo-Flush-Quality"] = flushQuality.toFixed(4);
     headers["X-FatHippo-Constraint-Diff-Missing"] = String(missingConstraints);

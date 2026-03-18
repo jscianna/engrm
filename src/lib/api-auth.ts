@@ -71,7 +71,9 @@ export async function validateApiKey(
 
   // Check rate limits and record the API call
   // Pass raw token for elevated limit checks (testing/enterprise keys)
-  await checkRateLimit(identity.userId, identity.keyId, endpoint, token);
+  // Pass key prefix hash for elevated checks, never the raw token
+  const key_prefix_hash = identity.keyId;
+  await checkRateLimit(identity.userId, key_prefix_hash, endpoint);
 
   const pluginId = request.headers.get("x-fathippo-plugin-id");
   const pluginVersion = request.headers.get("x-fathippo-plugin-version");
@@ -80,6 +82,7 @@ export async function validateApiKey(
     try {
       await recordApiKeyPluginMetadata({
         keyId: identity.keyId,
+        userId: identity.userId,
         pluginId,
         pluginVersion,
         pluginMode,

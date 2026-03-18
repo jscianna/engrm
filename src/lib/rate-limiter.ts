@@ -20,8 +20,9 @@ export const LIMITS = {
 
 // API keys with elevated limits (hash prefix -> limits)
 // Used for autoresearch/testing accounts
-const ELEVATED_API_KEY_PREFIXES = new Set([
-  "mem_e94394c0499b7026c0576d2ddc9db41fe5127c642115ccb1", // Test account for autoresearch
+// Elevated key IDs (not raw tokens) for testing/enterprise accounts
+const ELEVATED_KEY_IDS = new Set([
+  "key_autoresearch_test", // Test account for autoresearch — update to actual keyId
 ]);
 const ELEVATED_LIMITS = {
   REQUESTS_PER_DAY: 100_000,
@@ -102,10 +103,9 @@ export async function checkRateLimit(
   userId: string,
   apiKeyId: string,
   endpoint: string,
-  rawApiKey?: string
 ): Promise<void> {
-  // Check for elevated API keys (testing/enterprise)
-  const isElevated = rawApiKey && ELEVATED_API_KEY_PREFIXES.has(rawApiKey);
+  // Check for elevated API keys by keyId (never pass raw tokens)
+  const isElevated = ELEVATED_KEY_IDS.has(apiKeyId);
   const dailyLimit = isElevated ? ELEVATED_LIMITS.REQUESTS_PER_DAY : LIMITS.REQUESTS_PER_DAY;
   await ensureRateLimiterInitialized();
   const client = getDb();

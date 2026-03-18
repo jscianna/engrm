@@ -43,6 +43,7 @@ const CORE_COLUMN_REPAIRS = {
     { name: "absorbed_into_synthesis_id", ddl: "TEXT" },
     { name: "absorbed_by", ddl: "TEXT" },
     { name: "absorbed_at", ddl: "TEXT" },
+    { name: "peer", ddl: "TEXT NOT NULL DEFAULT 'user'" },
   ],
   api_keys: [
     { name: "key_suffix", ddl: "TEXT" },
@@ -236,6 +237,11 @@ async function ensureCoreIndexes(client, helpers) {
   await client.execute(`
     CREATE INDEX IF NOT EXISTS idx_memories_lifecycle
     ON memories(user_id, archived_at, strength, last_accessed_at)
+  `);
+
+  await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_memories_user_peer
+    ON memories(user_id, peer)
   `);
 
   const memoryColumns = await helpers.getTableColumns("memories");

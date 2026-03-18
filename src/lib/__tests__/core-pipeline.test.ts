@@ -119,12 +119,9 @@ describe("Encryption round-trip", () => {
     const { decryptMemoryContent } = await import("@/lib/db");
 
     // Manually construct what encryptMemoryContent would produce:
-    // deriveUserKey(userId) → SHA-256(masterKey + userId)
+    // deriveUserKey(userId) → HKDF-SHA256(masterKey, "", "fathippo:memory:userId", 32)
     const masterKey = Buffer.from(TEST_KEY, "hex");
-    const userKey = crypto
-      .createHash("sha256")
-      .update(Buffer.concat([masterKey, Buffer.from("test-user", "utf8")]))
-      .digest();
+    const userKey = Buffer.from(crypto.hkdfSync("sha256", masterKey, Buffer.alloc(0), "fathippo:memory:test-user", 32));
 
     const plaintext = "Remember that the deployment target is us-east-1";
     const iv = crypto.randomBytes(12);
@@ -152,10 +149,7 @@ describe("Encryption round-trip", () => {
 
     // Encrypt for user-a
     const masterKey = Buffer.from(TEST_KEY, "hex");
-    const userAKey = crypto
-      .createHash("sha256")
-      .update(Buffer.concat([masterKey, Buffer.from("user-a", "utf8")]))
-      .digest();
+    const userAKey = Buffer.from(crypto.hkdfSync("sha256", masterKey, Buffer.alloc(0), "fathippo:memory:user-a", 32));
 
     const plaintext = "secret data for user-a";
     const iv = crypto.randomBytes(12);
@@ -182,10 +176,7 @@ describe("Encryption round-trip", () => {
     const { decryptMemoryContent } = await import("@/lib/db");
 
     const masterKey = Buffer.from(TEST_KEY, "hex");
-    const userKey = crypto
-      .createHash("sha256")
-      .update(Buffer.concat([masterKey, Buffer.from("user-unicode", "utf8")]))
-      .digest();
+    const userKey = Buffer.from(crypto.hkdfSync("sha256", masterKey, Buffer.alloc(0), "fathippo:memory:user-unicode", 32));
 
     const plaintext = "日本語テスト 🦛 émojis and spëcîal chars";
     const iv = crypto.randomBytes(12);

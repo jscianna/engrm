@@ -65,7 +65,7 @@ const TITLE_PATTERNS: Array<{ pattern: RegExp; type: MemoryKind }> = [
   { pattern: /\bannounced\b/i, type: "fact" },
   { pattern: /\blaunched\b/i, type: "fact" },
   { pattern: /\bacquired\b/i, type: "fact" },
-  { pattern: /\bIPO\b/i, type: "fact" },
+  { pattern: /\bIPO\b/, type: "fact" },
   { pattern: /\bnews\b/i, type: "fact" },
 ];
 
@@ -343,10 +343,6 @@ export function classifyPeer(text: string): MemoryPeer {
     (score, pattern) => score + (pattern.test(text) ? 1 : 0),
     0,
   );
-  if (sharedScore > 0) {
-    return "shared";
-  }
-
   const userScore = USER_PEER_PATTERNS.reduce(
     (score, pattern) => score + (pattern.test(text) ? 1 : 0),
     0,
@@ -355,6 +351,11 @@ export function classifyPeer(text: string): MemoryPeer {
     (score, pattern) => score + (pattern.test(text) ? 1 : 0),
     0,
   );
+
+  // Shared needs to win by margin (≥2 matches, or 1 match + beats both others)
+  if (sharedScore >= 2 || (sharedScore > 0 && sharedScore > userScore && sharedScore > agentScore)) {
+    return "shared";
+  }
 
   if (agentScore > userScore) {
     return "agent";

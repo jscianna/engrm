@@ -110,15 +110,26 @@ export async function runMicroDream(opts: {
       if (existing && !existing.absorbed) {
         // Keep the longer/more detailed version
         if (opts.memoryText.length <= existing.text.length) {
-          // New memory is shorter or equal — mark new as merged (no-op, it's already stored)
+          // New memory is shorter or equal — mark new memory as absorbed (existing wins)
+          await updateAgentMemory(opts.userId, opts.memoryId, {
+            absorbed: true,
+            absorbedBy: `micro-dream:merge:${existing.id}`,
+          });
           return {
             action: "merged",
             mergedWith: existing.id,
             processingMs: Math.round(performance.now() - start),
           };
         }
-        // New memory is longer — update existing with new text
-        await updateAgentMemory(opts.userId, existing.id, { text: opts.memoryText });
+        // New memory is longer — update existing with new text, absorb existing
+        await updateAgentMemory(opts.userId, existing.id, {
+          text: opts.memoryText,
+        });
+        // Mark new memory as absorbed since existing was updated with its content
+        await updateAgentMemory(opts.userId, opts.memoryId, {
+          absorbed: true,
+          absorbedBy: `micro-dream:merge:${existing.id}`,
+        });
         return {
           action: "merged",
           mergedWith: existing.id,
@@ -150,13 +161,11 @@ export async function runMicroDream(opts: {
 
         const existingEntities = extractKeyEntities(existing.text);
         if (entitiesOverlap(newEntities, existingEntities)) {
-          // Mark the older memory as absorbed (superseded by newer)
+          // Mark the older memory as absorbed (superseded by newer memory)
           await updateAgentMemory(opts.userId, existing.id, {
-            text: existing.text, // keep text, but the absorbed flag marks it superseded
+            absorbed: true,
+            absorbedBy: `micro-dream:contradiction:${opts.memoryId}`,
           });
-          // Note: We can't directly set absorbed=true via updateAgentMemory.
-          // The contradiction is flagged but the older memory remains searchable.
-          // The full dream cycle handles proper absorption.
           return {
             action: "contradiction_resolved",
             contradictionId: existing.id,

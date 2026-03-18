@@ -16,17 +16,25 @@ export type ProjectScope = {
  * Extract a project name from a file path.
  * Handles common patterns like ~/projects/foo, /Users/x/code/bar, /home/x/repos/baz.
  */
+// Common directories that are NOT project names
+const IGNORED_DIR_NAMES = new Set([
+  ".config", ".cache", ".local", ".ssh", ".npm", ".yarn", ".cargo", ".rustup",
+  ".git", ".vscode", "node_modules", "dist", "build", "tmp", "temp",
+  "utils", "helpers", "common", "shared", "api", "lib", "src", "app",
+  "bin", "var", "etc", "opt", "usr", "new", "main", "test", "tests",
+]);
+
 function extractProjectFromPath(filepath: string): string | null {
   // Match common project directory patterns
   const patterns = [
     /\/(?:projects|repos|code|src|workspace|workspaces|dev)\/([^/]+)/i,
-    /\/home\/[^/]+\/([^/]+)/,
-    /\/Users\/[^/]+\/(?:Documents\/|Desktop\/)?([^/]+)/,
+    /\/home\/[^/]+\/([^.][^/]*)/,  // Exclude dotfile directories under home
+    /\/Users\/[^/]+\/(?:Documents\/|Desktop\/)?([^.][^/]*)/,
   ];
 
   for (const pattern of patterns) {
     const match = filepath.match(pattern);
-    if (match?.[1]) {
+    if (match?.[1] && !IGNORED_DIR_NAMES.has(match[1].toLowerCase())) {
       return match[1];
     }
   }

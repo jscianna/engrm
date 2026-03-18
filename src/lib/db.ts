@@ -80,7 +80,8 @@ function getMasterKey(): Buffer {
  */
 function deriveUserKey(userId: string): Buffer {
   const master = getMasterKey();
-  return crypto.createHash("sha256").update(Buffer.concat([master, Buffer.from(userId, "utf8")])).digest();
+  // Use HKDF for proper domain-separated key derivation (replaces raw SHA-256 concat)
+  return Buffer.from(crypto.hkdfSync("sha256", master, Buffer.alloc(0), `fathippo:memory:${userId}`, 32));
 }
 
 /**
@@ -1097,18 +1098,22 @@ export async function listMemoryRecordsByUser(userId: string, limit = 100): Prom
   return result.rows.map((row) => mapRow(row as Record<string, unknown>));
 }
 
-export async function getMemoryById(id: string): Promise<MemoryRecord | null> {
+export async function getMemoryById(id: string, userId?: string): Promise<MemoryRecord | null> {
   await ensureInitialized();
   const client = getDb();
   
+  const args: string[] = [id];
+  const user_clause = userId ? " AND user_id = ?" : "";
+  if (userId) args.push(userId);
+
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, source_url, file_name, content_text, content_hash, created_at,
              memory_type, importance, tags_csv, sensitive, sync_status, sync_error, content_iv, content_encrypted
       FROM memories
-      WHERE id = ?
+      WHERE id = ?${user_clause}
     `,
-    args: [id],
+    args,
   });
 
   if (result.rows.length === 0) {
@@ -1185,7 +1190,8 @@ export async function getMemoriesByIds(userId: string, ids: string[]): Promise<M
 export async function textSearchMemoryIds(userId: string, query: string, limit = 10): Promise<string[]> {
   await ensureInitialized();
   const client = getDb();
-  const like_pattern = `%${query}%`;
+  const escaped_query = query.replace(/[%_\\]/g, "\\$&");
+  const like_pattern = `%${escaped_query}%`;
   const result = await client.execute({
     sql: `
       SELECT id FROM memories
@@ -1914,7 +1920,7 @@ function mapSynthesizedMemoryRow(row: Record<string, unknown>): SynthesizedMemor
     createdAt: row.created_at as string,
     abstractionLevel: Number(row.abstraction_level ?? 1),
     synthesisQualityScore: row.synthesis_quality_score === null ? undefined : Number(row.synthesis_quality_score),
-    synthesisMetadata: row.synthesis_metadata ? JSON.parse(row.synthesis_metadata as string) : undefined,
+    synthesisMetadata: row.synthesis_metadata ? parseJsonObject(row.synthesis_metadata as string) : undefined,
   };
 }
 
@@ -2133,6 +2139,7 @@ export async function listApiKeys(userId: string): Promise<Array<{
 
 export async function recordApiKeyPluginMetadata(params: {
   keyId: string;
+  userId: string;
   pluginId?: string | null;
   pluginVersion?: string | null;
   pluginMode?: string | null;
@@ -2158,9 +2165,9 @@ export async function recordApiKeyPluginMetadata(params: {
     sql: `
       UPDATE api_keys
       SET last_plugin_id = ?, last_plugin_version = ?, last_plugin_mode = ?, last_plugin_seen_at = ?
-      WHERE id = ?
+      WHERE id = ? AND user_id = ?
     `,
-    args: [pluginId, pluginVersion, pluginMode, seenAt, params.keyId],
+    args: [pluginId, pluginVersion, pluginMode, seenAt, params.keyId, params.userId],
   });
 }
 
@@ -3832,7 +3839,7 @@ export async function updateMemoryAccess(memoryId: string, userId: string): Prom
 export async function updateAgentMemory(
   userId: string,
   memoryId: string,
-  updates: { title?: string; text?: string }
+  updates: { title?: string; text?: string; absorbed?: boolean; absorbedBy?: string }
 ): Promise<boolean> {
   await ensureInitialized();
   const client = getDb();
@@ -3840,6 +3847,18 @@ export async function updateAgentMemory(
   const setClauses: string[] = [];
   const args: (string | number)[] = [];
 
+  if (updates.absorbed !== undefined) {
+    setClauses.push("absorbed = ?");
+    args.push(updates.absorbed ? 1 : 0);
+    if (updates.absorbed) {
+      setClauses.push("absorbed_at = ?");
+      args.push(new Date().toISOString());
+      if (updates.absorbedBy) {
+        setClauses.push("absorbed_by = ?");
+        args.push(updates.absorbedBy);
+      }
+    }
+  }
   if (updates.title !== undefined) {
     setClauses.push("title = ?");
     args.push(updates.title);

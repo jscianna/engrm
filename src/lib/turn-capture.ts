@@ -277,8 +277,7 @@ function shouldKeepCandidate(message: TurnCaptureMessage, segment: string): bool
 
   if (role === "tool" || role === "toolresult") {
     const looksDurable =
-      TOOL_DURABLE_PATTERNS.every((pattern) => pattern.test(segment)) ||
-      (TOOL_DURABLE_PATTERNS[0].test(segment) && segment.length <= 280);
+      TOOL_DURABLE_PATTERNS.some((pattern) => pattern.test(segment));
     return !detectTerminalOutput(segment) && looksDurable;
   }
 
@@ -510,7 +509,7 @@ export async function storeAutoMemory(params: {
     memoryId: memory.id,
     memoryText: text,
     namespaceId: params.namespaceId ?? null,
-  }).catch(() => {}); // Never block the response
+  }).catch((e) => console.warn("[MicroDream] failed:", e)); // Never block the response
 
   return {
     action: "stored",

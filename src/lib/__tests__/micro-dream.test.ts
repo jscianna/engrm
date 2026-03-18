@@ -44,7 +44,7 @@ describe("runMicroDream", () => {
     expect(semanticSearchVectors).not.toHaveBeenCalled();
   });
 
-  it("merges with a longer existing memory instead of duplicating it", async () => {
+  it("merges with a longer existing memory and absorbs the new one", async () => {
     const { runMicroDream } = await import("@/lib/micro-dream");
 
     embedText.mockResolvedValue([0.1, 0.2, 0.3]);
@@ -71,7 +71,11 @@ describe("runMicroDream", () => {
       mergedWith: "existing-1",
     });
 
-    expect(updateAgentMemory).not.toHaveBeenCalled();
+    // New memory should be marked as absorbed
+    expect(updateAgentMemory).toHaveBeenCalledWith("user-1", "mem-1", {
+      absorbed: true,
+      absorbedBy: "micro-dream:merge:existing-1",
+    });
   });
 
   it("updates an existing near-duplicate when the new memory is more detailed", async () => {
@@ -104,7 +108,12 @@ describe("runMicroDream", () => {
       mergedWith: "existing-2",
     });
 
+    // Existing gets updated text, new memory gets absorbed
     expect(updateAgentMemory).toHaveBeenCalledWith("user-1", "existing-2", { text: memoryText });
+    expect(updateAgentMemory).toHaveBeenCalledWith("user-1", "mem-2", {
+      absorbed: true,
+      absorbedBy: "micro-dream:merge:existing-2",
+    });
   });
 
   it("flags contradictions when negation overlaps entities with an older memory", async () => {
@@ -140,8 +149,10 @@ describe("runMicroDream", () => {
       contradictionId: "existing-3",
     });
 
+    // Old memory should be absorbed, not just rewritten
     expect(updateAgentMemory).toHaveBeenCalledWith("user-2", "existing-3", {
-      text: "John uses Redis for caching in the project.",
+      absorbed: true,
+      absorbedBy: "micro-dream:contradiction:mem-3",
     });
   });
 });
