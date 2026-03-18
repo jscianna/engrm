@@ -21,6 +21,7 @@ export type MemoryKind =
 export type MemorySyncStatus = "pending" | "synced" | "failed";
 export type MemoryImportanceTier = "critical" | "working" | "high" | "normal";
 export type MemoryDurabilityClass = "ephemeral" | "working" | "durable";
+export type MemoryPeer = "user" | "agent" | "shared";
 export type MemoryRelationshipType =
   | "similar"
   | "updates"

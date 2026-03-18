@@ -10,7 +10,7 @@
  * - fact: external events (company raised $X, person joined Y)
  */
 
-import type { MemoryKind } from "@/lib/types";
+import type { MemoryKind, MemoryPeer } from "@/lib/types";
 
 // =============================================================================
 // Title Pattern Matching (Priority 1)
@@ -268,4 +268,97 @@ export function classifyMemoryType(
  */
 export function isCoreMemoryType(type: MemoryKind): boolean {
   return ["identity", "preference", "belief", "decision", "fact"].includes(type);
+}
+
+// =============================================================================
+// Peer Classification (user vs agent vs shared)
+// =============================================================================
+
+const USER_PEER_PATTERNS: RegExp[] = [
+  /\buser prefers?\b/i,
+  /\bthey like\b/i,
+  /\bthey prefer\b/i,
+  /\bcorrected me\b/i,
+  /\bcommunication style\b/i,
+  /\buser wants?\b/i,
+  /\buser said\b/i,
+  /\buser asked\b/i,
+  /\buser('s| is| was)\b/i,
+  /\bprefers? snake.?case\b/i,
+  /\bprefers? camel.?case\b/i,
+  /\bprefers? early returns?\b/i,
+  /\b(his|her|their) (preference|style|workflow)\b/i,
+  /\bpersonal preference\b/i,
+  /\bmy name\b/i,
+  /\bI prefer\b/i,
+  /\bI like\b/i,
+  /\bI always\b/i,
+  /\bI never\b/i,
+  /\bI hate\b/i,
+  /\bdon't (like|want|use)\b/i,
+];
+
+const AGENT_PEER_PATTERNS: RegExp[] = [
+  /\bproject uses?\b/i,
+  /\binstalled\b/i,
+  /\bruns? on\b/i,
+  /\benvironment\b/i,
+  /\bgit repo\b/i,
+  /\brepository\b/i,
+  /\btech stack\b/i,
+  /\bconfigured (to|with|for)\b/i,
+  /\bproject structure\b/i,
+  /\bdirectory (layout|structure)\b/i,
+  /\bcodebase\b/i,
+  /\bCI\/?CD\b/i,
+  /\bdependenc(y|ies)\b/i,
+  /\bpackage\.json\b/i,
+  /\btsconfig\b/i,
+  /\bdocker(file)?\b/i,
+  /\bdeployed (to|on|at)\b/i,
+  /\bframework\b/i,
+  /\binfrastructure\b/i,
+  /\bOS (is|runs?|version)\b/i,
+  /\btool (config|quirk|version)\b/i,
+];
+
+const SHARED_PEER_PATTERNS: RegExp[] = [
+  /\bteam convention\b/i,
+  /\bteam (agreed|decided|uses?)\b/i,
+  /\bcross.?project\b/i,
+  /\bcompany.?wide\b/i,
+  /\borg(anization)?.?wide\b/i,
+  /\bstandard(ized)? (across|for all)\b/i,
+];
+
+/**
+ * Classify who a memory is about: the user, the agent/environment, or shared.
+ * Uses keyword heuristics (no LLM needed).
+ *
+ * @param text - Memory content text
+ * @returns "user" | "agent" | "shared"
+ */
+export function classifyPeer(text: string): MemoryPeer {
+  const sharedScore = SHARED_PEER_PATTERNS.reduce(
+    (score, pattern) => score + (pattern.test(text) ? 1 : 0),
+    0,
+  );
+  if (sharedScore > 0) {
+    return "shared";
+  }
+
+  const userScore = USER_PEER_PATTERNS.reduce(
+    (score, pattern) => score + (pattern.test(text) ? 1 : 0),
+    0,
+  );
+  const agentScore = AGENT_PEER_PATTERNS.reduce(
+    (score, pattern) => score + (pattern.test(text) ? 1 : 0),
+    0,
+  );
+
+  if (agentScore > userScore) {
+    return "agent";
+  }
+
+  return "user";
 }

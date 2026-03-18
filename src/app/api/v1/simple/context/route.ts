@@ -45,6 +45,7 @@ import {
   countMissingConstraints,
   recordCompactionSafetySample,
 } from "@/lib/compaction-safety";
+import { detectProjectScope } from "@/lib/project-scope";
 import type { MemoryRecord } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -129,6 +130,17 @@ export async function POST(request: Request) {
       return resolvedNamespace.error;
     }
     const namespaceId = resolvedNamespace.namespaceId;
+    const peer = (body.peer === "user" || body.peer === "agent" || body.peer === "shared")
+      ? body.peer as "user" | "agent" | "shared"
+      : undefined;
+    const sessionMeta = (typeof body.sessionMeta === "object" && body.sessionMeta !== null && !Array.isArray(body.sessionMeta))
+      ? body.sessionMeta as Record<string, unknown>
+      : undefined;
+    const projectScope = detectProjectScope({
+      namespace: requestedNamespace.name,
+      sessionMeta,
+      messageText: message,
+    });
     const trivialQuery = isTrivialQuery(message);
 
     if (!message || trivialQuery) {
@@ -288,6 +300,7 @@ export async function POST(request: Request) {
       feedbackScore: 0,
       accessCount: synthesis.accessCount,
       sensitive: false,
+      peer: "shared" as const,
       createdAt: synthesis.synthesizedAt,
     }));
     const allCritical = [...synthesizedCritical, ...allCriticalMemories];
@@ -608,9 +621,50 @@ export async function POST(request: Request) {
 
     // Dedupe and limit relevant memories
     const criticalIds = new Set(criticalMemories.map((m) => m.id));
-    const dedupedRelevant = relevantMemories
-      .filter((m) => !criticalIds.has(m.id))
-      .slice(0, maxRelevant);
+    let dedupedRelevant = relevantMemories
+      .filter((m) => !criticalIds.has(m.id));
+
+    // Peer dimension filtering/boosting
+    if (peer) {
+      // Explicit peer filter: post-filter (don't pre-filter to avoid missing cross-cutting context)
+      dedupedRelevant = dedupedRelevant.filter((m) => !m.peer || m.peer === peer);
+    } else {
+      // Soft boost: detect if the query is user-facing vs technical, boost matching peer by 1.2x
+      const looksUserFacing = /\b(prefer|style|like|want|user|habit|always|never)\b/i.test(message);
+      const looksTechnical = /\b(project|repo|install|deploy|config|environment|code|build|error|api)\b/i.test(message);
+      if ((looksUserFacing || looksTechnical) && dedupedRelevant.length > 1) {
+        const targetPeer = looksUserFacing ? "user" : "agent";
+        const scored = dedupedRelevant.map((m, i) => ({
+          memory: m,
+          score: (m.peer === targetPeer ? 1.2 : 1.0) * (1 / (i + 1)),
+        }));
+        scored.sort((a, b) => b.score - a.score);
+        dedupedRelevant = scored.map((s) => s.memory);
+      }
+    }
+
+    // Project scope boosting: boost memories that mention the detected project
+    if (projectScope.detected && projectScope.scope && projectScope.confidence > 0.5 && dedupedRelevant.length > 1) {
+      const scopeLower = projectScope.scope.toLowerCase();
+      const scored = dedupedRelevant.map((m, i) => {
+        let boost = 1.0;
+        const textLower = m.text.toLowerCase();
+        const titleLower = m.title.toLowerCase();
+        // Boost memories mentioning the project name
+        if (textLower.includes(scopeLower) || titleLower.includes(scopeLower)) {
+          boost = 1.3;
+        }
+        // Boost memories in matching namespace
+        if (m.namespaceId && namespaceId && m.namespaceId === namespaceId) {
+          boost = Math.max(boost, 1.5);
+        }
+        return { memory: m, score: boost * (1 / (i + 1)) };
+      });
+      scored.sort((a, b) => b.score - a.score);
+      dedupedRelevant = scored.map((s) => s.memory);
+    }
+
+    dedupedRelevant = dedupedRelevant.slice(0, maxRelevant);
 
     if (enableEdgeFirst && !edgeHit) {
       const candidateIds = dedupedRelevant.map((m) => m.id);

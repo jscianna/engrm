@@ -41,10 +41,19 @@ export async function POST(request: Request) {
       return resolved.error;
     }
 
+    const peer = (body.peer === "user" || body.peer === "agent" || body.peer === "shared")
+      ? body.peer
+      : undefined;
+    const sessionMeta = (typeof body.sessionMeta === "object" && body.sessionMeta !== null && !Array.isArray(body.sessionMeta))
+      ? body.sessionMeta as Record<string, unknown>
+      : undefined;
+
     const result = await storeAutoMemory({
       userId: identity.userId,
       namespaceId: resolved.namespaceId,
       text,
+      peer,
+      sessionMeta,
     });
 
     if (result.action === "skipped" && result.matchedSecretCategories?.length) {

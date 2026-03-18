@@ -1,6 +1,6 @@
 import { embedText } from "@/lib/embeddings";
 import { extractEntities } from "@/lib/entities";
-import { classifyMemoryType } from "@/lib/memory-classification";
+import { classifyMemoryType, classifyPeer } from "@/lib/memory-classification";
 import { classifyMemory } from "@/lib/memory-classifier";
 import {
   getAgentMemoriesByIds,
@@ -14,7 +14,9 @@ import {
 } from "@/lib/local-retrieval";
 import { detectSecretCategories, VAULT_HINT_MESSAGE } from "@/lib/secrets";
 import { createTrace, getMatchingPatterns, syncTracePatternMatches } from "@/lib/cognitive-db";
-import type { MemoryImportanceTier, MemoryKind } from "@/lib/types";
+import { runMicroDream } from "@/lib/micro-dream";
+import { detectProjectScope } from "@/lib/project-scope";
+import type { MemoryImportanceTier, MemoryKind, MemoryPeer } from "@/lib/types";
 
 const CONSOLIDATION_THRESHOLD = 0.9;
 
@@ -327,6 +329,8 @@ export async function storeAutoMemory(params: {
   sessionId?: string | null;
   text: string;
   userId: string;
+  peer?: MemoryPeer;
+  sessionMeta?: Record<string, unknown>;
 }): Promise<AutoStoredMemoryResult> {
   const text = sanitizeCapturedText(params.text);
   if (!text) {
@@ -453,6 +457,22 @@ export async function storeAutoMemory(params: {
     }
   }
 
+  const peer = params.peer ?? classifyPeer(text);
+
+  // Auto-detect project scope from session metadata and enrich memory metadata
+  if (params.sessionMeta) {
+    const scope = detectProjectScope({
+      sessionMeta: params.sessionMeta,
+      messageText: text,
+    });
+    if (scope.detected && scope.scope) {
+      structuredMetadata = {
+        ...(structuredMetadata ?? {}),
+        projectScope: scope.scope,
+      };
+    }
+  }
+
   const memory = await insertAgentMemory({
     userId: params.userId,
     title: text.slice(0, 60),
@@ -463,6 +483,7 @@ export async function storeAutoMemory(params: {
     metadata: structuredMetadata ?? undefined,
     namespaceId: params.namespaceId,
     sessionId: params.sessionId,
+    peer,
   });
 
   if (embedding) {
@@ -482,6 +503,14 @@ export async function storeAutoMemory(params: {
   }
 
   invalidateAllLocalResultsForUser(params.userId);
+
+  // Fire-and-forget micro-dream (non-blocking)
+  runMicroDream({
+    userId: params.userId,
+    memoryId: memory.id,
+    memoryText: text,
+    namespaceId: params.namespaceId ?? null,
+  }).catch(() => {}); // Never block the response
 
   return {
     action: "stored",

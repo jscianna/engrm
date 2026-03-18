@@ -34,6 +34,9 @@ export async function POST(request: Request) {
     }
 
     const limit = normalizeLimit(body.limit, 5, 20);
+    const peer = (body.peer === "user" || body.peer === "agent" || body.peer === "shared")
+      ? body.peer as "user" | "agent" | "shared"
+      : undefined;
 
     // Search
     const vector = await embedQuery(query);
@@ -55,6 +58,7 @@ export async function POST(request: Request) {
     const memories = await getAgentMemoriesByIds({
       userId: identity.userId,
       ids: hits.map((h) => h.item.id),
+      peer,
     });
 
     const memoryById = new Map(memories.map((m) => [m.id, m]));

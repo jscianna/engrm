@@ -1,6 +1,6 @@
 {
   "name": "fathippo",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "CLI for FatHippo — your coding agent gets smarter every session. One command connects 13 platforms.",
   "type": "module",
   "bin": {
@@ -9,6 +9,7 @@
   "files": [
     "bin/",
     "lib/",
+    "integrations/",
     "README.md"
   ],
   "scripts": {

@@ -9,6 +9,7 @@ import type {
   MemoryDurabilityClass,
   MemoryKind,
   MemoryListItem,
+  MemoryPeer,
   MemoryRecord,
   MemoryRelationshipType,
   MemorySourceType,
@@ -218,6 +219,7 @@ async function ensureInitialized(): Promise<void> {
       absorbed_into_synthesis_id TEXT,
       absorbed_by TEXT,
       absorbed_at TEXT,
+      peer TEXT NOT NULL DEFAULT 'user',
       created_at TEXT NOT NULL
     );
 
@@ -884,6 +886,8 @@ export type AgentMemoryRecord = {
   isEncrypted?: boolean;
   /** If true, memory contains detected secrets and is excluded from LLM context */
   sensitive: boolean;
+  /** Peer dimension: "user" (about the human), "agent" (about the environment), "shared" (cross-cutting) */
+  peer?: MemoryPeer;
   completed?: boolean;
   completedAt?: string | null;
   ephemeral?: boolean;
@@ -1975,6 +1979,7 @@ function mapAgentMemoryRow(row: Record<string, unknown>): AgentMemoryRecord {
       ((row.absorbed_by as string | null) ?? null),
     absorbedBy: (row.absorbed_by as string | null) ?? null,
     absorbedAt: (row.absorbed_at as string | null) ?? null,
+    peer: ((row.peer as string | null) ?? "user") as MemoryPeer,
     createdAt: row.created_at as string,
   };
 }
@@ -2688,6 +2693,7 @@ export async function insertAgentMemory(params: {
   namespaceId?: string | null;
   sessionId?: string | null;
   isEncrypted?: boolean;
+  peer?: MemoryPeer;
 }): Promise<AgentMemoryRecord> {
   await ensureInitialized();
   await ensureRateLimiterInitialized();
@@ -2700,6 +2706,7 @@ export async function insertAgentMemory(params: {
   const sourceType = params.sourceType ?? "text";
   const memoryType = params.memoryType ?? "episodic";
   const importanceTier = params.importanceTier ?? "normal";
+  const peer = params.peer ?? "user";
   const entities = params.entities ?? [];
   const entitiesJson = JSON.stringify(entities);
   const sizeBytes = Buffer.byteLength(text, "utf8");
@@ -2718,8 +2725,8 @@ export async function insertAgentMemory(params: {
         INSERT INTO memories (
           id, user_id, title, source_type, memory_type, importance, importance_tier, tags_csv,
           source_url, file_name, content_text, content_iv, content_encrypted, content_hash, sensitive,
-          sync_status, sync_error, created_at, namespace_id, session_id, metadata_json, entities, entities_json
-        ) VALUES (?, ?, ?, ?, ?, 5, ?, '', ?, ?, ?, NULL, ?, ?, ?, 'pending', NULL, ?, ?, ?, ?, ?, ?)
+          sync_status, sync_error, created_at, namespace_id, session_id, metadata_json, entities, entities_json, peer
+        ) VALUES (?, ?, ?, ?, ?, 5, ?, '', ?, ?, ?, NULL, ?, ?, ?, 'pending', NULL, ?, ?, ?, ?, ?, ?, ?)
       `,
       args: [
         id,
@@ -2740,6 +2747,7 @@ export async function insertAgentMemory(params: {
         metadataJson,
         entitiesJson,
         entitiesJson,
+        peer,
       ],
     });
     await tx.commit();
@@ -2768,6 +2776,7 @@ export async function insertAgentMemory(params: {
     accessCount: 0,
     isEncrypted: params.isEncrypted ?? false,
     sensitive: preparedContent.sensitive === 1,
+    peer,
     createdAt: now,
   };
 }
@@ -3261,6 +3270,7 @@ export async function getAgentMemoriesByIds(params: {
   excludeMemoryTypes?: MemoryKind[];
   excludeAbsorbed?: boolean;
   excludeSensitive?: boolean;
+  peer?: MemoryPeer;
 }): Promise<AgentMemoryRecord[]> {
   await ensureInitialized();
   if (params.ids.length === 0) {
@@ -3284,6 +3294,10 @@ export async function getAgentMemoriesByIds(params: {
   if (params.excludeMemoryTypes?.length) {
     args.push(...params.excludeMemoryTypes);
   }
+  const hasPeerFilter = typeof params.peer === "string";
+  if (hasPeerFilter) {
+    args.push(params.peer!);
+  }
   const excludeAbsorbed = params.excludeAbsorbed === true;
   const excludeSensitive = params.excludeSensitive !== false;
 
@@ -3298,7 +3312,7 @@ export async function getAgentMemoriesByIds(params: {
     sql: `
       SELECT id, user_id, title, source_type, memory_type, importance_tier, source_url, file_name, content_text, content_encrypted, metadata_json,
              namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive,
-             completed, completed_at, ephemeral, absorbed, absorbed_into_synthesis_id, absorbed_by, absorbed_at, created_at
+             completed, completed_at, ephemeral, absorbed, absorbed_into_synthesis_id, absorbed_by, absorbed_at, peer, created_at
       FROM memories
       WHERE user_id = ? AND id IN (${placeholders}) AND archived_at IS NULL
       ${excludeAbsorbed ? "AND (absorbed = 0 OR absorbed IS NULL)" : ""}
@@ -3307,6 +3321,7 @@ export async function getAgentMemoriesByIds(params: {
       ${hasSince ? "AND created_at >= ?" : ""}
       ${params.memoryTypes?.length ? `AND memory_type IN (${params.memoryTypes.map(() => "?").join(",")})` : ""}
       ${params.excludeMemoryTypes?.length ? `AND memory_type NOT IN (${params.excludeMemoryTypes.map(() => "?").join(",")})` : ""}
+      ${hasPeerFilter ? "AND peer = ?" : ""}
     `,
     args,
   });

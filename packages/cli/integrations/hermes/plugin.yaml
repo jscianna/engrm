@@ -1,0 +1,9 @@
+name: fathippo
+version: 0.2.1
+description: Cross-agent memory — recall context from any session, any platform. Your agent remembers everything.
+author: FatHippo
+provides:
+  tools: true
+  hooks: true
+requires_env:
+  - FATHIPPO_API_KEY

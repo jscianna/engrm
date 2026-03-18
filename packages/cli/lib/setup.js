@@ -90,8 +90,8 @@ const PLATFORMS = [
     name: 'Hermes Agent',
     detect: () =>
       existsSync(path.join(homedir, '.hermes')) || commandExists('hermes'),
-    configPath: path.join(homedir, '.hermes', 'config.yaml'),
-    format: 'hermes-yaml',
+    configPath: path.join(homedir, '.hermes', 'plugins', 'fathippo'),
+    format: 'hermes-plugin',
   },
   {
     name: 'Qoder',
@@ -242,50 +242,62 @@ function writeToml(configPath, apiKey) {
 }
 
 /**
- * Write fathippo MCP config into Hermes Agent's ~/.hermes/config.yaml.
- * Hermes uses YAML with mcp_servers key. We append/replace the fathippo block.
+ * Install FatHippo as a native Hermes plugin.
+ * Copies Python plugin files to ~/.hermes/plugins/fathippo/
+ * and SKILL.md to ~/.hermes/skills/fathippo/
+ * Also writes the API key to ~/.hermes/.env if not already present.
  */
-function writeHermesYaml(configPath, apiKey) {
-  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+function writeHermesPlugin(pluginDir, apiKey) {
+  // Find our integration files (shipped inside the npm package)
+  const cliRoot = path.resolve(new URL('.', import.meta.url).pathname, '..');
+  const hermesIntegrationDir = path.join(cliRoot, 'integrations', 'hermes');
 
-  const section = [
-    '  fathippo:',
-    '    command: npx',
-    '    args:',
-    '      - "-y"',
-    '      - "@fathippo/mcp-server"',
-    '    env:',
-    `      FATHIPPO_API_KEY: "${apiKey}"`,
-  ].join('\n');
-
-  let content = '';
-  if (fs.existsSync(configPath)) {
-    content = fs.readFileSync(configPath, 'utf-8');
-  }
-
-  // Check if mcp_servers section exists
-  if (/^mcp_servers:/m.test(content)) {
-    // Check if fathippo already exists under mcp_servers
-    if (/^  fathippo:/m.test(content)) {
-      // Replace existing fathippo block (from "  fathippo:" to next "  <name>:" or end of mcp_servers)
-      content = content.replace(
-        /^  fathippo:[\s\S]*?(?=\n  \w|\n[^ \n]|\n*$)/m,
-        section
-      );
-    } else {
-      // Append fathippo to mcp_servers section
-      content = content.replace(
-        /^(mcp_servers:)/m,
-        `$1\n${section}`
-      );
+  // Verify integration files exist
+  const requiredFiles = ['plugin.yaml', '__init__.py', 'schemas.py', 'tools.py', 'skill.md'];
+  for (const file of requiredFiles) {
+    const filePath = path.join(hermesIntegrationDir, file);
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Missing integration file: ${file} (expected at ${filePath})`);
     }
-  } else {
-    // Add mcp_servers section
-    const separator = content.length > 0 && !content.endsWith('\n') ? '\n' : '';
-    content += `${separator}mcp_servers:\n${section}\n`;
   }
 
-  fs.writeFileSync(configPath, content, 'utf-8');
+  // Copy plugin files to ~/.hermes/plugins/fathippo/
+  fs.mkdirSync(pluginDir, { recursive: true });
+  const pluginFiles = ['plugin.yaml', '__init__.py', 'schemas.py', 'tools.py'];
+  for (const file of pluginFiles) {
+    fs.copyFileSync(
+      path.join(hermesIntegrationDir, file),
+      path.join(pluginDir, file)
+    );
+  }
+
+  // Copy skill to ~/.hermes/skills/fathippo/SKILL.md
+  const skillDir = path.join(homedir, '.hermes', 'skills', 'fathippo');
+  fs.mkdirSync(skillDir, { recursive: true });
+  fs.copyFileSync(
+    path.join(hermesIntegrationDir, 'skill.md'),
+    path.join(skillDir, 'SKILL.md')
+  );
+
+  // Write API key to ~/.hermes/.env (append if not already there)
+  const envPath = path.join(homedir, '.hermes', '.env');
+  let envContent = '';
+  if (fs.existsSync(envPath)) {
+    envContent = fs.readFileSync(envPath, 'utf-8');
+  }
+
+  if (envContent.includes('FATHIPPO_API_KEY')) {
+    // Replace existing key
+    envContent = envContent.replace(
+      /^FATHIPPO_API_KEY=.*$/m,
+      `FATHIPPO_API_KEY=${apiKey}`
+    );
+  } else {
+    // Append
+    const separator = envContent.length > 0 && !envContent.endsWith('\n') ? '\n' : '';
+    envContent += `${separator}FATHIPPO_API_KEY=${apiKey}\n`;
+  }
+  fs.writeFileSync(envPath, envContent, 'utf-8');
 }
 
 // ─── Remove helpers ───────────────────────────────────────────────────────────
@@ -317,15 +329,34 @@ function removeZedJson(configPath) {
   return true;
 }
 
-function removeHermesYaml(configPath) {
-  if (!fs.existsSync(configPath)) return false;
-  let content = fs.readFileSync(configPath, 'utf-8');
-  if (!/^  fathippo:/m.test(content)) return false;
-  content = content.replace(/^  fathippo:[\s\S]*?(?=\n  \w|\n[^ \n]|\n*$)/m, '');
-  // Clean up double newlines
-  content = content.replace(/\n{3,}/g, '\n\n');
-  fs.writeFileSync(configPath, content, 'utf-8');
-  return true;
+function removeHermesPlugin(pluginDir) {
+  let removed = false;
+
+  // Remove plugin directory
+  if (fs.existsSync(pluginDir)) {
+    fs.rmSync(pluginDir, { recursive: true, force: true });
+    removed = true;
+  }
+
+  // Remove skill directory
+  const skillDir = path.join(homedir, '.hermes', 'skills', 'fathippo');
+  if (fs.existsSync(skillDir)) {
+    fs.rmSync(skillDir, { recursive: true, force: true });
+    removed = true;
+  }
+
+  // Remove API key from .env (leave other keys intact)
+  const envPath = path.join(homedir, '.hermes', '.env');
+  if (fs.existsSync(envPath)) {
+    let envContent = fs.readFileSync(envPath, 'utf-8');
+    if (envContent.includes('FATHIPPO_API_KEY')) {
+      envContent = envContent.replace(/^FATHIPPO_API_KEY=.*\n?/m, '');
+      fs.writeFileSync(envPath, envContent, 'utf-8');
+      removed = true;
+    }
+  }
+
+  return removed;
 }
 
 function removeToml(configPath) {
@@ -368,9 +399,9 @@ function isPlatformConfigured(platform) {
         const content = fs.readFileSync(platform.configPath, 'utf-8');
         return /\[mcp\.fathippo\]/.test(content);
       }
-      case 'hermes-yaml': {
-        const yamlContent = fs.readFileSync(platform.configPath, 'utf-8');
-        return /^\s+fathippo:/m.test(yamlContent);
+      case 'hermes-plugin': {
+        // Check if plugin files exist
+        return fs.existsSync(path.join(platform.configPath, 'plugin.yaml'));
       }
       default:
         return false;
@@ -618,7 +649,8 @@ async function showStatus() {
     }
     const configured = isPlatformConfigured(platform);
     if (configured) {
-      console.log(chalk.green(`  ✔ ${platform.name} — configured (MCP)`));
+      const method = platform.format === 'hermes-plugin' ? 'native plugin' : 'MCP';
+      console.log(chalk.green(`  ✔ ${platform.name} — configured (${method})`));
     } else {
       console.log(chalk.yellow(`  ○ ${platform.name} — detected, not configured`));
     }
@@ -665,8 +697,8 @@ function removeFromAll(platformFilter) {
         case 'toml':
           ok = removeToml(platform.configPath);
           break;
-        case 'hermes-yaml':
-          ok = removeHermesYaml(platform.configPath);
+        case 'hermes-plugin':
+          ok = removeHermesPlugin(platform.configPath);
           break;
       }
       if (ok) {
@@ -801,13 +833,14 @@ export async function setup(options) {
         case 'toml':
           writeToml(platform.configPath, apiKey);
           break;
-        case 'hermes-yaml':
-          writeHermesYaml(platform.configPath, apiKey);
+        case 'hermes-plugin':
+          writeHermesPlugin(platform.configPath, apiKey);
           break;
         default:
           throw new Error(`Unknown format: ${platform.format}`);
       }
-      console.log(chalk.green(`  ✔ ${platform.name} → ${configPathDisplay} (configured)`));
+      const setupMethod = platform.format === 'hermes-plugin' ? 'native plugin + skill' : 'MCP';
+      console.log(chalk.green(`  ✔ ${platform.name} → ${configPathDisplay} (${setupMethod})`));
       configured.push(platform.name);
       results.push({ platform, detected: true, configured: true });
     } catch (err) {
