@@ -80,14 +80,7 @@ function getMasterKey(): Buffer {
  */
 function deriveUserKey(userId: string): Buffer {
   const master = getMasterKey();
-  // Use HKDF for proper domain-separated key derivation
   return Buffer.from(crypto.hkdfSync("sha256", master, Buffer.alloc(0), `fathippo:memory:${userId}`, 32));
-}
-
-/** Legacy key derivation for decrypting pre-HKDF memories */
-function deriveUserKeyLegacy(userId: string): Buffer {
-  const master = getMasterKey();
-  return crypto.createHash("sha256").update(Buffer.concat([master, Buffer.from(userId, "utf8")])).digest();
 }
 
 /**
@@ -105,19 +98,11 @@ function encryptMemoryContent(plaintext: string, userId: string): string {
  * Expects the encrypted content as a JSON string containing ciphertext and iv.
  */
 export function decryptMemoryContent(encryptedJson: string, userId: string): string {
-  // Key config errors (missing/invalid ENCRYPTION_KEY) propagate as-is
   const key = deriveUserKey(userId);
 
   try {
     const payload = JSON.parse(encryptedJson) as { ciphertext: string; iv: string };
-    try {
-      // Try HKDF-derived key first (new memories)
-      return decryptAesGcm(payload, key).toString("utf8");
-    } catch {
-      // Fallback to legacy SHA-256 key for pre-migration memories
-      const legacy_key = deriveUserKeyLegacy(userId);
-      return decryptAesGcm(payload, legacy_key).toString("utf8");
-    }
+    return decryptAesGcm(payload, key).toString("utf8");
   } catch (error) {
     console.error("[DB] Failed to decrypt memory content:", error);
     throw new Error("Failed to decrypt memory content.");
@@ -1933,7 +1918,7 @@ function mapSynthesizedMemoryRow(row: Record<string, unknown>): SynthesizedMemor
     createdAt: row.created_at as string,
     abstractionLevel: Number(row.abstraction_level ?? 1),
     synthesisQualityScore: row.synthesis_quality_score === null ? undefined : Number(row.synthesis_quality_score),
-    synthesisMetadata: row.synthesis_metadata ? parseJsonObject(row.synthesis_metadata as string) : undefined,
+    synthesisMetadata: row.synthesis_metadata ? (parseJsonObject(row.synthesis_metadata as string) ?? undefined) : undefined,
   };
 }
 
