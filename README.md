@@ -339,6 +339,9 @@ docs/                   Product, API, operations, and rollout docs
 - OpenClaw guide page: [src/app/docs/guides/openclaw/page.tsx](src/app/docs/guides/openclaw/page.tsx)
 - Package examples: [examples/README.md](examples/README.md)
 - Production launch runbook: [docs/PRODUCTION-LAUNCH-RUNBOOK.md](docs/PRODUCTION-LAUNCH-RUNBOOK.md)
+- Incident runbook (decryption failures): [docs/runbooks/decryption-failures.md](docs/runbooks/decryption-failures.md)
+- Incident runbook (schema drift): [docs/runbooks/schema-drift.md](docs/runbooks/schema-drift.md)
+- Incident runbook (env parity): [docs/runbooks/env-parity.md](docs/runbooks/env-parity.md)
 - Cognitive strategy: [docs/COGNITIVE-SUBSTRATE-STRATEGY.md](docs/COGNITIVE-SUBSTRATE-STRATEGY.md)
 
 ---
