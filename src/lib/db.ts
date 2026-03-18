@@ -441,6 +441,10 @@ async function ensureMemoriesIndexes(client: Client): Promise<void> {
     ON memories(user_id, access_count DESC)
   `);
   await client.execute(`
+    CREATE INDEX IF NOT EXISTS idx_memories_user_peer
+    ON memories(user_id, peer)
+  `);
+  await client.execute(`
     DROP INDEX IF EXISTS idx_memories_user_embedding_hash
   `);
   await client.execute(`
@@ -472,6 +476,7 @@ async function ensureMemoriesColumns(client: Client): Promise<void> {
     { name: "namespace_id", ddl: "TEXT" },
     { name: "session_id", ddl: "TEXT" },
     { name: "metadata_json", ddl: "TEXT" },
+    { name: "peer", ddl: "TEXT NOT NULL DEFAULT 'user'" },
     // Reinforcement & decay columns
     { name: "strength", ddl: "REAL DEFAULT 1.0" },
     { name: "base_strength", ddl: "REAL DEFAULT 1.0" },
