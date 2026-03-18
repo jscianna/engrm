@@ -113,6 +113,19 @@ function hashMemoryContent(content: string): string {
   return crypto.createHash("sha256").update(content, "utf8").digest("hex");
 }
 
+/**
+ * Safely decrypt memory content. Returns fallback text on failure instead of throwing,
+ * so one bad memory doesn't crash the entire listing.
+ */
+function safeDecrypt(encryptedJson: string, userId: string, memoryId?: string): string {
+  try {
+    return decryptMemoryContent(encryptedJson, userId);
+  } catch (e) {
+    console.error(`[DB] Decrypt failed for memory ${memoryId ?? "unknown"}:`, e);
+    return "[encrypted — unable to decrypt]";
+  }
+}
+
 function looksLikeOpaqueEncryptedPayload(content: string): boolean {
   try {
     const parsed = JSON.parse(content) as { ciphertext?: unknown; iv?: unknown };
@@ -927,7 +940,7 @@ function mapRow(row: Record<string, unknown>): MemoryRecord {
   const userId = row.user_id as string;
   const storedText = row.content_text as string;
   const storageEncrypted = Number(row.content_encrypted ?? 0) === 1;
-  const decryptedText = storageEncrypted ? decryptMemoryContent(storedText, userId) : storedText;
+  const decryptedText = storageEncrypted ? safeDecrypt(storedText, userId, row.id as string) : storedText;
   
   return {
     id: row.id as string,
@@ -1051,7 +1064,7 @@ export async function listMemoriesByUser(userId: string, limit = 100): Promise<M
   return result.rows.map((row) => {
     const storedText = row.content_text as string;
     const storageEncrypted = Number(row.content_encrypted ?? 0) === 1;
-    const decryptedText = storageEncrypted ? decryptMemoryContent(storedText, userId) : storedText;
+    const decryptedText = storageEncrypted ? safeDecrypt(storedText, userId, row.id as string) : storedText;
 
     return {
       id: row.id as string,
@@ -1156,7 +1169,7 @@ export async function getMemoriesByIds(userId: string, ids: string[]): Promise<M
   return result.rows.map((row) => {
     const storedText = row.content_text as string;
     const storageEncrypted = Number(row.content_encrypted ?? 0) === 1;
-    const decryptedText = storageEncrypted ? decryptMemoryContent(storedText, userId) : storedText;
+    const decryptedText = storageEncrypted ? safeDecrypt(storedText, userId, row.id as string) : storedText;
 
     return {
       id: row.id as string,
@@ -1895,7 +1908,7 @@ function mapSynthesizedMemoryRow(row: Record<string, unknown>): SynthesizedMemor
     id: row.id as string,
     userId,
     synthesis: looksLikeOpaqueEncryptedPayload(storedSynthesis)
-      ? decryptMemoryContent(storedSynthesis, userId)
+      ? safeDecrypt(storedSynthesis, userId, row.id as string)
       : storedSynthesis,
     title: row.title as string,
     sourceMemoryIds: parseJsonStringArray(row.source_memory_ids),
@@ -1953,7 +1966,7 @@ function mapAgentMemoryRow(row: Record<string, unknown>): AgentMemoryRecord {
   const userId = row.user_id as string;
   const storedText = row.content_text as string;
   const storageEncrypted = Number(row.content_encrypted ?? 0) === 1;
-  const decryptedText = storageEncrypted ? decryptMemoryContent(storedText, userId) : storedText;
+  const decryptedText = storageEncrypted ? safeDecrypt(storedText, userId, row.id as string) : storedText;
   
   return {
     id: row.id as string,
