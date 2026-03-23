@@ -12,8 +12,8 @@ import { FatHippoError } from "./errors";
 
 // Beta limits - generous but protective
 export const LIMITS = {
-  REQUESTS_PER_MINUTE: 60,
-  REQUESTS_PER_DAY: 1_000,
+  REQUESTS_PER_MINUTE: 300,
+  REQUESTS_PER_DAY: 20_000,
   MEMORIES_TOTAL: 5_000,
   STORAGE_BYTES: 100 * 1024 * 1024, // 100MB
 } as const;
