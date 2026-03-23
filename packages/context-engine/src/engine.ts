@@ -60,7 +60,7 @@ import {
 } from "./utils/formatting.js";
 import {
   detectPromptInjection,
-  matchesCapturePatterns,
+  isHighSignalMemory,
   sanitizeContent,
 } from "./utils/filtering.js";
 import type { CodebaseProfile } from "./profiler/types.js";
@@ -1515,10 +1515,6 @@ export class FatHippoContextEngine implements ContextEngine {
     this.sessionLocalProfiles.set(params.sessionId, profileId);
 
     const candidates = new Set<string>();
-    const durablePattern =
-      /\b(decide|decided|decision|prefer|preference|always|never|must|remember|rule|workflow|process|plan|configured|set to|resolved|fixed|installed|created|updated)\b/i;
-    const toolPattern =
-      /\b(namespace|workspace|project|plugin|database|schema|endpoint|config|mode|version)\b/i;
 
     for (const message of params.messages) {
       if (this.config.captureUserOnly === true && message.role !== "user") {
@@ -1531,18 +1527,20 @@ export class FatHippoContextEngine implements ContextEngine {
         .filter(Boolean);
 
       for (const segment of segments) {
-        if (!segment || detectPromptInjection(segment) || !matchesCapturePatterns(segment)) {
+        if (!segment || detectPromptInjection(segment) || !isHighSignalMemory(segment)) {
           continue;
         }
 
+        // Never store raw tool/system output as memory.
+        if (message.role !== "user" && message.role !== "assistant") {
+          continue;
+        }
+
+        // Assistant memories must be explicit durable statements.
         if (
-          message.role === "tool" &&
-          !(durablePattern.test(segment) && toolPattern.test(segment))
+          message.role === "assistant" &&
+          !/\b(remember this|don't forget|we decided|i decided|we chose|root cause|resolved by|fix was)\b/i.test(segment)
         ) {
-          continue;
-        }
-
-        if (message.role === "assistant" && !durablePattern.test(segment)) {
           continue;
         }
 

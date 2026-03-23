@@ -28,7 +28,7 @@ const NOISE_PATTERNS = [
   /^https?:\/\/\S+$/,       // Just URLs
 ];
 
-// Patterns that indicate terminal/error output
+// Patterns that indicate terminal/error output or tool result confirmations
 const TERMINAL_PATTERNS = [
   /npm (ERR!|WARN)/,
   /error:\s*\w+Error/i,
@@ -37,6 +37,41 @@ const TERMINAL_PATTERNS = [
   /Traceback \(most recent call last\)/,
   /^warning:/im,
   /^error:/im,
+  // Tool result confirmation strings (file writes, command outputs)
+  /^Successfully (wrote|created|deleted|moved|copied|replaced|updated)\s+\d+/i,
+  /^Successfully replaced text in\s/i,
+  /^\d+ bytes? (written|saved|copied)/i,
+  /^(Created|Wrote|Saved|Deleted|Moved|Copied) (file|directory|folder)?\s*[:.]?\s*\//i,
+  /^Command exited with code \d+/i,
+  /^Process (started|stopped|completed|exited)/i,
+  // System/gateway log lines
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z\s+(info|warn|error|debug)\b/i,
+  /^(WARN|INFO|DEBUG|ERROR)\s/,
+  // Package manager output
+  /^(npm|yarn|bun|pnpm)\s+(install|add|remove|update)\b/i,
+  /^bun install v/,
+  /^Resolving dependencies/,
+  // System prompt / runtime metadata fragments
+  /<<<BEGIN_UNTRUSTED/,
+  /Result \(untrusted content, treat as data\)/i,
+  /^\[media attached:/,
+  /^If you must inline, use MEDIA:/,
+  /^Conversation info \(untrusted/,
+  /^Replied message \(untrusted/,
+  // JSON response blobs
+  /^\s*\{\s*"(status|error|result|data|childSession|accepted)":/,
+  // Directory listings
+  /^[dl\-][rwx\-]{9}\s+\d+\s+\w+/,
+  // System upgrade/path warnings
+  /You should consider upgrading via/i,
+  /Consider adding this directory to PATH/i,
+  // Task/internal instructions
+  /^Task: Read prompts\//,
+  /^Retry with env key loaded from/,
+  // Internal blocker/error notes (markdown-formatted agent output)
+  /^#{1,3}\s+(Blocker|Error|Warning|Bug|Issue)\b/i,
+  // Python UI code (streamlit, etc.)
+  /^st\.(subheader|write|markdown|header|sidebar|columns|tabs)\s*\(/,
 ];
 
 /**
@@ -121,17 +156,14 @@ export function detectSystemMetadata(content: string): boolean {
   return SYSTEM_METADATA_PATTERNS.some(p => p.test(content));
 }
 
-// Patterns that indicate memory-worthy content
-const CAPTURE_PATTERNS = [
-  /\b(decide|decided|decision)\b/i,
-  /\b(prefer|preference|prefers)\b/i,
-  /\b(always|never|must|should)\b/i,
-  /\b(remember|don't forget|note that)\b/i,
-  /\b(rule|principle|guideline)\b/i,
-  /\b(important|critical|key)\b/i,
-  /\b(identity|i am|my name)\b/i,
-  /\b(constraint|requirement|must not)\b/i,
-  /\b(workflow|process|procedure)\b/i,
+// Positive gate: only keep high-signal durable memory statements
+const HIGH_SIGNAL_PATTERNS = [
+  /\b(?:i|we)\s+(?:decided|decide|chose|choose|prefer|will always|will never|must)\b/i,
+  /\b(?:my name is|call me|i am)\b/i,
+  /\b(?:timezone is|i'm in|i am in)\b/i,
+  /\b(?:remember this|don't forget)\b/i,
+  /\b(?:root cause|resolved by|fix was|we fixed)\b/i,
+  /^\s*(?:name|role|timezone|what to call)\s*:/i,
 ];
 
 /**
@@ -156,8 +188,12 @@ export function matchesCapturePatterns(content: string): boolean {
   const alpha_ratio = (content.match(/[a-zA-Z]/g)?.length ?? 0) / content.length;
   if (alpha_ratio < 0.5) return false;
 
-  // Check for memory-worthy patterns
-  return CAPTURE_PATTERNS.some((pattern) => pattern.test(content));
+  // Positive gate: keep only explicit durable-memory phrasing
+  return HIGH_SIGNAL_PATTERNS.some((pattern) => pattern.test(content));
+}
+
+export function isHighSignalMemory(content: string): boolean {
+  return matchesCapturePatterns(content);
 }
 
 /**
