@@ -61,9 +61,13 @@ const TERMINAL_PATTERNS = [
   // CSS/HTML fragments and page head artifacts
   /\.changing-theme,\s*\.changing-theme\s*\*/i,
   /data-next-head=/i,
+  /^\[media attached:/i,
+  /\/Users\/clawdaddy\/\.openclaw\//i,
   // Secret request / workflow snippet artifacts
   /can you send me the full c52 api key/i,
-  /workflow files use secrets\.X directly/i,
+  /workflow files use `?secrets\.X`? directly/i,
+  /^Add:\s*-\s*`?ENCRYPTION_KEY`?/i,
+  /actions\/setup-node@v4/i,
   // JSON response blobs
   /^\s*\{\s*"(status|error|result|data|childSession|accepted)":/,
   // Directory listings
