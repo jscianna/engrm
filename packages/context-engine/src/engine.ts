@@ -59,8 +59,7 @@ import {
   estimateTokens,
 } from "./utils/formatting.js";
 import {
-  detectPromptInjection,
-  isHighSignalMemory,
+  evaluateMemoryCandidate,
   sanitizeContent,
 } from "./utils/filtering.js";
 import type { CodebaseProfile } from "./profiler/types.js";
@@ -150,7 +149,11 @@ export class FatHippoContextEngine implements ContextEngine {
   private static readonly HIPPO_NOD_MIN_MESSAGE_GAP = 6;
 
   constructor(config: FatHippoConfig) {
-    this.config = config;
+    this.config = {
+      ...config,
+      // Default to user-only memory capture unless explicitly disabled.
+      captureUserOnly: config.captureUserOnly ?? true,
+    };
     this.mode = config.mode === "local" || (!config.apiKey && config.mode !== "hosted") ? "local" : "hosted";
     if (this.mode === "hosted" && !config.apiKey) {
       throw new Error(
@@ -367,7 +370,7 @@ export class FatHippoContextEngine implements ContextEngine {
         sessionId: hostedSessionId,
         messages: turnMessages,
         memoriesUsed: [],
-        captureUserOnly: this.config.captureUserOnly === true,
+        captureUserOnly: this.config.captureUserOnly !== false,
         captureConstraints: this.cognitiveEnabled,
         captureTrace: this.cognitiveEnabled,
         runtime: this.buildHostedRuntimeMetadata({
@@ -1517,7 +1520,7 @@ export class FatHippoContextEngine implements ContextEngine {
     const candidates = new Set<string>();
 
     for (const message of params.messages) {
-      if (this.config.captureUserOnly === true && message.role !== "user") {
+      if (this.config.captureUserOnly !== false && message.role !== "user") {
         continue;
       }
 
@@ -1527,7 +1530,7 @@ export class FatHippoContextEngine implements ContextEngine {
         .filter(Boolean);
 
       for (const segment of segments) {
-        if (!segment || detectPromptInjection(segment) || !isHighSignalMemory(segment)) {
+        if (!segment) {
           continue;
         }
 
@@ -1536,11 +1539,8 @@ export class FatHippoContextEngine implements ContextEngine {
           continue;
         }
 
-        // Assistant memories must be explicit durable statements.
-        if (
-          message.role === "assistant" &&
-          !/\b(remember this|don't forget|we decided|i decided|we chose|root cause|resolved by|fix was)\b/i.test(segment)
-        ) {
+        const decision = evaluateMemoryCandidate(segment, message.role);
+        if (!decision.keep) {
           continue;
         }
 

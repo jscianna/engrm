@@ -182,6 +182,27 @@ const HIGH_SIGNAL_PATTERNS = [
   /^\s*(?:name|role|timezone|what to call)\s*:/i,
 ];
 
+const DURABLE_DECLARATIVE_PATTERNS = [
+  /\b(?:i|we)\s+(?:prefer|decided|choose|chose|must|always|never)\b/i,
+  /\b(?:the rule is|policy is|default is|standard is)\b/i,
+  /\b(?:my|our)\s+(?:timezone|name|role|workflow)\b/i,
+  /\b(?:this should be remembered|durable preference|long-term preference)\b/i,
+];
+
+export type MemoryCaptureDecision = {
+  keep: boolean;
+  score: number;
+  reason:
+    | "denylist"
+    | "noise"
+    | "code"
+    | "metadata"
+    | "json"
+    | "low_signal"
+    | "assistant_not_explicit"
+    | "accepted";
+};
+
 /**
  * Check if content matches capture patterns
  */
@@ -210,6 +231,45 @@ export function matchesCapturePatterns(content: string): boolean {
 
 export function isHighSignalMemory(content: string): boolean {
   return matchesCapturePatterns(content);
+}
+
+export function evaluateMemoryCandidate(
+  content: string,
+  role: "user" | "assistant" | "tool" | "system" | string,
+): MemoryCaptureDecision {
+  if (detectNoise(content) || content.length < 20) {
+    return { keep: false, score: 0, reason: "noise" };
+  }
+  if (detectTerminalOutput(content) || detectPromptInjection(content)) {
+    return { keep: false, score: 0, reason: "denylist" };
+  }
+  if (detectCodeSnippet(content)) {
+    return { keep: false, score: 0, reason: "code" };
+  }
+  if (detectSystemMetadata(content)) {
+    return { keep: false, score: 0, reason: "metadata" };
+  }
+  if (/^\s*[\[{]/.test(content) && /[\]}]\s*$/.test(content)) {
+    return { keep: false, score: 0, reason: "json" };
+  }
+
+  const explicitHighSignal = HIGH_SIGNAL_PATTERNS.some((pattern) => pattern.test(content));
+  const declarativeSignal = DURABLE_DECLARATIVE_PATTERNS.some((pattern) => pattern.test(content));
+  const alpha_ratio = (content.match(/[a-zA-Z]/g)?.length ?? 0) / Math.max(content.length, 1);
+  const score = (explicitHighSignal ? 0.7 : 0) + (declarativeSignal ? 0.3 : 0) + (alpha_ratio > 0.6 ? 0.1 : 0);
+
+  if (!explicitHighSignal && !declarativeSignal) {
+    return { keep: false, score, reason: "low_signal" };
+  }
+
+  if (
+    role === "assistant" &&
+    !/\b(remember this|don't forget|we decided|i decided|we chose|root cause|resolved by|fix was|policy is|rule is)\b/i.test(content)
+  ) {
+    return { keep: false, score, reason: "assistant_not_explicit" };
+  }
+
+  return { keep: true, score, reason: "accepted" };
 }
 
 /**
