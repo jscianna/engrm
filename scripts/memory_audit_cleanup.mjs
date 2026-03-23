@@ -45,16 +45,35 @@ function isKeepSignal(text) {
   return KEEP_SIGNAL.some((re) => re.test(text));
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function listMemoriesPage(before) {
   const qs = new URLSearchParams({ limit: "200" });
   if (before) qs.set("before", before);
-  const res = await fetch(`${BASE}?${qs.toString()}`, { headers: { Authorization: `Bearer ${API_KEY}` } });
-  if (!res.ok) throw new Error(`list failed ${res.status}`);
-  const body = await res.json();
-  return {
-    memories: body.memories || [],
-    pagination: body.pagination || null,
-  };
+
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const res = await fetch(`${BASE}?${qs.toString()}`, { headers: { Authorization: `Bearer ${API_KEY}` } });
+    if (res.ok) {
+      const body = await res.json();
+      return {
+        memories: body.memories || [],
+        pagination: body.pagination || null,
+      };
+    }
+
+    if (res.status === 429) {
+      const retryAfter = Number(res.headers.get("retry-after") || "0");
+      const waitMs = retryAfter > 0 ? retryAfter * 1000 : Math.min(30000, 1000 * 2 ** attempt);
+      await sleep(waitMs);
+      continue;
+    }
+
+    throw new Error(`list failed ${res.status}`);
+  }
+
+  throw new Error("list failed 429 after retries");
 }
 
 async function listAllMemories() {
@@ -65,6 +84,7 @@ async function listAllMemories() {
     const { memories, pagination } = await listMemoriesPage(before);
     if (memories.length === 0) break;
     all.push(...memories);
+    await sleep(120);
 
     const nextBefore = pagination?.nextBefore;
     const hasMore = Boolean(pagination?.hasMore);
@@ -114,6 +134,7 @@ async function deleteMemory(id) {
     for (const d of drops) {
       const ok = await deleteMemory(d.id);
       if (ok) total_deleted += 1;
+      await sleep(90);
     }
   }
 
