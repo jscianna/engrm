@@ -37,6 +37,7 @@ export async function GET(request: Request) {
     );
     const limit = normalizeLimit(url.searchParams.get("limit"), 50, 200);
     const since = normalizeIsoTimestamp(url.searchParams.get("since"), "since");
+    const before = normalizeIsoTimestamp(url.searchParams.get("before"), "before");
 
     const resolved = await resolveNamespaceIdOrError(
       identity.userId,
@@ -51,10 +52,14 @@ export async function GET(request: Request) {
       namespaceId: resolved.namespaceId,
       limit,
       since,
+      before,
       excludeSensitive: true,
     });
 
-    return Response.json({ memories });
+    const nextBefore = memories.length > 0 ? memories[memories.length - 1]?.createdAt ?? null : null;
+    const hasMore = memories.length === limit;
+
+    return Response.json({ memories, pagination: { nextBefore, hasMore, limit } });
   } catch (error) {
     return errorResponse(error);
   }

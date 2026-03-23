@@ -9,6 +9,7 @@ if (!API_KEY) {
 const BASE = "https://fathippo.ai/api/v1/memories";
 const APPLY = process.argv.includes("--apply");
 const MAX_ROUNDS = Number(process.env.MAX_ROUNDS || 30);
+const MAX_PAGES = Number(process.env.MAX_PAGES || 500);
 
 const DROP_BUCKETS = [
   { name: "json_blob", re: /^\s*[\[{]/ },
@@ -44,11 +45,35 @@ function isKeepSignal(text) {
   return KEEP_SIGNAL.some((re) => re.test(text));
 }
 
-async function listMemories() {
-  const res = await fetch(`${BASE}?limit=200`, { headers: { Authorization: `Bearer ${API_KEY}` } });
+async function listMemoriesPage(before) {
+  const qs = new URLSearchParams({ limit: "200" });
+  if (before) qs.set("before", before);
+  const res = await fetch(`${BASE}?${qs.toString()}`, { headers: { Authorization: `Bearer ${API_KEY}` } });
   if (!res.ok) throw new Error(`list failed ${res.status}`);
   const body = await res.json();
-  return body.memories || [];
+  return {
+    memories: body.memories || [],
+    pagination: body.pagination || null,
+  };
+}
+
+async function listAllMemories() {
+  const all = [];
+  let before = undefined;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const { memories, pagination } = await listMemoriesPage(before);
+    if (memories.length === 0) break;
+    all.push(...memories);
+
+    const nextBefore = pagination?.nextBefore;
+    const hasMore = Boolean(pagination?.hasMore);
+
+    if (!nextBefore || !hasMore) break;
+    before = nextBefore;
+  }
+
+  return all;
 }
 
 async function deleteMemory(id) {
@@ -63,7 +88,7 @@ async function deleteMemory(id) {
 
   while (round < MAX_ROUNDS) {
     round += 1;
-    const memories = await listMemories();
+    const memories = await listAllMemories();
     const drops = [];
     const keeps = [];
     const bucket_counts = {};

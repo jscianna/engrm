@@ -1762,7 +1762,7 @@ export async function getVaultEntryById(userId: string, id: string): Promise<Vau
 
   return {
     ...mapVaultListItemRow(row),
-    value: decryptMemoryContent(row.value_encrypted as string, userId),
+    value: safeDecrypt(row.value_encrypted as string, userId, row.id as string),
   };
 }
 
@@ -2810,6 +2810,7 @@ export async function listAgentMemories(params: {
   sessionId?: string | null;
   limit?: number;
   since?: string;
+  before?: string;
   memoryTypes?: MemoryKind[];
   excludeMemoryTypes?: MemoryKind[];
   excludeSensitive?: boolean;
@@ -2819,6 +2820,7 @@ export async function listAgentMemories(params: {
   const hasNamespaceFilter = typeof params.namespaceId !== "undefined";
   const hasSessionFilter = typeof params.sessionId !== "undefined";
   const hasSince = typeof params.since === "string" && params.since.length > 0;
+  const hasBefore = typeof params.before === "string" && params.before.length > 0;
   const excludeSensitive = params.excludeSensitive !== false;
   const limit = Math.max(1, Math.min(params.limit ?? 50, 200));
   const args: Array<string | number | null> = [params.userId];
@@ -2835,6 +2837,10 @@ export async function listAgentMemories(params: {
   if (hasSince) {
     where += " AND created_at >= ?";
     args.push(params.since as string);
+  }
+  if (hasBefore) {
+    where += " AND created_at < ?";
+    args.push(params.before as string);
   }
   if (params.memoryTypes?.length) {
     where += ` AND memory_type IN (${params.memoryTypes.map(() => "?").join(",")})`;
