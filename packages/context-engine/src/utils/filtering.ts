@@ -58,6 +58,12 @@ const TERMINAL_PATTERNS = [
   /^If you must inline, use MEDIA:/,
   /^Conversation info \(untrusted/,
   /^Replied message \(untrusted/,
+  // CSS/HTML fragments and page head artifacts
+  /\.changing-theme,\s*\.changing-theme\s*\*/i,
+  /data-next-head=/i,
+  // Secret request / workflow snippet artifacts
+  /can you send me the full c52 api key/i,
+  /workflow files use secrets\.X directly/i,
   // JSON response blobs
   /^\s*\{\s*"(status|error|result|data|childSession|accepted)":/,
   // Directory listings
