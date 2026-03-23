@@ -2827,8 +2827,12 @@ export async function listAgentMemories(params: {
   let where = "WHERE user_id = ? AND archived_at IS NULL";
 
   if (hasNamespaceFilter) {
-    where += " AND namespace_id = ?";
-    args.push(params.namespaceId ?? null);
+    if (params.namespaceId === null) {
+      where += " AND namespace_id IS NULL";
+    } else {
+      where += " AND namespace_id = ?";
+      args.push(params.namespaceId ?? null);
+    }
   }
   if (hasSessionFilter) {
     where += " AND session_id = ?";
@@ -2887,8 +2891,12 @@ export async function listConsolidatedMemories(params: {
   `;
 
   if (hasNamespaceFilter) {
-    where += " AND namespace_id = ?";
-    args.push(params.namespaceId ?? null);
+    if (params.namespaceId === null) {
+      where += " AND namespace_id IS NULL";
+    } else {
+      where += " AND namespace_id = ?";
+      args.push(params.namespaceId ?? null);
+    }
   }
   args.push(limit);
 
