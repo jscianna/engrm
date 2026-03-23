@@ -68,6 +68,12 @@ const TERMINAL_PATTERNS = [
   /workflow files use `?secrets\.X`? directly/i,
   /^Add:\s*-\s*`?ENCRYPTION_KEY`?/i,
   /actions\/setup-node@v4/i,
+  /Prefer plugin-local binary, not global PATH/i,
+  /ACPX install and version policy/i,
+  /First attempt automatic local repair/i,
+  /Set `agentId` explicitly unless ACP default agent is known/i,
+  /Use `sessions_spawn` with:\s*-\s*`runtime:\s*"acp"`/i,
+  /\*\*Lethe\*\* \| Greek mythology/i,
   // JSON response blobs
   /^\s*\{\s*"(status|error|result|data|childSession|accepted)":/,
   // Directory listings
