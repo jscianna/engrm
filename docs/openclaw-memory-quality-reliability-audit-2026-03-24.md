@@ -249,6 +249,44 @@ Script should:
 - Sync/import routes write directly and may never enter auto-consolidation path.
 - Therefore consolidation coverage is branch-specific and incomplete.
 
+## G7. Production reality check (operator-focused)
+
+Current behavior in production can look "healthy" at API level while consolidation/synthesis is effectively degraded:
+
+1. write endpoints return success while low-signal payloads still enter via bypass paths,
+2. embeddings can fail auth and silently degrade to weak recall paths,
+3. synthesis can be stale if dream-cycle cadence is not enforced and monitored.
+
+**Operator requirement:** add an explicit daily status panel that must show green for:
+- consolidation runs in the last 24h,
+- synthesis refreshes in the last 24h,
+- embedding auth failures in the last 24h = 0,
+- deny/accept ratio within expected bounds (not near 0% or 100% denies).
+
+## G8. Consolidation failure modes (expanded)
+
+Beyond the top-10 global failures, consolidation-specific failures to track continuously:
+
+- **No-trigger writes:** memory inserted from route/path that does not enqueue consolidation.
+- **Trigger-without-commit:** consolidation starts but does not persist syntheses/edges.
+- **Partial absorb:** source memory flagged absorbed but synthesis write failed.
+- **Stale synthesis leakage:** stale syntheses still injected into context.
+- **Over-consolidation:** unrelated memories collapsed into one synthesis due to broad clustering.
+- **Under-consolidation:** obvious duplicates survive because normalization similarity is too strict.
+
+## G9. Minimal watchdog spec (what to implement)
+
+Create a persistent `consolidation_runs` heartbeat (or equivalent) with:
+- `run_id`, `started_at`, `finished_at`, `status`,
+- `processed_memories`, `created_syntheses`, `updated_syntheses`, `failed_items`,
+- `error_summary` (nullable),
+- `trigger_source` (`manual`, `scheduled`, `post_write`).
+
+Alert when:
+- no successful run in >24h,
+- failure rate >5% over last 20 runs,
+- stale synthesis count trends upward 3 runs in a row.
+
 ---
 
 ## Required output 3: Ten real failure modes + detection
