@@ -21,6 +21,8 @@ import {
   resolveNamespaceIdOrError,
 } from "@/lib/api-v1";
 import type { MemoryKind } from "@/lib/types";
+import { assessMemoryWriteQuality } from "@/lib/turn-capture";
+import { assertClientWritableMemoryType } from "@/lib/memory-write-policy";
 
 // Similarity threshold for consolidation suggestion
 const CONSOLIDATION_THRESHOLD = 0.85;
@@ -142,6 +144,21 @@ export async function POST(request: Request) {
 
     // Plaintext path: extract entities, classify type, embed, store
     const contentText = plaintextContent as string;
+    const quality = assessMemoryWriteQuality(contentText);
+    if (!quality.allow) {
+      return Response.json(
+        {
+          stored: false,
+          reason_code: quality.reasonCode,
+          policy_code: quality.policyCode,
+          matched_rules: quality.matchedRules,
+          quality_signals: quality.signals,
+          warning: quality.warning,
+        },
+        { status: 200 },
+      );
+    }
+
     const titleForStorage = typeof body.title === "string" ? body.title : contentText.slice(0, 60);
     
     // Extract entities from content
@@ -154,9 +171,15 @@ export async function POST(request: Request) {
 
     // Classify memory type based on title and content
     // Allow explicit override via body.memoryType
+    const requestedMemoryType =
+      typeof body.memoryType === "string" && body.memoryType.trim()
+        ? body.memoryType.trim()
+        : undefined;
+    assertClientWritableMemoryType(requestedMemoryType);
+
     let memoryType: MemoryKind;
-    if (typeof body.memoryType === "string" && body.memoryType) {
-      memoryType = body.memoryType as MemoryKind;
+    if (requestedMemoryType) {
+      memoryType = requestedMemoryType as MemoryKind;
     } else {
       memoryType = classifyMemoryType(titleForStorage, contentText);
     }
@@ -200,6 +223,8 @@ export async function POST(request: Request) {
             excludeSensitive: true,
           });
 
+          const similarityById = new Map(similarHits.map((hit) => [hit.item.id, hit.score]));
+
           // Return consolidation suggestion instead of creating
           return Response.json({
             status: "consolidation_suggested",
@@ -210,11 +235,11 @@ export async function POST(request: Request) {
               importanceTier,
               entities,
             },
-            similarMemories: similarMemories.map((m, idx) => ({
+            similarMemories: similarMemories.map((m) => ({
               id: m.id,
               title: m.title,
               text: m.text.slice(0, 500) + (m.text.length > 500 ? "..." : ""),
-              similarity: Math.round(similarHits[idx]?.score * 100) / 100,
+              similarity: Math.round((similarityById.get(m.id) ?? 0) * 100) / 100,
               memoryType: m.memoryType,
               createdAt: m.createdAt,
             })),
@@ -251,7 +276,7 @@ export async function POST(request: Request) {
           title: titleForStorage,
           sourceType: memory.sourceType,
           memoryType: memory.memoryType,
-          importance: 5, // Default importance
+          importance: 2, // Default low importance baseline
           vector: embedding,
         });
       } catch {
