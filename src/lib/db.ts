@@ -26,7 +26,16 @@ import {
   reserveMemoryQuotaInTransaction,
 } from "@/lib/rate-limiter";
 import { ensureDatabaseMigrations } from "@/lib/db-migrations";
+import {
+  assertKnownMemoryType,
+  assertSystemDerivedBypassAllowed,
+  MemoryWritePolicyError,
+  assessMemoryWritePolicy,
+  type MemoryWritePolicyCode,
+  type MemoryWriteSignals,
+} from "@/lib/memory-write-policy";
 import { containsSecrets } from "@/lib/secrets";
+import { logAuditEvent } from "@/lib/audit-log";
 
 const ENCRYPTION_ALGORITHM = "aes-256-gcm";
 
@@ -509,6 +518,10 @@ async function ensureMemoriesColumns(client: Client): Promise<void> {
     // Synthesis absorption tracking
     { name: "absorbed_by", ddl: "TEXT" },  // ID of synthesis that absorbed this memory
     { name: "absorbed_at", ddl: "TEXT" },  // When memory was absorbed into synthesis
+    { name: "confidence_score", ddl: "REAL DEFAULT 0.6" },
+    { name: "superseded_by", ddl: "TEXT" },
+    { name: "conflicts_with_json", ddl: "TEXT" },
+    { name: "last_verified_at", ddl: "TEXT" },
   ];
 
   const tableInfo = await client.execute("PRAGMA table_info(memories)");
@@ -912,6 +925,10 @@ export type AgentMemoryRecord = {
   absorbedIntoSynthesisId?: string | null;
   absorbedBy?: string | null;
   absorbedAt?: string | null;
+  confidenceScore?: number;
+  supersededBy?: string | null;
+  conflictsWith?: string[];
+  lastVerifiedAt?: string | null;
   createdAt: string;
 };
 
@@ -981,6 +998,10 @@ function mapRow(row: Record<string, unknown>): MemoryRecord {
       (row.absorbed_into_synthesis_id as string | null) ??
       ((row.absorbed_by as string | null) ?? null),
     absorbedAt: (row.absorbed_at as string | null) ?? null,
+    confidenceScore: Number(row.confidence_score ?? 0.6),
+    supersededBy: (row.superseded_by as string | null) ?? null,
+    conflictsWith: parseJsonStringArray(row.conflicts_with_json),
+    lastVerifiedAt: (row.last_verified_at as string | null) ?? null,
     createdAt: row.created_at as string,
   };
 }
@@ -1000,6 +1021,15 @@ function mapVaultListItemRow(row: Record<string, unknown>): VaultEntryListItem {
 export async function insertMemory(memory: MemoryRecord): Promise<void> {
   await ensureInitialized();
   const client = getDb();
+  const policy = !memory.isEncrypted
+    ? await enforceMemoryWritePolicy({
+        userId: memory.userId,
+        text: memory.contentText,
+        sourceType: memory.sourceType,
+        memoryType: memory.memoryType,
+      })
+    : null;
+
   const preparedContent = prepareMemoryContentForStorage({
     content: memory.contentText,
     userId: memory.userId,
@@ -1034,6 +1064,18 @@ export async function insertMemory(memory: MemoryRecord): Promise<void> {
       memory.syncError,
       memory.createdAt,
     ],
+  });
+
+  await logMemoryWriteDecision({
+    userId: memory.userId,
+    decision: "accepted",
+    reasonCode: "stored",
+    policyCode: policy?.policyCode,
+    sourceType: memory.sourceType,
+    memoryType: memory.memoryType,
+    text: memory.contentText,
+    matchedRules: policy?.matchedRules,
+    qualitySignals: policy?.signals,
   });
 }
 
@@ -2001,6 +2043,10 @@ function mapAgentMemoryRow(row: Record<string, unknown>): AgentMemoryRecord {
       ((row.absorbed_by as string | null) ?? null),
     absorbedBy: (row.absorbed_by as string | null) ?? null,
     absorbedAt: (row.absorbed_at as string | null) ?? null,
+    confidenceScore: Number(row.confidence_score ?? 0.6),
+    supersededBy: (row.superseded_by as string | null) ?? null,
+    conflictsWith: parseJsonStringArray(row.conflicts_with_json),
+    lastVerifiedAt: (row.last_verified_at as string | null) ?? null,
     peer: ((row.peer as string | null) ?? "user") as MemoryPeer,
     createdAt: row.created_at as string,
   };
@@ -2702,6 +2748,91 @@ export async function getSessionById(userId: string, sessionId: string): Promise
   };
 }
 
+async function logMemoryWriteDecision(params: {
+  userId: string;
+  decision: "accepted" | "rejected";
+  reasonCode: string;
+  policyCode?: MemoryWritePolicyCode;
+  sourceType?: string;
+  memoryType?: string;
+  sessionId?: string | null;
+  namespaceId?: string | null;
+  text: string;
+  metadata?: Record<string, unknown> | null;
+  matchedRules?: string[];
+  qualitySignals?: MemoryWriteSignals;
+}): Promise<void> {
+  const text_preview = params.text.slice(0, 180);
+  const mcp_related =
+    /\bmcp\b/i.test(text_preview) ||
+    Boolean(params.metadata?.runtime) ||
+    Boolean(params.metadata?.platform) ||
+    Boolean(params.metadata?.conversationId) ||
+    String(params.sessionId ?? "").startsWith("mcp_");
+
+  await logAuditEvent({
+    userId: params.userId,
+    action: "memory.write_decision",
+    resourceType: "memory",
+    resourceId: params.sessionId ?? undefined,
+    metadata: {
+      decision: params.decision,
+      reason_code: params.reasonCode,
+      policy_code: params.policyCode ?? null,
+      source_type: params.sourceType ?? null,
+      memory_type: params.memoryType ?? null,
+      session_id: params.sessionId ?? null,
+      namespace_id: params.namespaceId ?? null,
+      matched_rules: params.matchedRules ?? null,
+      quality_signals: params.qualitySignals ?? null,
+      mcp_related,
+      text_preview,
+    },
+  });
+}
+
+async function enforceMemoryWritePolicy(params: {
+  userId: string;
+  text: string;
+  sourceType?: string;
+  memoryType?: string;
+  allowSystemDerivedBypass?: boolean;
+  sessionId?: string | null;
+  namespaceId?: string | null;
+  metadata?: Record<string, unknown> | null;
+}): Promise<ReturnType<typeof assessMemoryWritePolicy>> {
+  assertKnownMemoryType(params.memoryType);
+  assertSystemDerivedBypassAllowed(
+    params.memoryType,
+    params.allowSystemDerivedBypass,
+  );
+
+  const assessment = assessMemoryWritePolicy(params.text, {
+    memoryType: params.memoryType,
+    allowSystemDerivedBypass: params.allowSystemDerivedBypass,
+  });
+
+  if (!assessment.allow) {
+    await logMemoryWriteDecision({
+      userId: params.userId,
+      decision: "rejected",
+      reasonCode: assessment.reasonCode,
+      policyCode: assessment.policyCode,
+      sourceType: params.sourceType,
+      memoryType: params.memoryType,
+      sessionId: params.sessionId,
+      namespaceId: params.namespaceId,
+      text: params.text,
+      metadata: params.metadata,
+      matchedRules: assessment.matchedRules,
+      qualitySignals: assessment.signals,
+    });
+    throw new MemoryWritePolicyError(assessment);
+  }
+
+  return assessment;
+}
+
 export async function insertAgentMemory(params: {
   userId: string;
   title?: string;
@@ -2717,6 +2848,7 @@ export async function insertAgentMemory(params: {
   sessionId?: string | null;
   isEncrypted?: boolean;
   peer?: MemoryPeer;
+  allowSystemDerivedBypass?: boolean;
 }): Promise<AgentMemoryRecord> {
   await ensureInitialized();
   await ensureRateLimiterInitialized();
@@ -2724,6 +2856,18 @@ export async function insertAgentMemory(params: {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const text = params.text.trim();
+  const policy = !params.isEncrypted
+    ? await enforceMemoryWritePolicy({
+        userId: params.userId,
+        text,
+        sourceType: params.sourceType,
+        memoryType: params.memoryType,
+        allowSystemDerivedBypass: params.allowSystemDerivedBypass,
+        sessionId: params.sessionId,
+        namespaceId: params.namespaceId,
+        metadata: params.metadata,
+      })
+    : null;
   const title = (params.title?.trim() || text.slice(0, 80) || "Untitled Memory").trim();
   const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
   const sourceType = params.sourceType ?? "text";
@@ -2749,7 +2893,7 @@ export async function insertAgentMemory(params: {
           id, user_id, title, source_type, memory_type, importance, importance_tier, tags_csv,
           source_url, file_name, content_text, content_iv, content_encrypted, content_hash, sensitive,
           sync_status, sync_error, created_at, namespace_id, session_id, metadata_json, entities, entities_json, peer
-        ) VALUES (?, ?, ?, ?, ?, 5, ?, '', ?, ?, ?, NULL, ?, ?, ?, 'pending', NULL, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, 2, ?, '', ?, ?, ?, NULL, ?, ?, ?, 'pending', NULL, ?, ?, ?, ?, ?, ?, ?)
       `,
       args: [
         id,
@@ -2780,6 +2924,21 @@ export async function insertAgentMemory(params: {
   } finally {
     tx.close();
   }
+
+  await logMemoryWriteDecision({
+    userId: params.userId,
+    decision: "accepted",
+    reasonCode: "stored",
+    policyCode: policy?.policyCode,
+    sourceType,
+    memoryType,
+    sessionId: params.sessionId,
+    namespaceId: params.namespaceId,
+    text,
+    metadata: params.metadata,
+    matchedRules: policy?.matchedRules,
+    qualitySignals: policy?.signals,
+  });
 
   return {
     id,
@@ -3009,7 +3168,8 @@ export async function getAgentMemoryById(
   const result = await client.execute({
     sql: `
       SELECT id, user_id, title, source_type, memory_type, importance, importance_tier, source_url, file_name, content_text, content_encrypted, metadata_json,
-             namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive, created_at
+             namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive,
+             confidence_score, superseded_by, conflicts_with_json, last_verified_at, created_at
       FROM memories
       WHERE user_id = ? AND id = ?
       ${excludeSensitive ? "AND sensitive = 0" : ""}
@@ -3307,6 +3467,7 @@ export async function getAgentMemoriesByIds(params: {
   excludeMemoryTypes?: MemoryKind[];
   excludeAbsorbed?: boolean;
   excludeSensitive?: boolean;
+  includeSuperseded?: boolean;
   peer?: MemoryPeer;
 }): Promise<AgentMemoryRecord[]> {
   await ensureInitialized();
@@ -3337,6 +3498,7 @@ export async function getAgentMemoriesByIds(params: {
   }
   const excludeAbsorbed = params.excludeAbsorbed === true;
   const excludeSensitive = params.excludeSensitive !== false;
+  const includeSuperseded = params.includeSuperseded === true;
 
   // When namespace is specified, include both namespace-scoped AND global (null namespace) memories
   // This follows the spec: "Search defaults to current namespace + global"
@@ -3349,11 +3511,13 @@ export async function getAgentMemoriesByIds(params: {
     sql: `
       SELECT id, user_id, title, source_type, memory_type, importance_tier, source_url, file_name, content_text, content_encrypted, metadata_json,
              namespace_id, session_id, entities, entities_json, feedback_score, access_count, sensitive,
-             completed, completed_at, ephemeral, absorbed, absorbed_into_synthesis_id, absorbed_by, absorbed_at, peer, created_at
+             completed, completed_at, ephemeral, absorbed, absorbed_into_synthesis_id, absorbed_by, absorbed_at,
+             confidence_score, superseded_by, conflicts_with_json, last_verified_at, peer, created_at
       FROM memories
       WHERE user_id = ? AND id IN (${placeholders}) AND archived_at IS NULL
       ${excludeAbsorbed ? "AND (absorbed = 0 OR absorbed IS NULL)" : ""}
       ${excludeSensitive ? "AND sensitive = 0" : ""}
+      ${includeSuperseded ? "" : "AND superseded_by IS NULL"}
       ${namespaceClause}
       ${hasSince ? "AND created_at >= ?" : ""}
       ${params.memoryTypes?.length ? `AND memory_type IN (${params.memoryTypes.map(() => "?").join(",")})` : ""}
@@ -3374,6 +3538,42 @@ export async function getAgentMemoriesByIds(params: {
     });
 }
 
+export async function markMemorySuperseded(params: {
+  userId: string;
+  memoryId: string;
+  supersededById: string;
+}): Promise<void> {
+  await ensureInitialized();
+  const client = getDb();
+  await client.execute({
+    sql: `
+      UPDATE memories
+      SET superseded_by = ?,
+          last_verified_at = ?
+      WHERE user_id = ? AND id = ?
+    `,
+    args: [params.supersededById, new Date().toISOString(), params.userId, params.memoryId],
+  });
+}
+
+export async function setMemoryConflicts(params: {
+  userId: string;
+  memoryId: string;
+  conflictsWith: string[];
+}): Promise<void> {
+  await ensureInitialized();
+  const client = getDb();
+  await client.execute({
+    sql: `
+      UPDATE memories
+      SET conflicts_with_json = ?,
+          last_verified_at = ?
+      WHERE user_id = ? AND id = ?
+    `,
+    args: [JSON.stringify(params.conflictsWith), new Date().toISOString(), params.userId, params.memoryId],
+  });
+}
+
 /**
  * Get all critical-tier memories for a user (always injected at session start)
  */
@@ -3389,7 +3589,7 @@ export async function getCriticalMemories(
   await ensureInitialized();
   const client = getDb();
   const args: Array<string | number> = [userId];
-  const whereClauses = ["user_id = ?", "importance_tier = 'critical'", "archived_at IS NULL"];
+  const whereClauses = ["user_id = ?", "importance_tier = 'critical'", "archived_at IS NULL", "superseded_by IS NULL"];
 
   if (options?.excludeCompleted) {
     whereClauses.push("(completed = 0 OR completed IS NULL)");
@@ -3409,7 +3609,8 @@ export async function getCriticalMemories(
       SELECT id, user_id, title, source_type, memory_type, importance_tier, source_url, file_name, 
              content_text, content_encrypted, metadata_json, namespace_id, session_id, entities, entities_json, 
              feedback_score, access_count, sensitive, completed, completed_at, ephemeral, absorbed,
-             absorbed_into_synthesis_id, absorbed_by, absorbed_at, created_at
+             absorbed_into_synthesis_id, absorbed_by, absorbed_at,
+             confidence_score, superseded_by, conflicts_with_json, last_verified_at, created_at
       FROM memories
       WHERE ${whereClauses.join(" AND ")}
       ORDER BY created_at DESC
@@ -3518,7 +3719,8 @@ export async function listEphemeralMemoriesOlderThan(
       SELECT id, user_id, title, source_type, memory_type, importance_tier, source_url, file_name,
              content_text, content_encrypted, metadata_json, namespace_id, session_id, entities, entities_json,
              feedback_score, access_count, sensitive, completed, completed_at, ephemeral, absorbed,
-             absorbed_into_synthesis_id, absorbed_by, absorbed_at, created_at
+             absorbed_into_synthesis_id, absorbed_by, absorbed_at,
+             confidence_score, superseded_by, conflicts_with_json, last_verified_at, created_at
       FROM memories
       WHERE user_id = ?
         AND ephemeral = 1
@@ -3869,13 +4071,30 @@ export async function updateMemoryAccess(memoryId: string, userId: string): Prom
 export async function updateAgentMemory(
   userId: string,
   memoryId: string,
-  updates: { title?: string; text?: string; absorbed?: boolean; absorbedBy?: string }
+  updates: {
+    title?: string;
+    text?: string;
+    absorbed?: boolean;
+    absorbedBy?: string;
+    confidenceScore?: number;
+    supersededBy?: string | null;
+    conflictsWith?: string[];
+    lastVerifiedAt?: string | null;
+  },
+  options?: { allowSystemDerivedBypass?: boolean },
 ): Promise<boolean> {
   await ensureInitialized();
   const client = getDb();
 
   const setClauses: string[] = [];
-  const args: (string | number)[] = [];
+  const args: (string | number | null)[] = [];
+  let policy: ReturnType<typeof assessMemoryWritePolicy> | null = null;
+  let existingContext:
+    | {
+        sourceType?: string;
+        memoryType?: string;
+      }
+    | null = null;
 
   if (updates.absorbed !== undefined) {
     setClauses.push("absorbed = ?");
@@ -3893,7 +4112,50 @@ export async function updateAgentMemory(
     setClauses.push("title = ?");
     args.push(updates.title);
   }
+  if (typeof updates.confidenceScore === "number") {
+    const bounded = Math.max(0, Math.min(1, updates.confidenceScore));
+    setClauses.push("confidence_score = ?");
+    args.push(bounded);
+  }
+  if (updates.supersededBy !== undefined) {
+    setClauses.push("superseded_by = ?");
+    args.push(updates.supersededBy ?? null);
+  }
+  if (updates.conflictsWith !== undefined) {
+    setClauses.push("conflicts_with_json = ?");
+    args.push(JSON.stringify(updates.conflictsWith));
+  }
+  if (updates.lastVerifiedAt !== undefined) {
+    setClauses.push("last_verified_at = ?");
+    args.push(updates.lastVerifiedAt ?? null);
+  }
   if (updates.text !== undefined) {
+    const existingResult = await client.execute({
+      sql: `
+        SELECT source_type, memory_type
+        FROM memories
+        WHERE id = ? AND user_id = ? AND archived_at IS NULL
+        LIMIT 1
+      `,
+      args: [memoryId, userId],
+    });
+    const existingRow = existingResult.rows[0] as Record<string, unknown> | undefined;
+    if (!existingRow) {
+      return false;
+    }
+
+    existingContext = {
+      sourceType: existingRow.source_type as string | undefined,
+      memoryType: existingRow.memory_type as string | undefined,
+    };
+    policy = await enforceMemoryWritePolicy({
+      userId,
+      text: updates.text,
+      sourceType: existingContext.sourceType,
+      memoryType: existingContext.memoryType,
+      allowSystemDerivedBypass: options?.allowSystemDerivedBypass,
+    });
+
     const preparedContent = prepareMemoryContentForStorage({
       content: updates.text,
       userId,
@@ -3925,6 +4187,20 @@ export async function updateAgentMemory(
     `,
     args,
   });
+
+  if ((result.rowsAffected ?? 0) > 0 && updates.text !== undefined && policy) {
+    await logMemoryWriteDecision({
+      userId,
+      decision: "accepted",
+      reasonCode: "stored",
+      policyCode: policy.policyCode,
+      sourceType: existingContext?.sourceType,
+      memoryType: existingContext?.memoryType,
+      text: updates.text,
+      matchedRules: policy.matchedRules,
+      qualitySignals: policy.signals,
+    });
+  }
 
   return (result.rowsAffected ?? 0) > 0;
 }
@@ -4097,12 +4373,23 @@ export async function insertMemoryWithMetadata(params: {
   namespaceId?: string | null;
   sessionId?: string | null;
   metadata?: Record<string, unknown> | null;
+  allowSystemDerivedBypass?: boolean;
 }): Promise<AgentMemoryRecord> {
   await ensureInitialized();
   const client = getDb();
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const text = params.text.trim();
+  const policy = await enforceMemoryWritePolicy({
+    userId: params.userId,
+    text,
+    sourceType: "text",
+    memoryType: params.memoryType,
+    allowSystemDerivedBypass: params.allowSystemDerivedBypass,
+    sessionId: params.sessionId,
+    namespaceId: params.namespaceId,
+    metadata: params.metadata,
+  });
   const title = (params.title?.trim() || text.slice(0, 80) || "Untitled Memory").trim();
   const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
   const embeddingJson = params.embedding ? JSON.stringify(params.embedding) : null;
@@ -4132,7 +4419,7 @@ export async function insertMemoryWithMetadata(params: {
       params.userId,
       title,
       params.memoryType ?? 'episodic',
-      params.importance ?? 5,
+      params.importance ?? 2,
       preparedContent.contentText,
       preparedContent.contentEncrypted,
       preparedContent.contentHash,
@@ -4151,6 +4438,21 @@ export async function insertMemoryWithMetadata(params: {
       now,  // last_mentioned_at
       now,  // last_accessed_at
     ],
+  });
+
+  await logMemoryWriteDecision({
+    userId: params.userId,
+    decision: "accepted",
+    reasonCode: "stored",
+    policyCode: policy.policyCode,
+    sourceType: "text",
+    memoryType: params.memoryType,
+    sessionId: params.sessionId,
+    namespaceId: params.namespaceId,
+    text,
+    metadata: params.metadata,
+    matchedRules: policy.matchedRules,
+    qualitySignals: policy.signals,
   });
 
   return {
@@ -4191,6 +4493,7 @@ export async function insertMemoryWithMetadataAndQuota(params: {
   namespaceId?: string | null;
   sessionId?: string | null;
   metadata?: Record<string, unknown> | null;
+  allowSystemDerivedBypass?: boolean;
 }): Promise<{ memory: AgentMemoryRecord; created: boolean }> {
   await ensureInitialized();
   await ensureRateLimiterInitialized();
@@ -4199,6 +4502,16 @@ export async function insertMemoryWithMetadataAndQuota(params: {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const text = params.text.trim();
+  const policy = await enforceMemoryWritePolicy({
+    userId: params.userId,
+    text,
+    sourceType: "text",
+    memoryType: params.memoryType,
+    allowSystemDerivedBypass: params.allowSystemDerivedBypass,
+    sessionId: params.sessionId,
+    namespaceId: params.namespaceId,
+    metadata: params.metadata,
+  });
   const title = (params.title?.trim() || text.slice(0, 80) || "Untitled Memory").trim();
   const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
   const embeddingJson = params.embedding ? JSON.stringify(params.embedding) : null;
@@ -4232,7 +4545,7 @@ export async function insertMemoryWithMetadataAndQuota(params: {
         params.userId,
         title,
         params.memoryType ?? "episodic",
-        params.importance ?? 5,
+        params.importance ?? 2,
         preparedContent.contentText,
         preparedContent.contentEncrypted,
         preparedContent.contentHash,
@@ -4269,6 +4582,21 @@ export async function insertMemoryWithMetadataAndQuota(params: {
   } finally {
     tx.close();
   }
+
+  await logMemoryWriteDecision({
+    userId: params.userId,
+    decision: "accepted",
+    reasonCode: "stored",
+    policyCode: policy.policyCode,
+    sourceType: "text",
+    memoryType: params.memoryType,
+    sessionId: params.sessionId,
+    namespaceId: params.namespaceId,
+    text,
+    metadata: params.metadata,
+    matchedRules: policy.matchedRules,
+    qualitySignals: policy.signals,
+  });
 
   return {
     memory: {
@@ -4407,7 +4735,8 @@ export async function getHighTierMemories(
       SELECT id, user_id, title, source_type, memory_type, importance_tier, source_url, file_name, 
              content_text, content_encrypted, metadata_json, namespace_id, session_id, entities, entities_json, 
              feedback_score, access_count, sensitive, completed, completed_at, ephemeral, absorbed,
-             absorbed_into_synthesis_id, absorbed_by, absorbed_at, created_at
+             absorbed_into_synthesis_id, absorbed_by, absorbed_at,
+             confidence_score, superseded_by, conflicts_with_json, last_verified_at, created_at
       FROM memories
       WHERE ${whereClauses.join(" AND ")}
       ORDER BY access_count DESC, created_at DESC

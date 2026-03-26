@@ -40,6 +40,10 @@ export interface FatHippoConfig {
     userDNAEnabled?: boolean;
     /** Enable collective intelligence pattern sharing. Default: true for hosted */
     collectiveEnabled?: boolean;
+    /** Enable model-aware context formatting. Default: true */
+    modelAdaptersEnabled?: boolean;
+    /** Enable dynamic task-aware context prioritization. Default: true */
+    dynamicPrioritizationEnabled?: boolean;
 }
 export interface Memory {
     id: string;

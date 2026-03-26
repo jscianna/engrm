@@ -5,7 +5,8 @@
  * Designed for SOC2/GDPR readiness.
  */
 
-// TODO: Currently unused. Wire this into the authenticated mutation/read paths.
+// Active: memory.write_decision events are logged via turn-capture.ts / storeAutoMemory.
+// Cognitive actions (trace, pattern, skill) are logged by their respective API routes.
 
 import crypto from "node:crypto";
 import { ensureDatabaseMigrations } from "./db-migrations";
@@ -21,6 +22,7 @@ export type AuditAction =
   | "memory.update"
   | "memory.delete"
   | "memory.search"
+  | "memory.write_decision"
   | "auth.login"
   | "auth.logout"
   | "auth.api_key_create"
@@ -246,6 +248,128 @@ export async function getSuspiciousActivity(userId: string, windowMinutes = 60):
   const isSuspicious = rapidRequests > 100 || uniqueIps > 5 || failedAuths > 3;
 
   return { rapidRequests, uniqueIps, failedAuths, isSuspicious };
+}
+
+// =============================================================================
+// Decision Ledger (memory write decisions)
+// =============================================================================
+
+export type DecisionLedgerEntry = {
+  id: string;
+  userId: string;
+  timestamp: string;
+  decision: string;
+  reasonCode: string;
+  policyCode: string | null;
+  sourceType: string | null;
+  memoryType: string | null;
+  matchedRules: string[];
+  qualityScore: number | null;
+  sessionId: string | null;
+  namespaceId: string | null;
+  mcpRelated: boolean;
+  textPreview: string;
+  runtime: string | null;
+  platform: string | null;
+};
+
+export type DecisionLedgerSummary = {
+  entries: DecisionLedgerEntry[];
+  totals: Record<string, number>;
+  decisionTotals: Record<string, number>;
+  mcpCount: number;
+  directCount: number;
+  window: { since: string; until: string };
+};
+
+/**
+ * Query memory write decisions with filters for reason_code, MCP origin, and time window.
+ */
+export async function getDecisionLedger(params: {
+  userId?: string;
+  reasonCode?: string;
+  mcpOnly?: boolean;
+  since?: string;
+  until?: string;
+  limit?: number;
+}): Promise<DecisionLedgerSummary> {
+  await ensureAuditTable();
+  const client = getDb();
+
+  const conditions: string[] = ["action = 'memory.write_decision'"];
+  const args: (string | number)[] = [];
+
+  if (params.userId) {
+    conditions.push("user_id = ?");
+    args.push(params.userId);
+  }
+
+  const since = params.since ?? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  conditions.push("timestamp > ?");
+  args.push(since);
+
+  const until = params.until ?? new Date().toISOString();
+  conditions.push("timestamp <= ?");
+  args.push(until);
+
+  if (params.reasonCode) {
+    conditions.push("json_extract(metadata_json, '$.reason_code') = ?");
+    args.push(params.reasonCode);
+  }
+
+  if (params.mcpOnly) {
+    conditions.push("json_extract(metadata_json, '$.mcp_related') = 1");
+  }
+
+  const limit = params.limit ?? 200;
+  const whereClause = conditions.join(" AND ");
+
+  const result = await client.execute({
+    sql: `SELECT * FROM audit_logs WHERE ${whereClause} ORDER BY timestamp DESC LIMIT ?`,
+    args: [...args, limit],
+  });
+
+  const entries: DecisionLedgerEntry[] = result.rows.map((row) => {
+    const meta = row.metadata_json ? JSON.parse(row.metadata_json as string) : {};
+    const qualitySignals = (meta.quality_signals ?? {}) as Record<string, unknown>;
+    return {
+      id: row.id as string,
+      userId: row.user_id as string,
+      timestamp: row.timestamp as string,
+      decision: (meta.decision as string | undefined) ?? "unknown",
+      reasonCode: (meta.reason_code as string | undefined) ?? "unknown",
+      policyCode: (meta.policy_code as string | undefined) ?? null,
+      sourceType: (meta.source_type as string | undefined) ?? null,
+      memoryType: (meta.memory_type as string | undefined) ?? null,
+      matchedRules: Array.isArray(meta.matched_rules)
+        ? (meta.matched_rules as unknown[]).filter((v): v is string => typeof v === "string")
+        : [],
+      qualityScore: typeof qualitySignals.score === "number" ? qualitySignals.score : null,
+      sessionId: (meta.session_id as string | undefined) ?? null,
+      namespaceId: (meta.namespace_id as string | undefined) ?? null,
+      mcpRelated: Boolean(meta.mcp_related),
+      textPreview: (meta.text_preview as string | undefined) ?? "",
+      runtime: (meta.runtime as string | undefined) ?? null,
+      platform: (meta.platform as string | undefined) ?? null,
+    };
+  });
+
+  // Compute totals by reason_code and decision
+  const totals: Record<string, number> = {};
+  const decisionTotals: Record<string, number> = {};
+  let mcpCount = 0;
+  let directCount = 0;
+  for (const entry of entries) {
+    totals[entry.reasonCode] = (totals[entry.reasonCode] ?? 0) + 1;
+    decisionTotals[entry.decision] = (decisionTotals[entry.decision] ?? 0) + 1;
+    if (entry.mcpRelated) {
+      mcpCount++;
+    } else {
+      directCount++;
+    }
+  }
+
+  return { entries, totals, decisionTotals, mcpCount, directCount, window: { since, until } };
 }
 
 /**

@@ -49,6 +49,10 @@ export const tableSql = `
     absorbed_into_synthesis_id TEXT,
     absorbed_by TEXT,
     absorbed_at TEXT,
+    confidence_score REAL DEFAULT 0.6,
+    superseded_by TEXT,
+    conflicts_with_json TEXT,
+    last_verified_at TEXT,
     created_at TEXT NOT NULL
   );
 

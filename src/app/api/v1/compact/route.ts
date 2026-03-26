@@ -254,6 +254,7 @@ export async function POST(request: Request) {
         text: payload.text,
         embedding: vector,
         memoryType: "compacted",
+        allowSystemDerivedBypass: true,
         importance: clampImportance(payload.importance, 7),
         entities: extractEntities(payload.text),
         namespaceId,

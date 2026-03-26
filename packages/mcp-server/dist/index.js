@@ -800,8 +800,13 @@ async function handleRecordTrace(args) {
         const text = await response.text().catch(() => "");
         throw new Error(`Failed to record trace: ${response.status} ${text}`);
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await response.json();
+    let result;
+    try {
+        result = await response.json();
+    }
+    catch {
+        return toJsonText({ error: "Failed to parse response JSON from record_trace" });
+    }
     return toJsonText(result);
 }
 async function handleGetCognitiveContext(args) {
@@ -827,32 +832,49 @@ async function handleGetCognitiveContext(args) {
         const text = await response.text().catch(() => "");
         throw new Error(`Failed to get cognitive context: ${response.status} ${text}`);
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await response.json();
+    let result;
+    try {
+        result = await response.json();
+    }
+    catch {
+        return toJsonText({ error: "Failed to parse response JSON from get_cognitive_context" });
+    }
     // Format into a readable summary for the agent
     const parts = [];
-    if (result.traces?.length > 0) {
+    const traces = Array.isArray(result.traces) ? result.traces : [];
+    const patterns = Array.isArray(result.patterns) ? result.patterns : [];
+    const skills = Array.isArray(result.skills) ? result.skills : [];
+    const workflow = (typeof result.workflow === "object" && result.workflow !== null)
+        ? result.workflow
+        : null;
+    const workflow_steps = workflow && Array.isArray(workflow.steps) ? workflow.steps : [];
+    if (traces.length > 0) {
         parts.push("## Past Similar Problems");
-        for (const trace of result.traces) {
-            const icon = trace.outcome === "success" ? "✓" : trace.outcome === "failed" ? "✗" : "~";
-            parts.push(`- ${icon} ${trace.problem}${trace.solution ? ` → ${trace.solution}` : ""}`);
+        for (const trace of traces) {
+            const outcome = String(trace.outcome ?? "");
+            const icon = outcome === "success" ? "✓" : outcome === "failed" ? "✗" : "~";
+            const problem = String(trace.problem ?? "");
+            const solution = trace.solution ? String(trace.solution) : "";
+            parts.push(`- ${icon} ${problem}${solution ? ` → ${solution}` : ""}`);
         }
     }
-    if (result.patterns?.length > 0) {
+    if (patterns.length > 0) {
         parts.push("\n## Learned Patterns");
-        for (const pattern of result.patterns) {
-            parts.push(`- [${pattern.domain}] ${pattern.approach} (${Math.round(pattern.confidence * 100)}% confidence)`);
+        for (const pattern of patterns) {
+            const confidence = Number(pattern.confidence ?? 0);
+            parts.push(`- [${String(pattern.domain ?? "unknown")}] ${String(pattern.approach ?? "")} (${Math.round(confidence * 100)}% confidence)`);
         }
     }
-    if (result.skills?.length > 0) {
+    if (skills.length > 0) {
         parts.push("\n## Synthesized Skills");
-        for (const skill of result.skills) {
-            parts.push(`- ${skill.name}: ${skill.description} (${Math.round(skill.successRate * 100)}% success)`);
+        for (const skill of skills) {
+            const success_rate = Number(skill.successRate ?? 0);
+            parts.push(`- ${String(skill.name ?? "skill")}: ${String(skill.description ?? "")} (${Math.round(success_rate * 100)}% success)`);
         }
     }
-    if (result.workflow?.steps?.length > 0) {
+    if (workflow_steps.length > 0) {
         parts.push("\n## Recommended Workflow");
-        for (const step of result.workflow.steps) {
+        for (const step of workflow_steps) {
             parts.push(`- ${step}`);
         }
     }
@@ -862,10 +884,10 @@ async function handleGetCognitiveContext(args) {
             ? parts.join("\n")
             : "No relevant patterns or traces found yet. Record traces after solving problems to build up the knowledge base.",
         raw: {
-            traceCount: result.traces?.length ?? 0,
-            patternCount: result.patterns?.length ?? 0,
-            skillCount: result.skills?.length ?? 0,
-            hasWorkflow: !!result.workflow,
+            traceCount: traces.length,
+            patternCount: patterns.length,
+            skillCount: skills.length,
+            hasWorkflow: !!workflow,
         },
     });
 }
@@ -887,8 +909,13 @@ async function handleSubmitFeedback(args) {
         const text = await response.text().catch(() => "");
         throw new Error(`Failed to submit feedback: ${response.status} ${text}`);
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await response.json();
+    let result;
+    try {
+        result = await response.json();
+    }
+    catch {
+        return toJsonText({ error: "Failed to parse response JSON from submit_feedback" });
+    }
     return toJsonText(result);
 }
 async function handleGetSkillDetail(args) {
@@ -903,28 +930,35 @@ async function handleGetSkillDetail(args) {
         const text = await response.text().catch(() => "");
         throw new Error(`Failed to get skill: ${response.status} ${text}`);
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await response.json();
+    let result;
+    try {
+        result = await response.json();
+    }
+    catch {
+        return toJsonText({ error: "Failed to parse response JSON from get_skill_detail" });
+    }
     const skill = result.skill;
     if (!skill) {
         throw new Error("Skill not found");
     }
     const section = args.section ?? "full";
-    const content = skill.content ?? {};
+    const content = (skill.content ?? {});
+    const procedure = Array.isArray(content.procedure) ? content.procedure : [];
+    const pitfalls = Array.isArray(content.commonPitfalls) ? content.commonPitfalls : [];
     if (section === "full") {
         const parts = [
             `# ${skill.name}`,
             `**Description:** ${skill.description}`,
-            `**Success Rate:** ${Math.round((skill.successRate ?? 0) * 100)}%`,
+            `**Success Rate:** ${Math.round(Number(skill.successRate ?? 0) * 100)}%`,
             `**Status:** ${skill.status}`,
         ];
         if (content.whenToUse)
             parts.push(`\n## When To Use\n${content.whenToUse}`);
-        if (content.procedure?.length) {
-            parts.push(`\n## Procedure\n${content.procedure.map((s, i) => `${i + 1}. ${s}`).join("\n")}`);
+        if (procedure.length) {
+            parts.push(`\n## Procedure\n${procedure.map((s, i) => `${i + 1}. ${s}`).join("\n")}`);
         }
-        if (content.commonPitfalls?.length) {
-            parts.push(`\n## Common Pitfalls\n${content.commonPitfalls.map((s) => `- ${s}`).join("\n")}`);
+        if (pitfalls.length) {
+            parts.push(`\n## Common Pitfalls\n${pitfalls.map((s) => `- ${s}`).join("\n")}`);
         }
         if (content.verification)
             parts.push(`\n## Verification\n${content.verification}`);
@@ -975,8 +1009,13 @@ async function handleCreateSkill(args) {
         throw new Error(`Failed to create skill: ${response.status} ${text}`);
     }
     session_skill_counts.set(session_key, count + 1);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await response.json();
+    let result;
+    try {
+        result = await response.json();
+    }
+    catch {
+        return toJsonText({ error: "Failed to parse response JSON from create_skill" });
+    }
     return toJsonText({
         created: true,
         skillId: result.skill?.id,
@@ -1029,9 +1068,13 @@ async function main() {
         })),
     }));
     server.setRequestHandler(GetPromptRequestSchema, async (request) => {
-        const prompt = PROMPTS[request.params.name];
+        const promptName = request.params?.name;
+        if (!promptName) {
+            throw new Error("Missing prompt name in request params");
+        }
+        const prompt = PROMPTS[promptName];
         if (!prompt) {
-            throw new Error(`Unknown prompt: ${request.params.name}`);
+            throw new Error(`Unknown prompt: ${promptName}`);
         }
         return {
             description: prompt.description,
@@ -1047,6 +1090,9 @@ async function main() {
         };
     });
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
+        if (!request.params) {
+            throw new Error("Missing request params");
+        }
         const { name, arguments: args } = request.params;
         try {
             const toolArgs = (args ?? {});

@@ -35,7 +35,14 @@ export async function PATCH(
     const { id } = await context.params;
     
     const body = await request.json().catch(() => ({}));
-    const updates: { title?: string; text?: string } = {};
+    const updates: {
+      title?: string;
+      text?: string;
+      confidenceScore?: number;
+      supersededBy?: string | null;
+      conflictsWith?: string[];
+      lastVerifiedAt?: string | null;
+    } = {};
     
     if (typeof body.title === "string") {
       updates.title = body.title.trim();
@@ -43,9 +50,26 @@ export async function PATCH(
     if (typeof body.text === "string") {
       updates.text = body.text.trim();
     }
+    if (typeof body.confidenceScore === "number") {
+      updates.confidenceScore = body.confidenceScore;
+    }
+    if (body.supersededBy === null || typeof body.supersededBy === "string") {
+      updates.supersededBy = body.supersededBy;
+    }
+    if (
+      Array.isArray(body.conflictsWith) &&
+      body.conflictsWith.every((item: unknown) => typeof item === "string")
+    ) {
+      updates.conflictsWith = body.conflictsWith;
+    }
+    if (body.lastVerifiedAt === null || typeof body.lastVerifiedAt === "string") {
+      updates.lastVerifiedAt = body.lastVerifiedAt;
+    }
     
     if (Object.keys(updates).length === 0) {
-      throw new FatHippoError("VALIDATION_ERROR", { reason: "No valid fields to update (title or text)" });
+      throw new FatHippoError("VALIDATION_ERROR", {
+        reason: "No valid fields to update (title, text, confidenceScore, supersededBy, conflictsWith, lastVerifiedAt)",
+      });
     }
 
     const updated = await updateAgentMemory(identity.userId, id, updates);

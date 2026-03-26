@@ -11,7 +11,7 @@
 import { validateApiKey } from "@/lib/api-auth";
 import { FatHippoError, errorResponse } from "@/lib/errors";
 import { getDb } from "@/lib/turso";
-import { embedText } from "@/lib/embeddings";
+import { insertAgentMemory } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -108,26 +108,19 @@ export async function POST(request: Request) {
     // Also store in regular memories for semantic search (summary only)
     // This allows both indexed access AND similarity search
     try {
-      const embedding = await embedText(summary);
-      // Store with reference to index
-      await client.execute({
-        sql: `
-          INSERT INTO memories (id, user_id, title, content_text, content_hash, source_type, memory_type, importance_tier, created_at, metadata_json)
-          VALUES (?, ?, ?, ?, ?, 'indexed', 'fact', 'normal', ?, ?)
-          ON CONFLICT DO NOTHING
-        `,
-        args: [
-          `idx-${indexKey}-${identity.userId.slice(-8)}`,
-          identity.userId,
-          `[${indexKey}] ${summary.slice(0, 60)}`,
-          summary,
-          `idx:${indexKey}`,
-          now,
-          JSON.stringify({ indexedMemoryKey: indexKey }),
-        ],
+      await insertAgentMemory({
+        userId: identity.userId,
+        title: `[${indexKey}] ${summary.slice(0, 60)}`,
+        text: summary,
+        sourceType: "text",
+        memoryType: "fact",
+        importanceTier: "normal",
+        namespaceId: null,
+        sessionId: null,
+        metadata: { indexedMemoryKey: indexKey },
       });
     } catch {
-      // Best effort - don't fail if embedding fails
+      // Best effort - don't fail if embedding or quality-gated indexed shadow insert fails
     }
     
     return Response.json({

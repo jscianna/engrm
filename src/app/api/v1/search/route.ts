@@ -6,6 +6,7 @@ import { getAgentMemoriesByIds, incrementAccessCounts, checkAndPromoteMemories, 
 import { recordInjectionEvent } from "@/lib/memory-analytics";
 import { validateApiKey } from "@/lib/api-auth";
 import { FatHippoError, errorResponse } from "@/lib/errors";
+import { computeWave2Rank } from "@/lib/retrieval-ranking";
 import {
   getRequestedNamespace,
   isObject,
@@ -127,16 +128,23 @@ export async function POST(request: Request) {
           return null;
         }
         const entityOverlap = countEntityOverlap(queryEntities, memory.entities);
-        const adjustedScore =
-          ranked.score +
-          (memory.feedbackScore * 0.08) +
-          (Math.min(memory.accessCount, 25) * 0.01) +
-          (entityOverlap * 0.06);
+        const ranking = computeWave2Rank({
+          relevance_score: ranked.score,
+          feedback_score: memory.feedbackScore,
+          access_count: memory.accessCount,
+          entity_overlap: entityOverlap,
+          created_at: memory.createdAt,
+          confidence_score: memory.confidenceScore,
+        });
+        const adjustedScore = ranking.score;
         return {
           id: memory.id,
           score: adjustedScore,
           vectorScore: ranked.vectorScore,
           bm25Score: ranked.bm25Score,
+          qualityScore: ranking.quality_score,
+          freshnessScore: ranking.freshness_score,
+          confidenceScore: ranking.confidence_score,
           provenance: buildProvenance(memory),
           memory,
         };

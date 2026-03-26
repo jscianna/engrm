@@ -130,6 +130,12 @@ export interface FatHippoRememberOutput {
   stored: boolean;
   consolidated?: boolean;
   warning?: string;
+  /** Write-decision audit metadata */
+  audit?: {
+    reasonCode?: string;
+    policyCode?: string;
+    matchedRules?: string[];
+  };
 }
 
 export interface FatHippoSearchInput {
@@ -233,6 +239,9 @@ type RememberApiResponse = {
   stored?: boolean;
   consolidated?: boolean;
   warning?: string;
+  reason_code?: string;
+  policy_code?: string;
+  matched_rules?: string[];
 };
 
 type SearchApiResponse = Array<{
@@ -278,28 +287,6 @@ function formatMemoryList(memories: ApiTierMemory[]): string[] {
     const text = memory.text.trim();
     return text ? `- ${title}: ${text}` : `- ${title}`;
   });
-}
-
-function formatTieredContext(context: {
-  critical?: ApiTierMemory[];
-  working?: ApiTierMemory[];
-  high?: ApiTierMemory[];
-}): string {
-  const sections: string[] = [];
-
-  if ((context.critical?.length ?? 0) > 0) {
-    sections.push(`## Critical Memory\n${formatMemoryList(context.critical ?? []).join("\n")}`);
-  }
-
-  if ((context.working?.length ?? 0) > 0) {
-    sections.push(`## Working Memory\n${formatMemoryList(context.working ?? []).join("\n")}`);
-  }
-
-  if ((context.high?.length ?? 0) > 0) {
-    sections.push(`## Relevant Memory\n${formatMemoryList(context.high ?? []).join("\n")}`);
-  }
-
-  return sections.join("\n\n");
 }
 
 function mapInjectedMemories(
@@ -681,6 +668,13 @@ export class FatHippoHostedRuntimeClient implements FatHippoHostedRuntimeClientC
       stored: response.stored !== false,
       consolidated: response.consolidated,
       warning: response.warning,
+      audit: (response.reason_code || response.policy_code || response.matched_rules)
+        ? {
+            reasonCode: response.reason_code,
+            policyCode: response.policy_code,
+            matchedRules: response.matched_rules,
+          }
+        : undefined,
     };
   }
 

@@ -139,6 +139,7 @@ export async function POST(
       text,
       embedding: vector,
       memoryType: "session_summary",
+      allowSystemDerivedBypass: true,
       importance: 8,
       entities: extractEntities(text),
       namespaceId: session.namespaceId,

@@ -9,7 +9,7 @@
 
 import { embedText } from "@/lib/embeddings";
 import { semanticSearchVectors } from "@/lib/qdrant";
-import { getAgentMemoriesByIds, updateAgentMemory } from "@/lib/db";
+import { createMemoryEdge, getAgentMemoriesByIds, updateAgentMemory } from "@/lib/db";
 import { extractEntities } from "@/lib/entities";
 
 export interface MicroDreamResult {
@@ -110,10 +110,19 @@ export async function runMicroDream(opts: {
       if (existing && !existing.absorbed) {
         // Keep the longer/more detailed version
         if (opts.memoryText.length <= existing.text.length) {
-          // New memory is shorter or equal — mark new memory as absorbed (existing wins)
+          // New memory is shorter or equal — mark new memory as superseded (existing wins)
           await updateAgentMemory(opts.userId, opts.memoryId, {
-            absorbed: true,
-            absorbedBy: `micro-dream:merge:${existing.id}`,
+            supersededBy: existing.id,
+            confidenceScore: 0.45,
+            lastVerifiedAt: new Date().toISOString(),
+          });
+          await createMemoryEdge({
+            userId: opts.userId,
+            sourceId: opts.memoryId,
+            targetId: existing.id,
+            relationshipType: "updates",
+            weight: 1,
+            metadata: { source: "micro_dream_merge" },
           });
           return {
             action: "merged",
@@ -121,14 +130,20 @@ export async function runMicroDream(opts: {
             processingMs: Math.round(performance.now() - start),
           };
         }
-        // New memory is longer — update existing with new text, absorb existing
+        // New memory is longer — update existing with new text, mark new as canonical
         await updateAgentMemory(opts.userId, existing.id, {
           text: opts.memoryText,
+          supersededBy: opts.memoryId,
+          confidenceScore: 0.5,
+          lastVerifiedAt: new Date().toISOString(),
         });
-        // Mark new memory as absorbed since existing was updated with its content
-        await updateAgentMemory(opts.userId, opts.memoryId, {
-          absorbed: true,
-          absorbedBy: `micro-dream:merge:${existing.id}`,
+        await createMemoryEdge({
+          userId: opts.userId,
+          sourceId: existing.id,
+          targetId: opts.memoryId,
+          relationshipType: "updates",
+          weight: 1,
+          metadata: { source: "micro_dream_merge" },
         });
         return {
           action: "merged",
@@ -161,10 +176,24 @@ export async function runMicroDream(opts: {
 
         const existingEntities = extractKeyEntities(existing.text);
         if (entitiesOverlap(newEntities, existingEntities)) {
-          // Mark the older memory as absorbed (superseded by newer memory)
+          // Mark older memory as superseded and register conflict pair
           await updateAgentMemory(opts.userId, existing.id, {
-            absorbed: true,
-            absorbedBy: `micro-dream:contradiction:${opts.memoryId}`,
+            supersededBy: opts.memoryId,
+            confidenceScore: 0.35,
+            conflictsWith: [opts.memoryId],
+            lastVerifiedAt: new Date().toISOString(),
+          });
+          await updateAgentMemory(opts.userId, opts.memoryId, {
+            conflictsWith: [existing.id],
+            lastVerifiedAt: new Date().toISOString(),
+          });
+          await createMemoryEdge({
+            userId: opts.userId,
+            sourceId: existing.id,
+            targetId: opts.memoryId,
+            relationshipType: "contradicts",
+            weight: 1,
+            metadata: { source: "micro_dream_contradiction" },
           });
           return {
             action: "contradiction_resolved",

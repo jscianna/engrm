@@ -17,6 +17,11 @@ import { getAgentMemoriesByIds, getAgentMemoryById } from "@/lib/db";
 import { validateApiKey } from "@/lib/api-auth";
 import { FatHippoError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
+import {
+  buildProvenanceSnippet,
+  calculateFreshnessScore,
+  deriveMatchReason,
+} from "@/lib/retrieval-explainability";
 
 export const runtime = "nodejs";
 
@@ -31,6 +36,9 @@ type ExplainResult = {
   entityBonus: number;
   feedbackBonus: number;
   accessBonus: number;
+  freshnessScore: number;
+  matchReason: string;
+  provenanceSnippet: string;
   included: boolean;
   reason: string;
 };
@@ -78,8 +86,16 @@ export async function POST(request: Request) {
       const entityBonus = entityOverlap * 0.06;
       const feedbackBonus = memory.feedbackScore * 0.08;
       const accessBonus = Math.min(memory.accessCount, 25) * 0.01;
+      const freshnessScore = calculateFreshnessScore(memory.createdAt);
       const totalScore = vectorScore + entityBonus + feedbackBonus + accessBonus;
       const included = totalScore >= threshold;
+      const matchReason = deriveMatchReason({
+        vector_score: vectorScore,
+        entity_bonus: entityBonus,
+        feedback_bonus: feedbackBonus,
+        access_bonus: accessBonus,
+        freshness_score: freshnessScore,
+      });
 
       results = [{
         memoryId: memory.id,
@@ -89,6 +105,9 @@ export async function POST(request: Request) {
         entityBonus: Math.round(entityBonus * 1000) / 1000,
         feedbackBonus: Math.round(feedbackBonus * 1000) / 1000,
         accessBonus: Math.round(accessBonus * 1000) / 1000,
+        freshnessScore,
+        matchReason,
+        provenanceSnippet: buildProvenanceSnippet(memory.text),
         included,
         reason: included
           ? `Score ${totalScore.toFixed(3)} >= threshold ${threshold}`
@@ -122,6 +141,7 @@ export async function POST(request: Request) {
           const entityBonus = entityOverlap * 0.06;
           const feedbackBonus = memory.feedbackScore * 0.08;
           const accessBonus = Math.min(memory.accessCount, 25) * 0.01;
+          const freshnessScore = calculateFreshnessScore(memory.createdAt);
           const totalScore = vectorScore + entityBonus + feedbackBonus + accessBonus;
 
           return {
@@ -130,6 +150,7 @@ export async function POST(request: Request) {
             entityBonus,
             feedbackBonus,
             accessBonus,
+            freshnessScore,
             totalScore,
           };
         })
@@ -139,6 +160,14 @@ export async function POST(request: Request) {
 
       results = scored.map((item) => {
         const included = item.totalScore >= threshold;
+        const matchReason = deriveMatchReason({
+          vector_score: item.vectorScore,
+          entity_bonus: item.entityBonus,
+          feedback_bonus: item.feedbackBonus,
+          access_bonus: item.accessBonus,
+          freshness_score: item.freshnessScore,
+        });
+
         return {
           memoryId: item.memory.id,
           title: item.memory.title,
@@ -147,6 +176,9 @@ export async function POST(request: Request) {
           entityBonus: Math.round(item.entityBonus * 1000) / 1000,
           feedbackBonus: Math.round(item.feedbackBonus * 1000) / 1000,
           accessBonus: Math.round(item.accessBonus * 1000) / 1000,
+          freshnessScore: item.freshnessScore,
+          matchReason,
+          provenanceSnippet: buildProvenanceSnippet(item.memory.text),
           included,
           reason: included
             ? `Score ${item.totalScore.toFixed(3)} >= threshold ${threshold}`
@@ -170,6 +202,7 @@ export async function POST(request: Request) {
         entityWeight: 0.06,
         feedbackWeight: 0.08,
         accessWeight: 0.01,
+        freshnessWeightForReasoning: 0.08,
         accessCap: 25,
       },
     });

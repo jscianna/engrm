@@ -269,6 +269,13 @@ type CreateSkillArgs = RuntimeAwareArgs & {
   category?: string;
 };
 
+type GetWriteLedgerArgs = RuntimeAwareArgs & {
+  window?: "1h" | "24h" | "7d";
+  reasonCode?: string;
+  mcpOnly?: boolean;
+  limit?: number;
+};
+
 // Session-scoped rate limiting for create_skill
 const session_skill_counts = new Map<string, number>();
 const MAX_SKILLS_PER_SESSION = 3;
@@ -771,6 +778,35 @@ const TOOLS: Tool[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "get_write_ledger",
+    description:
+      "Query the memory write decision ledger. Shows what was accepted, rejected, merged, or updated — with reason codes and policy details. Useful for auditing and debugging memory writes.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        window: {
+          type: "string",
+          enum: ["1h", "24h", "7d"],
+          description: "Time window. Defaults to 24h.",
+        },
+        reasonCode: {
+          type: "string",
+          description: "Filter by reason code (e.g. 'stored', 'rejected_low_quality', 'rejected_secret').",
+        },
+        mcpOnly: {
+          type: "boolean",
+          description: "If true, only show writes that originated from an MCP runtime.",
+        },
+        limit: {
+          type: "number",
+          description: "Max entries to return. Default 50, max 200.",
+        },
+        ...runtimeAwareProperties,
+      },
+      additionalProperties: false,
+    },
+  },
 ];
 
 function mergeRuntime(args: RuntimeAwareArgs): Partial<FatHippoRuntimeMetadata> | undefined {
@@ -900,6 +936,7 @@ async function handleRemember(args: RememberArgs): Promise<string> {
     memoryId: result.memoryId,
     consolidated: result.consolidated,
     warning: result.warning,
+    audit: result.audit,
   });
 }
 
@@ -970,8 +1007,12 @@ async function handleRecordTrace(args: RecordTraceArgs): Promise<string> {
     throw new Error(`Failed to record trace: ${response.status} ${text}`);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result = await response.json() as any;
+  let result: unknown;
+  try {
+    result = await response.json();
+  } catch {
+    return toJsonText({ error: "Failed to parse response JSON from record_trace" });
+  }
   return toJsonText(result);
 }
 
@@ -1000,39 +1041,55 @@ async function handleGetCognitiveContext(args: GetCognitiveContextArgs): Promise
     throw new Error(`Failed to get cognitive context: ${response.status} ${text}`);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result = await response.json() as any;
+  let result: Record<string, unknown>;
+  try {
+    result = await response.json() as Record<string, unknown>;
+  } catch {
+    return toJsonText({ error: "Failed to parse response JSON from get_cognitive_context" });
+  }
 
   // Format into a readable summary for the agent
   const parts: string[] = [];
+  const traces = Array.isArray(result.traces) ? result.traces as Array<Record<string, unknown>> : [];
+  const patterns = Array.isArray(result.patterns) ? result.patterns as Array<Record<string, unknown>> : [];
+  const skills = Array.isArray(result.skills) ? result.skills as Array<Record<string, unknown>> : [];
+  const workflow = (typeof result.workflow === "object" && result.workflow !== null)
+    ? result.workflow as Record<string, unknown>
+    : null;
+  const workflow_steps = workflow && Array.isArray(workflow.steps) ? workflow.steps as string[] : [];
 
-  if (result.traces?.length > 0) {
+  if (traces.length > 0) {
     parts.push("## Past Similar Problems");
-    for (const trace of result.traces) {
-      const icon = trace.outcome === "success" ? "✓" : trace.outcome === "failed" ? "✗" : "~";
-      parts.push(`- ${icon} ${trace.problem}${trace.solution ? ` → ${trace.solution}` : ""}`);
+    for (const trace of traces) {
+      const outcome = String(trace.outcome ?? "");
+      const icon = outcome === "success" ? "✓" : outcome === "failed" ? "✗" : "~";
+      const problem = String(trace.problem ?? "");
+      const solution = trace.solution ? String(trace.solution) : "";
+      parts.push(`- ${icon} ${problem}${solution ? ` → ${solution}` : ""}`);
     }
   }
 
-  if (result.patterns?.length > 0) {
+  if (patterns.length > 0) {
     parts.push("\n## Learned Patterns");
-    for (const pattern of result.patterns) {
+    for (const pattern of patterns) {
+      const confidence = Number(pattern.confidence ?? 0);
       parts.push(
-        `- [${pattern.domain}] ${pattern.approach} (${Math.round(pattern.confidence * 100)}% confidence)`,
+        `- [${String(pattern.domain ?? "unknown")}] ${String(pattern.approach ?? "") } (${Math.round(confidence * 100)}% confidence)`,
       );
     }
   }
 
-  if (result.skills?.length > 0) {
+  if (skills.length > 0) {
     parts.push("\n## Synthesized Skills");
-    for (const skill of result.skills) {
-      parts.push(`- ${skill.name}: ${skill.description} (${Math.round(skill.successRate * 100)}% success)`);
+    for (const skill of skills) {
+      const success_rate = Number(skill.successRate ?? 0);
+      parts.push(`- ${String(skill.name ?? "skill")}: ${String(skill.description ?? "")} (${Math.round(success_rate * 100)}% success)`);
     }
   }
 
-  if (result.workflow?.steps?.length > 0) {
+  if (workflow_steps.length > 0) {
     parts.push("\n## Recommended Workflow");
-    for (const step of result.workflow.steps) {
+    for (const step of workflow_steps) {
       parts.push(`- ${step}`);
     }
   }
@@ -1044,10 +1101,10 @@ async function handleGetCognitiveContext(args: GetCognitiveContextArgs): Promise
         ? parts.join("\n")
         : "No relevant patterns or traces found yet. Record traces after solving problems to build up the knowledge base.",
     raw: {
-      traceCount: result.traces?.length ?? 0,
-      patternCount: result.patterns?.length ?? 0,
-      skillCount: result.skills?.length ?? 0,
-      hasWorkflow: !!result.workflow,
+      traceCount: traces.length,
+      patternCount: patterns.length,
+      skillCount: skills.length,
+      hasWorkflow: !!workflow,
     },
   });
 }
@@ -1072,8 +1129,12 @@ async function handleSubmitFeedback(args: SubmitFeedbackArgs): Promise<string> {
     throw new Error(`Failed to submit feedback: ${response.status} ${text}`);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result = await response.json() as any;
+  let result: unknown;
+  try {
+    result = await response.json();
+  } catch {
+    return toJsonText({ error: "Failed to parse response JSON from submit_feedback" });
+  }
   return toJsonText(result);
 }
 
@@ -1091,29 +1152,35 @@ async function handleGetSkillDetail(args: GetSkillDetailArgs): Promise<string> {
     throw new Error(`Failed to get skill: ${response.status} ${text}`);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result = await response.json() as any;
-  const skill = result.skill;
+  let result: Record<string, unknown>;
+  try {
+    result = await response.json() as Record<string, unknown>;
+  } catch {
+    return toJsonText({ error: "Failed to parse response JSON from get_skill_detail" });
+  }
+  const skill = result.skill as Record<string, unknown> | undefined;
   if (!skill) {
     throw new Error("Skill not found");
   }
 
   const section = args.section ?? "full";
-  const content = skill.content ?? {};
+  const content = (skill.content ?? {}) as Record<string, unknown>;
+  const procedure = Array.isArray(content.procedure) ? content.procedure as string[] : [];
+  const pitfalls = Array.isArray(content.commonPitfalls) ? content.commonPitfalls as string[] : [];
 
   if (section === "full") {
     const parts: string[] = [
       `# ${skill.name}`,
       `**Description:** ${skill.description}`,
-      `**Success Rate:** ${Math.round((skill.successRate ?? 0) * 100)}%`,
+      `**Success Rate:** ${Math.round(Number(skill.successRate ?? 0) * 100)}%`,
       `**Status:** ${skill.status}`,
     ];
     if (content.whenToUse) parts.push(`\n## When To Use\n${content.whenToUse}`);
-    if (content.procedure?.length) {
-      parts.push(`\n## Procedure\n${(content.procedure as string[]).map((s, i) => `${i + 1}. ${s}`).join("\n")}`);
+    if (procedure.length) {
+      parts.push(`\n## Procedure\n${procedure.map((s, i) => `${i + 1}. ${s}`).join("\n")}`);
     }
-    if (content.commonPitfalls?.length) {
-      parts.push(`\n## Common Pitfalls\n${(content.commonPitfalls as string[]).map((s: string) => `- ${s}`).join("\n")}`);
+    if (pitfalls.length) {
+      parts.push(`\n## Common Pitfalls\n${pitfalls.map((s: string) => `- ${s}`).join("\n")}`);
     }
     if (content.verification) parts.push(`\n## Verification\n${content.verification}`);
     return toJsonText({ skillId: skill.id, name: skill.name, content: parts.join("\n") });
@@ -1169,13 +1236,92 @@ async function handleCreateSkill(args: CreateSkillArgs): Promise<string> {
   }
 
   session_skill_counts.set(session_key, count + 1);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result = await response.json() as any;
+  let result: Record<string, unknown>;
+  try {
+    result = await response.json() as Record<string, unknown>;
+  } catch {
+    return toJsonText({ error: "Failed to parse response JSON from create_skill" });
+  }
   return toJsonText({
     created: true,
-    skillId: result.skill?.id,
+    skillId: (result.skill as Record<string, unknown> | undefined)?.id,
     status: "pending_review",
     message: `Skill "${args.name}" saved in review status. It will be suggested across platforms once validated by successful usage.`,
+  });
+}
+
+async function handleGetWriteLedger(args: GetWriteLedgerArgs): Promise<string> {
+  const params = new URLSearchParams();
+  params.set("window", args.window ?? "24h");
+  if (args.reasonCode) params.set("reason_code", args.reasonCode);
+  if (args.mcpOnly) params.set("mcp_only", "true");
+  params.set("limit", String(Math.min(args.limit ?? 50, 200)));
+
+  const response = await fetch(`${BASE_URL}/v1/audit/decisions?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Failed to get write ledger: ${response.status} ${text}`);
+  }
+
+  let ledger: Record<string, unknown>;
+  try {
+    ledger = await response.json() as Record<string, unknown>;
+  } catch {
+    return toJsonText({ error: "Failed to parse write ledger response" });
+  }
+
+  // Format into a readable summary
+  const entries = Array.isArray(ledger.entries) ? ledger.entries as Array<Record<string, unknown>> : [];
+  const totals = (ledger.totals ?? {}) as Record<string, number>;
+  const window = (ledger.window ?? {}) as Record<string, string>;
+
+  const parts: string[] = [];
+  parts.push(`## Write Decision Ledger`);
+  parts.push(`**Window:** ${window.since ?? "?"} → ${window.until ?? "now"}`);
+  parts.push(`**MCP writes:** ${ledger.mcpCount ?? 0} | **Direct writes:** ${ledger.directCount ?? 0}`);
+
+  const decisionTotals = (ledger.decisionTotals ?? {}) as Record<string, number>;
+  if (Object.keys(decisionTotals).length > 0) {
+    parts.push("\n### Outcome Breakdown");
+    for (const [decision, count] of Object.entries(decisionTotals)) {
+      parts.push(`- ${decision}: ${count}`);
+    }
+  }
+
+  if (Object.keys(totals).length > 0) {
+    parts.push("\n### Reason Breakdown");
+    for (const [code, count] of Object.entries(totals)) {
+      parts.push(`- ${code}: ${count}`);
+    }
+  }
+
+  if (entries.length > 0) {
+    parts.push(`\n### Recent Entries (${entries.length})`);
+    for (const entry of entries.slice(0, 20)) {
+      const icon = entry.decision === "accepted" ? "✓" : entry.decision === "rejected" ? "✗" : "~";
+      const runtime = entry.runtime ? ` [${entry.runtime}]` : "";
+      const policy = entry.policyCode ? ` · ${entry.policyCode}` : "";
+      const source = entry.sourceType ? ` · ${entry.sourceType}` : "";
+      const preview = String(entry.textPreview ?? "").slice(0, 80);
+      parts.push(`- ${icon} **${entry.reasonCode}**${policy}${source}${runtime}: ${preview}`);
+    }
+    if (entries.length > 20) {
+      parts.push(`\n_(${entries.length - 20} more entries not shown)_`);
+    }
+  } else {
+    parts.push("\n_No write decisions in this window._");
+  }
+
+  return toJsonText({
+    summary: parts.join("\n"),
+    raw: ledger,
   });
 }
 
@@ -1237,10 +1383,14 @@ async function main() {
   }));
 
   server.setRequestHandler(GetPromptRequestSchema, async (request) => {
-    const prompt = PROMPTS[request.params.name];
+    const promptName = request.params?.name;
+    if (!promptName) {
+      throw new Error("Missing prompt name in request params");
+    }
+    const prompt = PROMPTS[promptName];
 
     if (!prompt) {
-      throw new Error(`Unknown prompt: ${request.params.name}`);
+      throw new Error(`Unknown prompt: ${promptName}`);
     }
 
     return {
@@ -1258,6 +1408,9 @@ async function main() {
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    if (!request.params) {
+      throw new Error("Missing request params");
+    }
     const { name, arguments: args } = request.params;
 
     try {
@@ -1300,6 +1453,9 @@ async function main() {
           break;
         case "create_skill":
           result = await handleCreateSkill(toolArgs as CreateSkillArgs);
+          break;
+        case "get_write_ledger":
+          result = await handleGetWriteLedger(toolArgs as GetWriteLedgerArgs);
           break;
         default:
           throw new Error(`Unknown tool: ${name}`);

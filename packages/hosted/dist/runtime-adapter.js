@@ -1,3 +1,4 @@
+import { detectModelFamily, formatTieredContextForModel } from "./model-adapter.js";
 function normalizeApiBaseUrl(baseUrl) {
     const normalized = baseUrl.replace(/\/+$/, "");
     if (normalized.endsWith("/api/v1")) {
@@ -26,19 +27,6 @@ function formatMemoryList(memories) {
         const text = memory.text.trim();
         return text ? `- ${title}: ${text}` : `- ${title}`;
     });
-}
-function formatTieredContext(context) {
-    const sections = [];
-    if ((context.critical?.length ?? 0) > 0) {
-        sections.push(`## Critical Memory\n${formatMemoryList(context.critical ?? []).join("\n")}`);
-    }
-    if ((context.working?.length ?? 0) > 0) {
-        sections.push(`## Working Memory\n${formatMemoryList(context.working ?? []).join("\n")}`);
-    }
-    if ((context.high?.length ?? 0) > 0) {
-        sections.push(`## Relevant Memory\n${formatMemoryList(context.high ?? []).join("\n")}`);
-    }
-    return sections.join("\n\n");
 }
 function mapInjectedMemories(memories, source) {
     return (memories ?? []).map((memory) => ({
@@ -238,9 +226,10 @@ export class FatHippoHostedRuntimeClient {
             ...mapInjectedMemories(response.context?.critical, "critical"),
             ...mapInjectedMemories(response.context?.high, "high"),
         ];
+        const model_family = detectModelFamily(input.runtime?.model);
         return {
             sessionId: response.sessionId,
-            systemPromptAddition: formatTieredContext(response.context ?? {}),
+            systemPromptAddition: formatTieredContextForModel(response.context ?? {}, model_family),
             injectedMemories,
             tokensInjected: response.stats?.tokensInjected,
             criticalCount: response.stats?.criticalCount,
@@ -332,8 +321,9 @@ export class FatHippoHostedRuntimeClient {
             ...mapInjectedMemories(response.newContext?.critical, "refresh"),
             ...mapInjectedMemories(response.newContext?.high, "refresh"),
         ];
+        const turn_model_family = detectModelFamily(input.runtime?.model);
         const systemPromptAddition = response.newContext
-            ? formatTieredContext(response.newContext)
+            ? formatTieredContextForModel(response.newContext, turn_model_family)
             : undefined;
         return {
             turnNumber: response.turnNumber,
@@ -358,6 +348,13 @@ export class FatHippoHostedRuntimeClient {
             stored: response.stored !== false,
             consolidated: response.consolidated,
             warning: response.warning,
+            audit: (response.reason_code || response.policy_code || response.matched_rules)
+                ? {
+                    reasonCode: response.reason_code,
+                    policyCode: response.policy_code,
+                    matchedRules: response.matched_rules,
+                }
+                : undefined,
         };
     }
     async search(input) {

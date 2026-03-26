@@ -12,8 +12,11 @@ import { CONTEXT_ENGINE_ID, CONTEXT_ENGINE_VERSION } from "./version.js";
 import { initializeUserDNA, analyzeSession, mergeSignals, formatUserDNAForInjection, loadUserDNA, saveUserDNA, } from "./user-dna/index.js";
 import { processTraceForCollective, getCollectiveWisdom, } from "./collective/index.js";
 import { formatMemoriesForInjection, dedupeMemories, estimateTokens, } from "./utils/formatting.js";
-import { detectPromptInjection, matchesCapturePatterns, sanitizeContent, } from "./utils/filtering.js";
+import { evaluateMemoryCandidate, sanitizeContent, } from "./utils/filtering.js";
 import { loadCodebaseProfile, formatCodebaseProfileForInjection, isProfileStale, formatStalenessHint } from "./profiler/index.js";
+import { detectModelFamily } from "./model-adapters/index.js";
+import { detectTaskType } from "./task-detection.js";
+import { prioritizeForTask } from "./context-prioritizer.js";
 /**
  * FatHippo Context Engine implementation
  */
@@ -43,6 +46,16 @@ export class FatHippoContextEngine {
     userDNAEnabled;
     // Collective intelligence state
     collectiveEnabled;
+    // Model adapter state
+    modelAdapter = null;
+    modelAdaptersEnabled;
+    // Dynamic prioritization state
+    dynamicPrioritizationEnabled;
+    // Cognitive feedback tracking
+    sessionInjectedContext = new Map();
+    // Cognitive run interval tracking (Break 1)
+    turnsSinceLastCognitiveRun = 0;
+    static COGNITIVE_RUN_INTERVAL = 5; // Run every 5th turn
     static TRIVIAL_ACKS = new Set([
         "ok",
         "thanks",
@@ -59,7 +72,11 @@ export class FatHippoContextEngine {
     static HIPPO_NOD_COOLDOWN_MS = 15 * 60 * 1000;
     static HIPPO_NOD_MIN_MESSAGE_GAP = 6;
     constructor(config) {
-        this.config = config;
+        this.config = {
+            ...config,
+            // Default to user-only memory capture unless explicitly disabled.
+            captureUserOnly: config.captureUserOnly ?? true,
+        };
         this.mode = config.mode === "local" || (!config.apiKey && config.mode !== "hosted") ? "local" : "hosted";
         if (this.mode === "hosted" && !config.apiKey) {
             throw new Error("FatHippo hosted mode requires an API key. Pass apiKey or switch mode to local/auto.");
@@ -87,6 +104,10 @@ export class FatHippoContextEngine {
         this.userDNAEnabled = config.userDNAEnabled !== false;
         // Enable collective intelligence (default: true for hosted)
         this.collectiveEnabled = this.mode === "hosted" && config.collectiveEnabled !== false;
+        // Enable model adapters (default: true)
+        this.modelAdaptersEnabled = config.modelAdaptersEnabled !== false;
+        // Enable dynamic task-aware prioritization (default: true)
+        this.dynamicPrioritizationEnabled = config.dynamicPrioritizationEnabled !== false;
     }
     /**
      * Initialize engine state for a session
@@ -94,6 +115,13 @@ export class FatHippoContextEngine {
     async bootstrap(params) {
         try {
             this.sessionStartTimes.set(params.sessionId, Date.now());
+            // Detect model adapter from bootstrap params or config
+            if (this.modelAdaptersEnabled && !this.modelAdapter) {
+                const modelId = params.model ?? this.config.runtime ?? undefined;
+                if (modelId) {
+                    this.modelAdapter = detectModelFamily(modelId);
+                }
+            }
             const workspaceRoot = this.detectWorkspaceRoot(params.sessionFile);
             // Load existing codebase profile (read-only, no generation)
             if (this.codebaseProfilingEnabled && workspaceRoot) {
@@ -178,10 +206,18 @@ export class FatHippoContextEngine {
      * Post-turn lifecycle processing
      */
     async afterTurn(params) {
-        if (params.isHeartbeat) {
-            if (this.cognitiveEnabled && this.config.cognitiveHeartbeatEnabled !== false) {
-                await this.runCognitiveHeartbeat();
+        // Run cognitive heartbeat periodically, not just on heartbeat turns
+        this.turnsSinceLastCognitiveRun++;
+        if (this.cognitiveEnabled && this.config.cognitiveHeartbeatEnabled !== false) {
+            if (params.isHeartbeat || this.turnsSinceLastCognitiveRun >= FatHippoContextEngine.COGNITIVE_RUN_INTERVAL) {
+                this.turnsSinceLastCognitiveRun = 0;
+                // Fire and forget — don't block the turn
+                this.runCognitiveHeartbeat().catch((err) => {
+                    console.error("[FatHippo] Background cognitive run error:", err);
+                });
             }
+        }
+        if (params.isHeartbeat) {
             return;
         }
         const turnMessages = this.extractTurnMessages(params.messages, params.prePromptMessageCount);
@@ -214,7 +250,7 @@ export class FatHippoContextEngine {
                 sessionId: hostedSessionId,
                 messages: turnMessages,
                 memoriesUsed: [],
-                captureUserOnly: this.config.captureUserOnly === true,
+                captureUserOnly: this.config.captureUserOnly !== false,
                 captureConstraints: this.cognitiveEnabled,
                 captureTrace: this.cognitiveEnabled,
                 runtime: this.buildHostedRuntimeMetadata({
@@ -226,6 +262,16 @@ export class FatHippoContextEngine {
         catch (error) {
             console.error("[FatHippo] Record turn error:", error);
         }
+        // Automatic feedback for injected patterns/skills
+        await this.submitCognitiveFeedback({
+            sessionId: params.sessionId,
+            messages: params.messages,
+        });
+        // Update application outcome for cognitively-tracked applications
+        await this.updateApplicationOutcome({
+            sessionId: params.sessionId,
+            messages: params.messages,
+        });
         // User DNA analysis (hosted mode)
         await this.updateUserDNA({
             sessionId: params.sessionId,
@@ -240,6 +286,138 @@ export class FatHippoContextEngine {
                 messages: params.messages,
             });
         }
+    }
+    async submitCognitiveFeedback(params) {
+        const injected = this.sessionInjectedContext.get(params.sessionId);
+        if (!injected || injected.pattern_ids.length === 0)
+            return;
+        // Don't submit feedback too quickly — wait for at least 2 turns after injection
+        // (the turn where context was injected + at least 1 follow-up)
+        if (Date.now() - injected.injected_at < 30_000)
+            return;
+        try {
+            const outcome = this.detectTurnOutcome(params.messages);
+            if (!outcome)
+                return; // Inconclusive — don't submit noise
+            const client = this.client;
+            if (!client)
+                return;
+            // Submit feedback for each injected pattern
+            // Use Promise.allSettled to not block on failures
+            const feedback_promises = injected.pattern_ids.map(pattern_id => {
+                // Find a trace ID that was injected alongside this pattern
+                const trace_id = injected.trace_ids[0] ?? params.sessionId;
+                return client.submitPatternFeedback({
+                    patternId: pattern_id,
+                    traceId: trace_id,
+                    outcome,
+                }).catch(err => {
+                    console.error(`[FatHippo] Pattern feedback error for ${pattern_id}:`, err instanceof Error ? err.message : 'unknown');
+                });
+            });
+            await Promise.allSettled(feedback_promises);
+            // Clear injected context after feedback is submitted
+            this.sessionInjectedContext.delete(params.sessionId);
+        }
+        catch (error) {
+            console.error("[FatHippo] Cognitive feedback error:", error);
+        }
+    }
+    async updateApplicationOutcome(params) {
+        // Check if there's a cognitive application ID tracked for this session
+        const injected = this.sessionInjectedContext.get(params.sessionId);
+        if (!injected?.application_id)
+            return;
+        // Don't update too early
+        if (Date.now() - injected.injected_at < 30_000)
+            return;
+        try {
+            const outcome = this.detectTurnOutcome(params.messages);
+            if (!outcome)
+                return;
+            const client = this.client;
+            if (!client)
+                return;
+            // Map engine outcome to API outcome (API uses 'failed' not 'failure')
+            const api_outcome = outcome === 'success' ? 'success' : 'failed';
+            await client.updateApplicationOutcome({
+                applicationId: injected.application_id,
+                outcome: api_outcome,
+            }).catch((err) => {
+                console.error("[FatHippo] Application outcome update error:", err instanceof Error ? err.message : "unknown");
+            });
+        }
+        catch {
+            // Fire and forget
+        }
+    }
+    detectTurnOutcome(messages) {
+        // Look at the last few messages for outcome signals
+        const recent_messages = messages.slice(-6);
+        const recent_text = recent_messages.map(m => getMessageText(m)).join(' ').toLowerCase();
+        // User correction signals (indicates the agent was wrong — treat as failure for feedback)
+        const correction_signals = [
+            "no, that's wrong", "that's not right", "that's incorrect",
+            "actually, it should", "you're wrong", "that's not how",
+            "wrong approach", "not what i asked", "that's outdated",
+            "no that's wrong", "actually it should",
+        ];
+        let correction_score = 0;
+        for (const signal of correction_signals) {
+            if (recent_text.includes(signal))
+                correction_score++;
+        }
+        if (correction_score >= 1)
+            return 'failure';
+        // Strong success signals
+        const success_signals = [
+            'fixed', 'resolved', 'working now', 'that worked', 'works now',
+            'solved', 'solution worked', 'problem solved', 'issue resolved',
+            'successfully', 'tests pass', 'builds successfully', 'compiles',
+            'lgtm', 'looks good', 'confirmed working', 'verified',
+        ];
+        // Strong failure signals
+        const failure_signals = [
+            'still broken', 'still failing', 'didn\'t work', 'doesn\'t work',
+            'same error', 'still getting', 'not working', 'wrong approach',
+            'that\'s wrong', 'incorrect', 'made it worse', 'still see the error',
+            'different approach', 'try something else', 'that didn\'t help',
+        ];
+        let success_score = 0;
+        let failure_score = 0;
+        for (const signal of success_signals) {
+            if (recent_text.includes(signal))
+                success_score++;
+        }
+        for (const signal of failure_signals) {
+            if (recent_text.includes(signal))
+                failure_score++;
+        }
+        // Need a clear signal — at least 2 points of evidence
+        if (success_score >= 2 && success_score > failure_score)
+            return 'success';
+        if (failure_score >= 2 && failure_score > success_score)
+            return 'failure';
+        // Check for tool results that indicate success/failure
+        for (const msg of recent_messages) {
+            const raw = msg;
+            if (raw.role === 'toolResult' || raw.type === 'toolResult') {
+                const text = getMessageText(msg).toLowerCase();
+                // Successful test/build tool results
+                if (/(?:tests?\s+passed|build\s+succeeded|exit\s+code\s*:?\s*0)/.test(text)) {
+                    success_score += 2;
+                }
+                // Failed test/build tool results
+                if (/(?:tests?\s+failed|build\s+failed|exit\s+code\s*:?\s*[1-9])/.test(text)) {
+                    failure_score += 2;
+                }
+            }
+        }
+        if (success_score >= 2 && success_score > failure_score)
+            return 'success';
+        if (failure_score >= 2 && failure_score > success_score)
+            return 'failure';
+        return null; // Inconclusive
     }
     detectToolsUsed(messages) {
         const tools = new Set();
@@ -258,6 +436,14 @@ export class FatHippoContextEngine {
      * Assemble context for the model
      */
     async assemble(params) {
+        // Re-detect model adapter if a different model is specified (e.g. subagent on different model)
+        if (params.model && this.config.modelAdaptersEnabled !== false) {
+            const { detectModelFamily } = await import("./model-adapters/index.js");
+            const detected = detectModelFamily(params.model);
+            if (!this.modelAdapter || detected.family !== this.modelAdapter.family) {
+                this.modelAdapter = detected;
+            }
+        }
         const lastUserMessage = this.findLastUserMessage(params.messages)?.trim() ?? "";
         const runtimeAwareness = this.buildRuntimeAwarenessInstruction();
         if (this.mode === "local") {
@@ -295,6 +481,16 @@ export class FatHippoContextEngine {
                 }),
             });
             hostedContext = context.systemPromptAddition ?? "";
+            // Capture injected cognitive IDs for feedback loop
+            if (context.injectedPatternIds?.length || context.injectedSkillIds?.length || context.injectedTraceIds?.length) {
+                this.sessionInjectedContext.set(params.sessionId, {
+                    pattern_ids: context.injectedPatternIds ?? [],
+                    skill_ids: context.injectedSkillIds ?? [],
+                    trace_ids: context.injectedTraceIds ?? [],
+                    application_id: context.cognitiveApplicationId,
+                    injected_at: Date.now(),
+                });
+            }
             if (hostedContext.includes("## Recommended Workflow")) {
                 cue = {
                     kind: "workflow",
@@ -333,19 +529,42 @@ export class FatHippoContextEngine {
         const collectiveBlock = this.collectiveEnabled
             ? await this.getCollectiveWisdomBlock(lastUserMessage, params.messages)
             : "";
-        const fullContext = typeof params.tokenBudget === "number" && params.tokenBudget > 0
-            ? this.fitContextToBudget({
-                sections: [
-                    runtimeAwareness,
-                    profileBlock,
-                    userDNABlock,
-                    hostedContext,
-                    collectiveBlock,
-                    hippoNodInstruction,
-                ],
-                contextBudget: Math.max(0, params.tokenBudget - baseMessageTokens),
-            })
-            : runtimeAwareness + profileBlock + userDNABlock + hostedContext + collectiveBlock + hippoNodInstruction;
+        // Map section IDs to their content blocks
+        const sectionMap = {
+            runtime: runtimeAwareness,
+            codebaseProfile: profileBlock,
+            userDNA: userDNABlock,
+            traces: hostedContext,
+            collective: collectiveBlock,
+        };
+        // Use model adapter budget if available and no explicit budget
+        const adapterBudget = this.modelAdaptersEnabled && this.modelAdapter
+            ? this.modelAdapter.adapter.optimalContextBudget
+            : undefined;
+        const effectiveBudget = typeof params.tokenBudget === "number" && params.tokenBudget > 0
+            ? params.tokenBudget
+            : adapterBudget;
+        // Dynamic task-aware prioritization
+        const contextSections = this.buildDynamicSections({
+            messages: params.messages,
+            sectionMap,
+            totalBudget: effectiveBudget
+                ? Math.max(0, effectiveBudget - baseMessageTokens)
+                : undefined,
+            suffix: hippoNodInstruction,
+        });
+        let fullContext;
+        if (effectiveBudget && effectiveBudget > 0) {
+            fullContext = this.fitContextToBudget({
+                sections: contextSections,
+                contextBudget: Math.max(0, effectiveBudget - baseMessageTokens),
+            });
+        }
+        else {
+            fullContext = contextSections.join("");
+        }
+        // Apply model-aware wrapping if adapter detected and prefers XML
+        fullContext = this.applyModelFormatting(fullContext);
         const tokens = estimateTokens(fullContext) + baseMessageTokens;
         return {
             messages: params.messages,
@@ -441,21 +660,30 @@ export class FatHippoContextEngine {
         const profileBlock = await this.getCodebaseProfileBlock(localProfileId !== "openclaw-local-default" ? localProfileId : undefined);
         // User DNA context injection (local mode)
         const userDNABlock = await this.getUserDNABlock(localProfileId !== "openclaw-local-default" ? localProfileId : undefined);
-        const fullContext = typeof params.tokenBudget === "number" && params.tokenBudget > 0
+        // Map section IDs to their content blocks (local mode)
+        // traces = workflow + pattern blocks; memories = memoryBlock + indexedContext
+        const localSectionMap = {
+            runtime: runtimeAwareness,
+            codebaseProfile: profileBlock,
+            userDNA: userDNABlock,
+            traces: workflowBlock + patternBlock,
+            memories: (memoryBlock ? `${memoryBlock}\n` : "") + indexedContext,
+        };
+        const localBudget = typeof params.tokenBudget === "number" && params.tokenBudget > 0
+            ? Math.max(0, params.tokenBudget - baseTokens)
+            : undefined;
+        const localSections = this.buildDynamicSections({
+            messages: params.messages,
+            sectionMap: localSectionMap,
+            totalBudget: localBudget,
+            suffix: hippoNodInstruction,
+        });
+        const fullContext = localBudget !== undefined
             ? this.fitContextToBudget({
-                sections: [
-                    runtimeAwareness,
-                    profileBlock,
-                    userDNABlock,
-                    workflowBlock,
-                    patternBlock,
-                    memoryBlock ? `${memoryBlock}\n` : "",
-                    indexedContext,
-                    hippoNodInstruction,
-                ],
-                contextBudget: Math.max(0, params.tokenBudget - baseTokens),
+                sections: localSections,
+                contextBudget: localBudget,
             })
-            : runtimeAwareness + profileBlock + userDNABlock + workflowBlock + patternBlock + (memoryBlock ? memoryBlock + "\n" : "") + indexedContext + hippoNodInstruction;
+            : localSections.join("");
         return {
             messages: params.messages,
             estimatedTokens: baseTokens + estimateTokens(fullContext),
@@ -732,6 +960,7 @@ export class FatHippoContextEngine {
         this.sessionHippoNodState.clear();
         this.sessionCodebaseProfiles.clear();
         this.userDNACache.clear();
+        this.sessionInjectedContext.clear();
     }
     // --- Codebase profiling methods ---
     // Staleness tracking: only inject the hint once per session
@@ -975,10 +1204,8 @@ export class FatHippoContextEngine {
         const profileId = this.deriveLocalProfileId(params.sessionId, params.sessionFile);
         this.sessionLocalProfiles.set(params.sessionId, profileId);
         const candidates = new Set();
-        const durablePattern = /\b(decide|decided|decision|prefer|preference|always|never|must|remember|rule|workflow|process|plan|configured|set to|resolved|fixed|installed|created|updated)\b/i;
-        const toolPattern = /\b(namespace|workspace|project|plugin|database|schema|endpoint|config|mode|version)\b/i;
         for (const message of params.messages) {
-            if (this.config.captureUserOnly === true && message.role !== "user") {
+            if (this.config.captureUserOnly !== false && message.role !== "user") {
                 continue;
             }
             const segments = message.content
@@ -986,14 +1213,15 @@ export class FatHippoContextEngine {
                 .map((segment) => segment.trim())
                 .filter(Boolean);
             for (const segment of segments) {
-                if (!segment || detectPromptInjection(segment) || !matchesCapturePatterns(segment)) {
+                if (!segment) {
                     continue;
                 }
-                if (message.role === "tool" &&
-                    !(durablePattern.test(segment) && toolPattern.test(segment))) {
+                // Never store raw tool/system output as memory.
+                if (message.role !== "user" && message.role !== "assistant") {
                     continue;
                 }
-                if (message.role === "assistant" && !durablePattern.test(segment)) {
+                const decision = evaluateMemoryCandidate(segment, message.role);
+                if (!decision.keep) {
                     continue;
                 }
                 candidates.add(sanitizeContent(segment));
@@ -1123,6 +1351,62 @@ export class FatHippoContextEngine {
             syntheses: selectedSyntheses,
         };
     }
+    /**
+     * Build dynamically-ordered context sections based on task detection.
+     *
+     * When dynamic prioritization is enabled and task confidence is >= 0.3,
+     * reorders sections by task-adjusted priority. Otherwise, preserves
+     * the default static ordering (existing behavior).
+     *
+     * @param params.messages - conversation messages for task detection
+     * @param params.sectionMap - map of sectionId → content string
+     * @param params.totalBudget - optional total token budget for allocation
+     * @param params.suffix - content always appended last (e.g., hippo nod)
+     * @returns ordered array of section content strings
+     */
+    buildDynamicSections(params) {
+        const { messages, sectionMap, suffix } = params;
+        // Default static order: the insertion order of sectionMap keys
+        const defaultOrder = Object.keys(sectionMap);
+        if (!this.dynamicPrioritizationEnabled) {
+            const sections = defaultOrder.map((id) => sectionMap[id]).filter(Boolean);
+            if (suffix?.trim())
+                sections.push(suffix);
+            return sections;
+        }
+        // Detect task type from messages
+        const runtimeMessages = messages.map((msg) => {
+            const raw = msg;
+            return {
+                role: (typeof raw.role === "string" ? raw.role : "assistant"),
+                content: getMessageText(msg),
+            };
+        });
+        const taskResult = detectTaskType(runtimeMessages);
+        // Low confidence → fall back to static ordering
+        if (taskResult.confidence < 0.3) {
+            const sections = defaultOrder.map((id) => sectionMap[id]).filter(Boolean);
+            if (suffix?.trim())
+                sections.push(suffix);
+            return sections;
+        }
+        // Get dynamic priorities
+        const availableSections = defaultOrder.filter((id) => sectionMap[id]?.trim());
+        const budget = params.totalBudget ?? 0;
+        const priorities = prioritizeForTask(taskResult.taskType, budget, availableSections);
+        // Log for debugging (verbose only)
+        if (this.config.cognitiveEnabled !== false) {
+            console.log(`[FatHippo] Task detected: ${taskResult.taskType} (confidence: ${taskResult.confidence}, signals: ${taskResult.signals.slice(0, 3).join(", ")})`);
+        }
+        // Reorder sections by adjusted priority
+        const ordered = priorities
+            .sort((a, b) => a.adjustedPriority - b.adjustedPriority)
+            .map((p) => sectionMap[p.sectionId])
+            .filter(Boolean);
+        if (suffix?.trim())
+            ordered.push(suffix);
+        return ordered;
+    }
     fitContextToBudget(params) {
         if (params.contextBudget <= 0) {
             return "";
@@ -1146,6 +1430,24 @@ export class FatHippoContextEngine {
             break;
         }
         return selected.join("\n\n");
+    }
+    /**
+     * Apply model-aware formatting to assembled context.
+     * When adapter prefers XML, wrap context in XML tags.
+     */
+    applyModelFormatting(context) {
+        if (!this.modelAdaptersEnabled || !this.modelAdapter) {
+            return context;
+        }
+        const adapter = this.modelAdapter.adapter;
+        if (adapter.prefersXml) {
+            const trimmed = context.trim();
+            if (!trimmed)
+                return context;
+            // Wrap the entire FatHippo context block in XML for Claude-family models
+            return `<fathippo-context>\n${trimmed}\n</fathippo-context>\n`;
+        }
+        return context;
     }
     truncateContextSection(section, tokenBudget) {
         let low = 0;

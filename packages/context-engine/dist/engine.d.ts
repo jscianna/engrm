@@ -26,6 +26,12 @@ export declare class FatHippoContextEngine implements ContextEngine {
     private userDNACache;
     private userDNAEnabled;
     private collectiveEnabled;
+    private modelAdapter;
+    private modelAdaptersEnabled;
+    private dynamicPrioritizationEnabled;
+    private sessionInjectedContext;
+    private turnsSinceLastCognitiveRun;
+    private static readonly COGNITIVE_RUN_INTERVAL;
     private static readonly TRIVIAL_ACKS;
     private static readonly HIPPO_NOD_COOLDOWN_MS;
     private static readonly HIPPO_NOD_MIN_MESSAGE_GAP;
@@ -36,6 +42,7 @@ export declare class FatHippoContextEngine implements ContextEngine {
     bootstrap(params: {
         sessionId: string;
         sessionFile: string;
+        model?: string;
     }): Promise<BootstrapResult>;
     /**
      * Ingest a single message into FatHippo
@@ -66,6 +73,9 @@ export declare class FatHippoContextEngine implements ContextEngine {
         tokenBudget?: number;
         legacyCompactionParams?: Record<string, unknown>;
     }): Promise<void>;
+    private submitCognitiveFeedback;
+    private updateApplicationOutcome;
+    private detectTurnOutcome;
     private detectToolsUsed;
     /**
      * Assemble context for the model
@@ -74,6 +84,7 @@ export declare class FatHippoContextEngine implements ContextEngine {
         sessionId: string;
         messages: AgentMessage[];
         tokenBudget?: number;
+        model?: string;
     }): Promise<AssembleResult>;
     private assembleLocalContext;
     private buildRuntimeAwarenessInstruction;
@@ -138,7 +149,26 @@ export declare class FatHippoContextEngine implements ContextEngine {
     private isRoleMessage;
     private estimateMessageTokens;
     private constrainContextToBudget;
+    /**
+     * Build dynamically-ordered context sections based on task detection.
+     *
+     * When dynamic prioritization is enabled and task confidence is >= 0.3,
+     * reorders sections by task-adjusted priority. Otherwise, preserves
+     * the default static ordering (existing behavior).
+     *
+     * @param params.messages - conversation messages for task detection
+     * @param params.sectionMap - map of sectionId → content string
+     * @param params.totalBudget - optional total token budget for allocation
+     * @param params.suffix - content always appended last (e.g., hippo nod)
+     * @returns ordered array of section content strings
+     */
+    private buildDynamicSections;
     private fitContextToBudget;
+    /**
+     * Apply model-aware formatting to assembled context.
+     * When adapter prefers XML, wrap context in XML tags.
+     */
+    private applyModelFormatting;
     private truncateContextSection;
 }
 //# sourceMappingURL=engine.d.ts.map
