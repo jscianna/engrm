@@ -8,7 +8,7 @@ import {
 } from "./openclaw.js";
 import { install_hooks, remove_hooks } from "./hooks.js";
 
-const CLI_VERSION = "0.1.0";
+const CLI_VERSION = "0.1.3";
 const DEFAULT_BASE_URL = "https://fathippo.ai/api";
 const DEFAULT_POLL_INTERVAL_MS = 2000;
 const DEFAULT_POLL_TIMEOUT_MS = 15 * 60 * 1000;

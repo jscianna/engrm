@@ -9,9 +9,9 @@ export function getRetrievalConfig() {
     return {
         hostedHydeEnabled: process.env.FATHIPPO_HOSTED_HYDE === "true",
         hostedRerankEnabled: process.env.FATHIPPO_HOSTED_RERANK === "true",
-        confidenceThreshold: parseFloat(process.env.FATHIPPO_CONFIDENCE_THRESHOLD ?? "") || DEFAULT_CONFIG.confidenceThreshold,
-        confidenceMinSimilarity: parseFloat(process.env.FATHIPPO_CONFIDENCE_MIN_SIMILARITY ?? "") || DEFAULT_CONFIG.confidenceMinSimilarity,
-        confidenceRequiredCount: parseInt(process.env.FATHIPPO_CONFIDENCE_REQUIRED_COUNT ?? "", 10) || DEFAULT_CONFIG.confidenceRequiredCount,
+        confidenceThreshold: ((v) => !isNaN(v) ? v : DEFAULT_CONFIG.confidenceThreshold)(parseFloat(process.env.FATHIPPO_CONFIDENCE_THRESHOLD ?? "")),
+        confidenceMinSimilarity: ((v) => !isNaN(v) ? v : DEFAULT_CONFIG.confidenceMinSimilarity)(parseFloat(process.env.FATHIPPO_CONFIDENCE_MIN_SIMILARITY ?? "")),
+        confidenceRequiredCount: ((v) => !isNaN(v) ? v : DEFAULT_CONFIG.confidenceRequiredCount)(parseInt(process.env.FATHIPPO_CONFIDENCE_REQUIRED_COUNT ?? "", 10)),
     };
 }
 export function computeRetrievalConfidence(scores, config = getRetrievalConfig()) {
@@ -23,6 +23,8 @@ export function computeRetrievalConfidence(scores, config = getRetrievalConfig()
     const highQualityCount = sorted.filter((score) => score >= config.confidenceMinSimilarity).length;
     const countFactor = Math.min(highQualityCount / config.confidenceRequiredCount, 1) * 0.4;
     const topThree = sorted.slice(0, 3);
+    if (topThree.length === 0)
+        return 0;
     const averageTopThree = topThree.reduce((sum, score) => sum + score, 0) / topThree.length;
     const variance = topThree.reduce((sum, score) => sum + Math.pow(score - averageTopThree, 2), 0) / topThree.length;
     const consistencyFactor = Math.max(0, 0.2 - variance);

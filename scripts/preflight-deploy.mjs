@@ -23,9 +23,8 @@ function parseCanonicalBase64Key(raw) {
     const trimmed = raw.trim();
     const bytes = Buffer.from(trimmed, "base64");
     if (bytes.length !== 32) return null;
-    const canonical = bytes.toString("base64").replace(/=+$/g, "");
-    const normalized = trimmed.replace(/=+$/g, "");
-    return canonical === normalized ? bytes : null;
+    const canonical = bytes.toString("base64");
+    return canonical === trimmed ? bytes : null;
   } catch {
     return null;
   }
@@ -148,6 +147,11 @@ async function main() {
 
   validateEncryptionKey();
   validateTursoUrl();
+
+  if (process.env.ENABLE_DIAGNOSTICS === "true") {
+    warn("ENABLE_DIAGNOSTICS is set to true — disable before production deploy");
+  }
+
   await validateSchema();
 
   console.log("\n--- Preflight Summary ---");

@@ -3,6 +3,8 @@
  * All errors have codes, HTTP status, and user-friendly messages
  */
 
+import { MemoryTypeValidationError, MemoryWritePolicyError } from "@/lib/memory-write-policy";
+
 export type ErrorCode =
   | "AUTH_MISSING"
   | "AUTH_INVALID"
@@ -21,6 +23,7 @@ export type ErrorCode =
   | "NAMESPACE_NOT_FOUND"
   | "SESSION_NOT_FOUND"
   | "SYNTHESIS_NOT_FOUND"
+  | "MEMORY_REJECTED"
   | "VALIDATION_ERROR"
   | "ENCRYPTION_REQUIRED"
   | "ENCRYPTION_ERROR"
@@ -113,6 +116,11 @@ const ERROR_DETAILS: Record<ErrorCode, { status: number; message: string; userMe
     message: "Synthesis not found",
     userMessage: "This synthesis doesn't exist or you don't have access.",
   },
+  MEMORY_REJECTED: {
+    status: 400,
+    message: "Memory rejected by quality policy",
+    userMessage: "Memory rejected by quality policy.",
+  },
   VALIDATION_ERROR: {
     status: 400,
     message: "Validation error",
@@ -184,6 +192,25 @@ export class ApiAuthError extends Error {
 export function errorResponse(error: unknown): Response {
   if (error instanceof FatHippoError) {
     return Response.json(error.toJSON(), { status: error.status });
+  }
+
+  if (error instanceof MemoryWritePolicyError) {
+    const translated = new FatHippoError("MEMORY_REJECTED", {
+      reason_code: error.reasonCode,
+      policy_code: error.policyCode,
+      matched_rules: error.matchedRules,
+      quality_signals: error.signals,
+      warning: error.warning,
+    });
+    return Response.json(translated.toJSON(), { status: translated.status });
+  }
+
+  if (error instanceof MemoryTypeValidationError) {
+    const translated = new FatHippoError("VALIDATION_ERROR", {
+      field: error.field,
+      reason: error.reason,
+    });
+    return Response.json(translated.toJSON(), { status: translated.status });
   }
 
   // Log unexpected errors

@@ -7,18 +7,26 @@ import {
   insertAgentMemory,
   updateAgentMemory,
 } from "@/lib/db";
+import { logAuditEvent } from "@/lib/audit-log";
 import { semanticSearchVectors, upsertMemoryVector } from "@/lib/qdrant";
 import {
   invalidateAllLocalResultsForUser,
   invalidateLocalResultsByMemoryIds,
 } from "@/lib/local-retrieval";
+import {
+  assessMemoryWritePolicy,
+  type MemoryWritePolicyCode,
+  type MemoryWriteSignals,
+} from "@/lib/memory-write-policy";
 import { detectSecretCategories, VAULT_HINT_MESSAGE } from "@/lib/secrets";
 import { createTrace, getMatchingPatterns, syncTracePatternMatches } from "@/lib/cognitive-db";
 import { runMicroDream } from "@/lib/micro-dream";
+import { buildRewriteSuggestion, type RewriteSuggestion } from "@/lib/memory-rewrite";
 import { detectProjectScope } from "@/lib/project-scope";
 import type { MemoryImportanceTier, MemoryKind, MemoryPeer } from "@/lib/types";
 
-const CONSOLIDATION_THRESHOLD = 0.9;
+const NEAR_DUPLICATE_THRESHOLD = 0.85;
+const NEAR_DUPLICATE_COOLDOWN_DAYS = 14;
 
 const HIGH_IMPORTANCE_PATTERNS = [
   /\b(?:always|never|must|required|important|critical|prefers?|preferred)\b/i,
@@ -173,13 +181,28 @@ export type TurnCaptureMessage = {
   toolName?: string | null;
 };
 
+export type AutoStoredMemoryReasonCode =
+  | "stored"
+  | "updated_existing"
+  | "merged_exact_duplicate"
+  | "rejected_empty"
+  | "rejected_low_quality"
+  | "rejected_hard_deny"
+  | "rejected_secret"
+  | "rejected_duplicate_cooldown";
+
 export type AutoStoredMemoryResult = {
   action: "stored" | "updated" | "merged" | "skipped";
+  reasonCode: AutoStoredMemoryReasonCode;
   id?: string;
   consolidated?: boolean;
   mergedWith?: string;
   warning?: string;
+  policyCode?: MemoryWritePolicyCode;
+  matchedRules?: string[];
+  signals?: MemoryWriteSignals;
   matchedSecretCategories?: string[];
+  rewriteSuggestion?: RewriteSuggestion;
 };
 
 export type TurnMemoryCaptureSummary = {
@@ -195,7 +218,14 @@ function normalizeWhitespace(value: string): string {
 }
 
 function normalizeForDedup(value: string): string {
-  return normalizeWhitespace(value).toLowerCase().replace(/\s+/g, " ");
+  return normalizeWhitespace(value)
+    .toLowerCase()
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`[^`]*`/g, " ")
+    .replace(/[\p{P}\p{S}]+/gu, " ")
+    .replace(/\b(claude code|claude|codex|openclaw|acpx|pty|--print|--permission-mode|runtime|session[_-]?key)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function sanitizeCapturedText(value: string): string {
@@ -221,6 +251,34 @@ function matchesCapturePatterns(content: string): boolean {
   return CAPTURE_PATTERNS.some((pattern) => pattern.test(content));
 }
 
+export function assessMemoryWriteQuality(content: string): {
+  allow: boolean;
+  reasonCode: AutoStoredMemoryReasonCode;
+  policyCode: MemoryWritePolicyCode;
+  matchedRules: string[];
+  signals: MemoryWriteSignals;
+  warning?: string;
+} {
+  const text = sanitizeCapturedText(content);
+  const assessment = assessMemoryWritePolicy(text);
+  return {
+    allow: assessment.allow,
+    reasonCode: assessment.reasonCode,
+    policyCode: assessment.policyCode,
+    matchedRules: assessment.matchedRules,
+    signals: assessment.signals,
+    warning: assessment.warning,
+  };
+}
+
+function isWithinCooldown(createdAt: string | Date | null | undefined): boolean {
+  if (!createdAt) return false;
+  const created = new Date(createdAt).getTime();
+  if (!Number.isFinite(created)) return false;
+  const ageMs = Date.now() - created;
+  return ageMs <= NEAR_DUPLICATE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+}
+
 function classifyImportance(text: string): MemoryImportanceTier {
   for (const pattern of CRITICAL_PATTERNS) {
     if (pattern.test(text)) {
@@ -241,8 +299,8 @@ function importanceTierToScore(tier: MemoryImportanceTier): number {
     case "critical": return 9;
     case "working": return 8;
     case "high": return 7;
-    case "normal": return 5;
-    default: return 5;
+    case "normal": return 2;
+    default: return 2;
   }
 }
 
@@ -323,6 +381,44 @@ export function extractTurnMemoryCandidates(params: {
   return candidates;
 }
 
+async function auditAutoMemoryDecision(params: {
+  userId: string;
+  sessionId?: string | null;
+  namespaceId?: string | null;
+  text: string;
+  decision: "accepted" | "rejected" | "merged" | "updated";
+  reasonCode: AutoStoredMemoryReasonCode;
+  policyCode?: MemoryWritePolicyCode;
+  matchedRules?: string[];
+  signals?: MemoryWriteSignals;
+  sessionMeta?: Record<string, unknown>;
+}): Promise<void> {
+  const isMcp =
+    Boolean(params.sessionMeta?.runtime) ||
+    Boolean(params.sessionMeta?.platform) ||
+    String(params.sessionId ?? "").startsWith("mcp_");
+
+  await logAuditEvent({
+    userId: params.userId,
+    action: "memory.write_decision",
+    resourceType: "memory",
+    resourceId: params.sessionId ?? undefined,
+    metadata: {
+      decision: params.decision,
+      reason_code: params.reasonCode,
+      policy_code: params.policyCode ?? null,
+      matched_rules: params.matchedRules ?? null,
+      quality_signals: params.signals ?? null,
+      session_id: params.sessionId ?? null,
+      namespace_id: params.namespaceId ?? null,
+      mcp_related: isMcp,
+      runtime: params.sessionMeta?.runtime ?? null,
+      platform: params.sessionMeta?.platform ?? null,
+      text_preview: params.text.slice(0, 180),
+    },
+  });
+}
+
 export async function storeAutoMemory(params: {
   namespaceId?: string | null;
   sessionId?: string | null;
@@ -332,17 +428,52 @@ export async function storeAutoMemory(params: {
   sessionMeta?: Record<string, unknown>;
 }): Promise<AutoStoredMemoryResult> {
   const text = sanitizeCapturedText(params.text);
-  if (!text) {
+  const quality = assessMemoryWriteQuality(text);
+  if (!quality.allow) {
+    await auditAutoMemoryDecision({
+      userId: params.userId,
+      sessionId: params.sessionId,
+      namespaceId: params.namespaceId,
+      text,
+      decision: "rejected",
+      reasonCode: quality.reasonCode,
+      policyCode: quality.policyCode,
+      matchedRules: quality.matchedRules,
+      signals: quality.signals,
+      sessionMeta: params.sessionMeta,
+    });
+    const rewriteSuggestion = buildRewriteSuggestion(text) ?? undefined;
     return {
       action: "skipped",
-      warning: "Empty memory text",
+      reasonCode: quality.reasonCode,
+      policyCode: quality.policyCode,
+      matchedRules: quality.matchedRules,
+      signals: quality.signals,
+      warning: quality.warning,
+      rewriteSuggestion,
     };
   }
 
   const matchedSecretCategories = detectSecretCategories(text);
   if (matchedSecretCategories.length > 0) {
+    await auditAutoMemoryDecision({
+      userId: params.userId,
+      sessionId: params.sessionId,
+      namespaceId: params.namespaceId,
+      text,
+      decision: "rejected",
+      reasonCode: "rejected_secret",
+      policyCode: quality.policyCode,
+      matchedRules: quality.matchedRules,
+      signals: quality.signals,
+      sessionMeta: params.sessionMeta,
+    });
     return {
       action: "skipped",
+      reasonCode: "rejected_secret",
+      policyCode: quality.policyCode,
+      matchedRules: quality.matchedRules,
+      signals: quality.signals,
       warning:
         "This looks like a sensitive credential. Store it in your secure vault instead of memories.",
       matchedSecretCategories,
@@ -401,9 +532,9 @@ export async function storeAutoMemory(params: {
         userId: params.userId,
         query: text,
         vector: embedding,
-        topK: 3,
+        topK: 5,
       });
-      const similarHit = hits.find((hit) => hit.score >= CONSOLIDATION_THRESHOLD);
+      const similarHit = hits.find((hit) => hit.score >= NEAR_DUPLICATE_THRESHOLD);
       if (similarHit) {
         const [existing] = await getAgentMemoriesByIds({
           userId: params.userId,
@@ -416,11 +547,50 @@ export async function storeAutoMemory(params: {
           const nextNormalized = normalizeForDedup(text);
           if (existingNormalized === nextNormalized || existing.text.includes(text)) {
             invalidateLocalResultsByMemoryIds(params.userId, [existing.id]);
+            await auditAutoMemoryDecision({
+              userId: params.userId,
+              sessionId: params.sessionId,
+              namespaceId: params.namespaceId,
+              text,
+              decision: "merged",
+              reasonCode: "merged_exact_duplicate",
+              policyCode: quality.policyCode,
+              matchedRules: quality.matchedRules,
+              signals: quality.signals,
+              sessionMeta: params.sessionMeta,
+            });
             return {
               action: "merged",
+              reasonCode: "merged_exact_duplicate",
               id: existing.id,
               consolidated: true,
               mergedWith: existing.id,
+              policyCode: quality.policyCode,
+              matchedRules: quality.matchedRules,
+              signals: quality.signals,
+            };
+          }
+
+          if (isWithinCooldown(existing.createdAt)) {
+            await auditAutoMemoryDecision({
+              userId: params.userId,
+              sessionId: params.sessionId,
+              namespaceId: params.namespaceId,
+              text,
+              decision: "rejected",
+              reasonCode: "rejected_duplicate_cooldown",
+              policyCode: quality.policyCode,
+              matchedRules: quality.matchedRules,
+              signals: quality.signals,
+              sessionMeta: params.sessionMeta,
+            });
+            return {
+              action: "skipped",
+              reasonCode: "rejected_duplicate_cooldown",
+              warning: "Near-duplicate memory inside cooldown window",
+              policyCode: quality.policyCode,
+              matchedRules: quality.matchedRules,
+              signals: quality.signals,
             };
           }
 
@@ -443,11 +613,27 @@ export async function storeAutoMemory(params: {
             // Best effort.
           }
 
+          await auditAutoMemoryDecision({
+            userId: params.userId,
+            sessionId: params.sessionId,
+            namespaceId: params.namespaceId,
+            text,
+            decision: "updated",
+            reasonCode: "updated_existing",
+            policyCode: quality.policyCode,
+            matchedRules: quality.matchedRules,
+            signals: quality.signals,
+            sessionMeta: params.sessionMeta,
+          });
           return {
             action: "updated",
+            reasonCode: "updated_existing",
             id: existing.id,
             consolidated: true,
             mergedWith: existing.id,
+            policyCode: quality.policyCode,
+            matchedRules: quality.matchedRules,
+            signals: quality.signals,
           };
         }
       }
@@ -511,9 +697,26 @@ export async function storeAutoMemory(params: {
     namespaceId: params.namespaceId ?? null,
   }).catch((e) => console.warn("[MicroDream] failed:", e)); // Never block the response
 
+  await auditAutoMemoryDecision({
+    userId: params.userId,
+    sessionId: params.sessionId,
+    namespaceId: params.namespaceId,
+    text,
+    decision: "accepted",
+    reasonCode: "stored",
+    policyCode: quality.policyCode,
+    matchedRules: quality.matchedRules,
+    signals: quality.signals,
+    sessionMeta: params.sessionMeta,
+  });
+
   return {
     action: "stored",
+    reasonCode: "stored",
     id: memory.id,
+    policyCode: quality.policyCode,
+    matchedRules: quality.matchedRules,
+    signals: quality.signals,
   };
 }
 

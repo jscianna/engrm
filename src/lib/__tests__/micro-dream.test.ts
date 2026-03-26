@@ -4,6 +4,7 @@ const embedText = vi.fn();
 const semanticSearchVectors = vi.fn();
 const getAgentMemoriesByIds = vi.fn();
 const updateAgentMemory = vi.fn();
+const createMemoryEdge = vi.fn();
 const extractEntities = vi.fn();
 
 vi.mock("@/lib/embeddings", () => ({
@@ -17,6 +18,7 @@ vi.mock("@/lib/qdrant", () => ({
 vi.mock("@/lib/db", () => ({
   getAgentMemoriesByIds,
   updateAgentMemory,
+  createMemoryEdge,
 }));
 
 vi.mock("@/lib/entities", () => ({
@@ -71,11 +73,17 @@ describe("runMicroDream", () => {
       mergedWith: "existing-1",
     });
 
-    // New memory should be marked as absorbed
     expect(updateAgentMemory).toHaveBeenCalledWith("user-1", "mem-1", {
-      absorbed: true,
-      absorbedBy: "micro-dream:merge:existing-1",
+      supersededBy: "existing-1",
+      confidenceScore: 0.45,
+      lastVerifiedAt: expect.any(String),
     });
+    expect(createMemoryEdge).toHaveBeenCalledWith(expect.objectContaining({
+      userId: "user-1",
+      sourceId: "mem-1",
+      targetId: "existing-1",
+      relationshipType: "updates",
+    }));
   });
 
   it("updates an existing near-duplicate when the new memory is more detailed", async () => {
@@ -108,12 +116,18 @@ describe("runMicroDream", () => {
       mergedWith: "existing-2",
     });
 
-    // Existing gets updated text, new memory gets absorbed
-    expect(updateAgentMemory).toHaveBeenCalledWith("user-1", "existing-2", { text: memoryText });
-    expect(updateAgentMemory).toHaveBeenCalledWith("user-1", "mem-2", {
-      absorbed: true,
-      absorbedBy: "micro-dream:merge:existing-2",
+    expect(updateAgentMemory).toHaveBeenCalledWith("user-1", "existing-2", {
+      text: memoryText,
+      supersededBy: "mem-2",
+      confidenceScore: 0.5,
+      lastVerifiedAt: expect.any(String),
     });
+    expect(createMemoryEdge).toHaveBeenCalledWith(expect.objectContaining({
+      userId: "user-1",
+      sourceId: "existing-2",
+      targetId: "mem-2",
+      relationshipType: "updates",
+    }));
   });
 
   it("flags contradictions when negation overlaps entities with an older memory", async () => {
@@ -149,10 +163,21 @@ describe("runMicroDream", () => {
       contradictionId: "existing-3",
     });
 
-    // Old memory should be absorbed, not just rewritten
     expect(updateAgentMemory).toHaveBeenCalledWith("user-2", "existing-3", {
-      absorbed: true,
-      absorbedBy: "micro-dream:contradiction:mem-3",
+      supersededBy: "mem-3",
+      confidenceScore: 0.35,
+      conflictsWith: ["mem-3"],
+      lastVerifiedAt: expect.any(String),
     });
+    expect(updateAgentMemory).toHaveBeenCalledWith("user-2", "mem-3", {
+      conflictsWith: ["existing-3"],
+      lastVerifiedAt: expect.any(String),
+    });
+    expect(createMemoryEdge).toHaveBeenCalledWith(expect.objectContaining({
+      userId: "user-2",
+      sourceId: "existing-3",
+      targetId: "mem-3",
+      relationshipType: "contradicts",
+    }));
   });
 });

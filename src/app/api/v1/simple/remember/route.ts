@@ -60,7 +60,12 @@ export async function POST(request: Request) {
       return Response.json(
         {
           stored: false,
+          reason_code: result.reasonCode,
+          policy_code: result.policyCode,
+          matched_rules: result.matchedRules,
+          quality_signals: result.signals,
           warning: result.warning,
+          rewrite_suggestion: result.rewriteSuggestion,
           vault_hint: VAULT_HINT_MESSAGE,
           matched_categories: result.matchedSecretCategories,
         },
@@ -72,6 +77,12 @@ export async function POST(request: Request) {
       {
         id: result.id,
         stored: result.action !== "skipped",
+        reason_code: result.reasonCode,
+        policy_code: result.policyCode,
+        matched_rules: result.matchedRules,
+        quality_signals: result.signals,
+        warning: result.warning,
+        rewrite_suggestion: result.rewriteSuggestion,
         consolidated: result.action === "updated" || result.action === "merged" || undefined,
         mergedWith: result.mergedWith,
         updated: result.action === "updated" || undefined,

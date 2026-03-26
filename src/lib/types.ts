@@ -107,6 +107,10 @@ export type MemoryRecord = {
   /** ID of synthesis that absorbed this memory (excluded from direct injection) */
   absorbedBy?: string | null;
   absorbedAt?: string | null;
+  confidenceScore?: number;
+  supersededBy?: string | null;
+  conflictsWith?: string[];
+  lastVerifiedAt?: string | null;
   createdAt: string;
   relationshipCount?: number;
   supersededByCount?: number;

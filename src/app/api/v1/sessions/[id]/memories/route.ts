@@ -4,6 +4,7 @@ import { getSessionById, insertAgentMemory, listSessionMemories } from "@/lib/db
 import { validateApiKey } from "@/lib/api-auth";
 import { FatHippoError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
+import { assessMemoryWriteQuality } from "@/lib/turn-capture";
 
 export const runtime = "nodejs";
 
@@ -45,6 +46,18 @@ export async function POST(
       throw new FatHippoError("VALIDATION_ERROR", { field: "text", reason: "required" });
     }
     const metadata = isObject(body.metadata) ? body.metadata : null;
+    const quality = assessMemoryWriteQuality(body.text);
+    if (!quality.allow) {
+      return Response.json({
+        stored: false,
+        reason_code: quality.reasonCode,
+        policy_code: quality.policyCode,
+        matched_rules: quality.matchedRules,
+        quality_signals: quality.signals,
+        warning: quality.warning,
+      }, { status: 200 });
+    }
+
     const memory = await insertAgentMemory({
       userId: identity.userId,
       title: typeof body.title === "string" ? body.title : undefined,
@@ -61,7 +74,7 @@ export async function POST(
       title: memory.title,
       sourceType: "text",
       memoryType: "episodic",
-      importance: 5,
+      importance: 2,
       vector,
     });
 

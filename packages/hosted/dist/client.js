@@ -101,7 +101,7 @@ export class FatHippoClient {
             .map(mapMemoryRecord)
             .filter((memory) => (options?.excludeAbsorbed ? !memory.absorbed : true))
             .slice(0, options?.limit ?? 30);
-        const syntheses = response.working.slice(0, options?.limit ?? 30).map((item) => ({
+        const syntheses = (response.working ?? []).slice(0, options?.limit ?? 30).map((item) => ({
             id: item.id,
             userId: "",
             title: item.title,

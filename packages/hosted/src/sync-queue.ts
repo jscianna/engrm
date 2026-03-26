@@ -79,7 +79,12 @@ function decrypt(encryptedData: string, ivBase64: string): string {
     throw new Error("Sync queue not initialized. Call initSyncQueue first.");
   }
 
-  const [encrypted, authTagBase64] = encryptedData.split(".");
+  const parts = encryptedData.split(".");
+  if (parts.length !== 2) {
+    console.warn(`[sync-queue] Invalid encrypted data format: expected 2 parts, got ${parts.length}`);
+    return "";
+  }
+  const [encrypted, authTagBase64] = parts;
   const iv = Buffer.from(ivBase64, "base64");
   const authTag = Buffer.from(authTagBase64, "base64");
 

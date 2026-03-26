@@ -39,6 +39,12 @@ npx fathippo setup
 # Check what's configured
 npx fathippo setup --status
 
+# Run readiness diagnostics (auth, MCP, recall health)
+npx fathippo doctor
+
+# JSON output for CI/scripts
+npx fathippo doctor --json
+
 # Remove FatHippo from all platforms
 npx fathippo setup --remove
 

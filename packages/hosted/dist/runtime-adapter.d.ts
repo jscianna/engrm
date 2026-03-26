@@ -104,6 +104,12 @@ export interface FatHippoRememberOutput {
     stored: boolean;
     consolidated?: boolean;
     warning?: string;
+    /** Write-decision audit metadata */
+    audit?: {
+        reasonCode?: string;
+        policyCode?: string;
+        matchedRules?: string[];
+    };
 }
 export interface FatHippoSearchInput {
     query: string;

@@ -6,6 +6,7 @@ import { store } from "../lib/store.js";
 import { search } from "../lib/search.js";
 import { setup } from "../lib/setup.js";
 import { hooks } from "../lib/hooks.js";
+import { doctor } from "../lib/doctor.js";
 
 const program = new Command();
 
@@ -51,5 +52,12 @@ program
   .description("Manage git hooks (install | remove)")
   .option("-k, --key <key>", "FatHippo API key")
   .action(hooks);
+
+program
+  .command("doctor")
+  .description("Run readiness checks for auth, MCP clients, and recall endpoint")
+  .option("-k, --key <key>", "FatHippo API key (or set FATHIPPO_API_KEY)")
+  .option("--json", "Output machine-readable JSON")
+  .action(doctor);
 
 program.parse();

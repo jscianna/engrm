@@ -1,6 +1,7 @@
 import { validateApiKey } from "@/lib/api-auth";
 import { errorResponse } from "@/lib/errors";
 import { getSkills, createAgentSkill } from "@/lib/cognitive-db";
+import { logCognitiveAuditEvent } from "@/lib/cognitive-audit";
 
 export const runtime = "nodejs";
 
@@ -63,6 +64,20 @@ export async function POST(request: Request) {
       technologies: Array.isArray(body.technologies) ? body.technologies as string[] : [],
       source: typeof body.source === "string" ? body.source : "agent-explicit",
       status: typeof body.status === "string" ? body.status : "pending_review",
+    });
+
+    await logCognitiveAuditEvent({
+      request,
+      userId: identity.userId,
+      action: "cognitive.skill.synthesize",
+      resourceType: "cognitive_skill",
+      resourceId: skill.id,
+      metadata: {
+        name: skill.name,
+        source: typeof body.source === "string" ? body.source : "agent-explicit",
+        status: skill.status,
+        category: typeof body.category === "string" ? body.category : "agent-created",
+      },
     });
 
     return Response.json({ created: true, skill });

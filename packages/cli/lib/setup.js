@@ -24,7 +24,7 @@ function existsSync(p) {
   return fs.existsSync(p);
 }
 
-const PLATFORMS = [
+export const PLATFORMS = [
   {
     name: 'Claude Code',
     detect: () =>
@@ -378,7 +378,7 @@ function removeToml(configPath) {
 
 // ─── Check if a platform is already configured ───────────────────────────────
 
-function isPlatformConfigured(platform) {
+export function isPlatformConfigured(platform) {
   if (!fs.existsSync(platform.configPath)) return false;
   try {
     switch (platform.format) {
@@ -413,11 +413,11 @@ function isPlatformConfigured(platform) {
 
 // ─── OpenClaw integration ─────────────────────────────────────────────────────
 
-function detectOpenClaw() {
+export function detectOpenClaw() {
   return existsSync(path.join(homedir, '.openclaw')) || commandExists('openclaw');
 }
 
-function isOpenClawConfigured() {
+export function isOpenClawConfigured() {
   try {
     const result = execSync('openclaw config get plugins.slots.contextEngine', {
       stdio: 'pipe',
@@ -491,7 +491,7 @@ function removeOpenClaw() {
 const FATHIPPO_CONFIG_DIR = path.join(homedir, '.fathippo');
 const FATHIPPO_CONFIG_PATH = path.join(FATHIPPO_CONFIG_DIR, 'config.json');
 
-function readFathippoConfig() {
+export function readFathippoConfig() {
   try {
     return JSON.parse(fs.readFileSync(FATHIPPO_CONFIG_PATH, 'utf-8'));
   } catch {
@@ -603,7 +603,7 @@ async function authenticateWithDeviceFlow() {
   }
 }
 
-async function validateApiKey(key) {
+export async function validateApiKey(key) {
   try {
     const res = await fetch('https://fathippo.ai/api/v1/simple/context', {
       method: 'POST',

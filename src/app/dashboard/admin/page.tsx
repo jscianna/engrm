@@ -135,6 +135,9 @@ export default async function AdminDashboardPage({
             <Button asChild type="button" size="sm" variant="secondary">
               <Link href="/dashboard/cognitive">Open Cognition</Link>
             </Button>
+            <Button asChild type="button" size="sm" variant="secondary">
+              <Link href="/dashboard/admin/audit">Memory Decision Ledger</Link>
+            </Button>
           </CardContent>
         </Card>
 

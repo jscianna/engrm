@@ -10,7 +10,12 @@ import { FatHippoError, errorResponse } from "@/lib/errors";
 import { isObject } from "@/lib/api-v1";
 import { updateAgentMemory, deleteAgentMemoryById, insertAgentMemory } from "@/lib/db";
 import { invalidateAllLocalResultsForUser, invalidateLocalResultsByMemoryIds } from "@/lib/local-retrieval";
-import type { MemoryImportanceTier } from "@/lib/types";
+import {
+  assertClientWritableMemoryType,
+  MemoryWritePolicyError,
+  assessMemoryWritePolicy,
+} from "@/lib/memory-write-policy";
+import type { MemoryImportanceTier, MemoryKind } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -26,6 +31,8 @@ interface SyncResult {
   id: string;
   success: boolean;
   error?: string;
+  reasonCode?: string;
+  policyCode?: string;
 }
 
 /**
@@ -127,6 +134,8 @@ export async function POST(request: Request) {
           id: op.id,
           success: false,
           error: error instanceof Error ? error.message : "Unknown error",
+          reasonCode: error instanceof MemoryWritePolicyError ? error.reasonCode : undefined,
+          policyCode: error instanceof MemoryWritePolicyError ? error.policyCode : undefined,
         });
       }
     }
@@ -165,12 +174,23 @@ async function processCreate(op: SyncOperation): Promise<void> {
     throw new Error("Missing required field: text");
   }
 
+  const requestedMemoryType =
+    typeof payload.memoryType === "string" && payload.memoryType.trim()
+      ? payload.memoryType.trim()
+      : undefined;
+  assertClientWritableMemoryType(requestedMemoryType);
+
+  const quality = assessMemoryWritePolicy(text);
+  if (!quality.allow) {
+    throw new MemoryWritePolicyError(quality);
+  }
+
   await insertAgentMemory({
     userId: op.userId,
     text,
     title: typeof payload.title === "string" ? payload.title : undefined,
     sourceType: typeof payload.sourceType === "string" ? payload.sourceType as "text" | "url" | "file" | "pdf" : "text",
-    memoryType: typeof payload.memoryType === "string" ? payload.memoryType as "semantic" | "episodic" | "procedural" : "episodic",
+    memoryType: (requestedMemoryType as MemoryKind | undefined) ?? "episodic",
     importanceTier: typeof payload.importanceTier === "string" && ["critical", "working", "high", "normal"].includes(payload.importanceTier) 
       ? payload.importanceTier as MemoryImportanceTier 
       : "normal",
@@ -196,7 +216,13 @@ async function processUpdate(op: SyncOperation): Promise<void> {
   // Build update object with only provided fields
   const updates: Record<string, unknown> = {};
   
-  if (typeof payload.text === "string") updates.text = payload.text;
+  if (typeof payload.text === "string") {
+    const quality = assessMemoryWritePolicy(payload.text);
+    if (!quality.allow) {
+      throw new MemoryWritePolicyError(quality);
+    }
+    updates.text = payload.text;
+  }
   if (typeof payload.title === "string") updates.title = payload.title;
   if (typeof payload.importanceTier === "string") updates.importanceTier = payload.importanceTier;
   if (typeof payload.durabilityClass === "string") updates.durabilityClass = payload.durabilityClass;
