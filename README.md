@@ -34,6 +34,10 @@ npx fathippo setup
 
 # Or connect to OpenClaw specifically
 npx @fathippo/connect openclaw
+
+# Uninstall safely (preview first)
+npx fathippo uninstall --dry-run
+npx fathippo uninstall
 ```
 
 ---

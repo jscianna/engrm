@@ -7,6 +7,7 @@ import { search } from "../lib/search.js";
 import { setup } from "../lib/setup.js";
 import { hooks } from "../lib/hooks.js";
 import { doctor } from "../lib/doctor.js";
+import { uninstall } from "../lib/uninstall.js";
 
 const program = new Command();
 
@@ -59,5 +60,15 @@ program
   .option("-k, --key <key>", "FatHippo API key (or set FATHIPPO_API_KEY)")
   .option("--json", "Output machine-readable JSON")
   .action(doctor);
+
+program
+  .command("uninstall")
+  .description("Safely remove FatHippo integrations from coding platforms")
+  .option("--dry-run", "Preview changes without writing files")
+  .option("--target <names>", "Comma-separated targets (e.g. claude code,codex,openclaw)")
+  .option("--yes", "Skip confirmation prompt")
+  .option("--list", "List detected/configured uninstall targets")
+  .option("--restore <backupId>", "Restore configs from a previous uninstall backup")
+  .action(uninstall);
 
 program.parse();

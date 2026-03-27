@@ -45,11 +45,29 @@ npx fathippo doctor
 # JSON output for CI/scripts
 npx fathippo doctor --json
 
-# Remove FatHippo from all platforms
+# Remove FatHippo from all platforms (legacy path)
 npx fathippo setup --remove
 
 # Configure only one platform
 npx fathippo setup --platform "Claude Code"
+
+# List uninstall targets (detected + configured)
+npx fathippo uninstall --list
+
+# Preview uninstall safely
+npx fathippo uninstall --dry-run
+
+# Uninstall from all configured targets
+npx fathippo uninstall
+
+# Uninstall only selected targets
+npx fathippo uninstall --target "claude code,codex"
+
+# Non-interactive uninstall
+npx fathippo uninstall --yes
+
+# Restore after uninstall
+npx fathippo uninstall --restore 2026-03-27T10-45-00-000Z
 
 # Store a memory
 npx fathippo store "Always use connection pooling for Turso"
