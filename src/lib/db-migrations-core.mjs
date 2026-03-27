@@ -12,9 +12,14 @@ function quoteIdentifier(identifier) {
 }
 
 function migrationChecksum(migration) {
-  if (migration.kind === "sql") {
-    return sha256(migration.sql);
+  if (typeof migration.lockedChecksum === "string" && migration.lockedChecksum.length > 0) {
+    return migration.lockedChecksum;
   }
+
+  if (migration.kind === "sql") {
+    return sha256(migration.signature ?? migration.sql);
+  }
+
   return sha256(migration.signature ?? String(migration.up));
 }
 

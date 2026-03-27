@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 import { createClient } from "@libsql/client";
+import crypto from "node:crypto";
+import * as baselineMigration from "../migrations/0001_baseline.mjs";
+import { getMigrationStatus } from "../src/lib/db-migrations-core.mjs";
 
 const errors = [];
 const warnings = [];
@@ -70,6 +73,24 @@ function validateTursoUrl() {
   }
 }
 
+function validateBaselineMigrationImmutability() {
+  const locked = baselineMigration.lockedChecksum;
+  if (!locked) {
+    fail("migrations/0001_baseline.mjs is missing lockedChecksum");
+    return;
+  }
+
+  const actual = crypto.createHash("sha256").update(baselineMigration.sql, "utf8").digest("hex");
+  if (actual !== locked) {
+    fail(
+      `0001_baseline SQL checksum drift detected: locked ${locked}, current ${actual}. Never modify baseline; add a new migration.`,
+    );
+    return;
+  }
+
+  ok(`0001_baseline checksum locked (${locked.slice(0, 12)}…)`);
+}
+
 async function validateSchema() {
   const url = process.env.TURSO_DATABASE_URL;
   const authToken = process.env.TURSO_AUTH_TOKEN;
@@ -137,6 +158,9 @@ async function validateSchema() {
     if (requiredIndexes.every((i) => indexes.has(i))) {
       ok("Required memories indexes present");
     }
+
+    const migrationStatus = await getMigrationStatus({ client });
+    ok(`Migration checksum/status healthy (${migrationStatus.filter((m) => m.applied).length}/${migrationStatus.length} applied)`);
   } catch (err) {
     fail(`Schema preflight query failed: ${err?.message ?? String(err)}`);
   }
@@ -147,6 +171,7 @@ async function main() {
 
   validateEncryptionKey();
   validateTursoUrl();
+  validateBaselineMigrationImmutability();
 
   if (process.env.ENABLE_DIAGNOSTICS === "true") {
     warn("ENABLE_DIAGNOSTICS is set to true — disable before production deploy");
