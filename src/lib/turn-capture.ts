@@ -14,6 +14,11 @@ import {
   invalidateLocalResultsByMemoryIds,
 } from "@/lib/local-retrieval";
 import {
+  deriveImportanceTierFromQuality,
+  evaluateAutoMemoryCandidate,
+  evaluateExplicitMemoryCandidate,
+} from "@/lib/memory-quality";
+import {
   assessMemoryWritePolicy,
   type MemoryWritePolicyCode,
   type MemoryWriteSignals,
@@ -27,58 +32,6 @@ import type { MemoryImportanceTier, MemoryKind, MemoryPeer } from "@/lib/types";
 
 const NEAR_DUPLICATE_THRESHOLD = 0.85;
 const NEAR_DUPLICATE_COOLDOWN_DAYS = 14;
-
-const HIGH_IMPORTANCE_PATTERNS = [
-  /\b(?:always|never|must|required|important|critical|prefers?|preferred)\b/i,
-  /\b(?:my name is|i am|i'm called)\b/i,
-  /\b(?:remember|don't forget)\b/i,
-];
-
-const CRITICAL_PATTERNS = [
-  /\b(?:must always|never ever|absolutely|core principle|fundamental)\b/i,
-];
-
-const NOISE_PATTERNS = [
-  /^```[\s\S]{0,50}```$/,
-  /^\s*$/,
-  /^(ok|okay|thanks|thx|ty|np|no problem|sure|yep|yes|no|maybe)\.?$/i,
-  /^[👍👎🎉✅❌🔥💯]+$/,
-  /^\d+$/,
-  /^https?:\/\/\S+$/,
-];
-
-const TERMINAL_PATTERNS = [
-  /npm (ERR!|WARN)/,
-  /error:\s*\w+Error/i,
-  /at\s+\w+\s+\([^)]+:\d+:\d+\)/,
-  /^\s*\^\s*$/m,
-  /Traceback \(most recent call last\)/,
-  /^warning:/im,
-  /^error:/im,
-];
-
-const CAPTURE_PATTERNS = [
-  /\b(decide|decided|decision)\b/i,
-  /\b(prefer|preference|prefers)\b/i,
-  /\b(always|never|must|should)\b/i,
-  /\b(remember|don't forget|note that)\b/i,
-  /\b(rule|principle|guideline)\b/i,
-  /\b(important|critical|key)\b/i,
-  /\b(identity|i am|my name)\b/i,
-  /\b(constraint|requirement|must not)\b/i,
-  /\b(workflow|process|procedure)\b/i,
-  /\b(plan|approved|ship|release|namespace|installation|mode)\b/i,
-];
-
-const ASSISTANT_DURABLE_PATTERNS = [
-  /\b(?:we(?:'ll| will)?|let's|plan is|decision is|recommended|use|using|configured|set to|remember)\b/i,
-  /\b(?:fixed|resolved|migrated|installed|enabled|disabled|created|updated)\b/i,
-];
-
-const TOOL_DURABLE_PATTERNS = [
-  /\b(?:created|updated|configured|installed|migrated|fixed|resolved|generated|saved|wrote|set)\b/i,
-  /\b(?:namespace|workspace|project|plugin|database|schema|endpoint|config|mode|version)\b/i,
-];
 
 const CODING_KEYWORDS = [
   // Existing
@@ -232,25 +185,6 @@ function sanitizeCapturedText(value: string): string {
   return normalizeWhitespace(value).slice(0, 10_000);
 }
 
-function detectNoise(content: string): boolean {
-  const trimmed = content.trim();
-  if (trimmed.length < 10) {
-    return true;
-  }
-  return NOISE_PATTERNS.some((pattern) => pattern.test(trimmed));
-}
-
-function detectTerminalOutput(content: string): boolean {
-  return TERMINAL_PATTERNS.some((pattern) => pattern.test(content));
-}
-
-function matchesCapturePatterns(content: string): boolean {
-  if (detectNoise(content) || detectTerminalOutput(content) || content.length < 20) {
-    return false;
-  }
-  return CAPTURE_PATTERNS.some((pattern) => pattern.test(content));
-}
-
 export function assessMemoryWriteQuality(content: string): {
   allow: boolean;
   reasonCode: AutoStoredMemoryReasonCode;
@@ -278,21 +212,6 @@ function isWithinCooldown(createdAt: string | Date | null | undefined): boolean 
   const ageMs = Date.now() - created;
   return ageMs <= NEAR_DUPLICATE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
 }
-
-function classifyImportance(text: string): MemoryImportanceTier {
-  for (const pattern of CRITICAL_PATTERNS) {
-    if (pattern.test(text)) {
-      return "critical";
-    }
-  }
-  for (const pattern of HIGH_IMPORTANCE_PATTERNS) {
-    if (pattern.test(text)) {
-      return "high";
-    }
-  }
-  return "normal";
-}
-
 /** Map importance tier to numeric score (1-10) for vector storage and display */
 function importanceTierToScore(tier: MemoryImportanceTier): number {
   switch (tier) {
@@ -315,39 +234,17 @@ function splitCandidateSegments(content: string): string[] {
     .filter(Boolean);
 }
 
-function shouldKeepCandidate(message: TurnCaptureMessage, segment: string): boolean {
-  const role = (message.role ?? "").toLowerCase();
-  if (!segment || detectNoise(segment)) {
-    return false;
-  }
-
-  if (role === "user") {
-    return matchesCapturePatterns(segment);
-  }
-
-  if (role === "assistant") {
-    return (
-      !detectTerminalOutput(segment) &&
-      ASSISTANT_DURABLE_PATTERNS.some((pattern) => pattern.test(segment)) &&
-      matchesCapturePatterns(segment)
-    );
-  }
-
-  if (role === "tool" || role === "toolresult") {
-    const looksDurable =
-      TOOL_DURABLE_PATTERNS.some((pattern) => pattern.test(segment));
-    return !detectTerminalOutput(segment) && looksDurable;
-  }
-
-  return false;
-}
+type TurnMemoryCandidate = {
+  qualityScore: number;
+  role: string;
+  text: string;
+};
 
 export function extractTurnMemoryCandidates(params: {
   captureUserOnly?: boolean;
   messages: TurnCaptureMessage[];
-}): string[] {
-  const seen = new Set<string>();
-  const candidates: string[] = [];
+}): TurnMemoryCandidate[] {
+  const seen = new Map<string, TurnMemoryCandidate>();
 
   for (const message of params.messages) {
     const role = (message.role ?? "").toLowerCase();
@@ -362,23 +259,27 @@ export function extractTurnMemoryCandidates(params: {
 
     const segments = splitCandidateSegments(content);
     for (const segment of segments) {
-      if (!shouldKeepCandidate(message, segment)) {
+      const assessment = evaluateAutoMemoryCandidate(segment, role);
+      if (!assessment.keep) {
         continue;
       }
+
       const candidate = sanitizeCapturedText(segment);
       const key = normalizeForDedup(candidate);
-      if (seen.has(key)) {
-        continue;
-      }
-      seen.add(key);
-      candidates.push(candidate);
-      if (candidates.length >= 12) {
-        return candidates;
+      const existing = seen.get(key);
+      if (!existing || assessment.finalScore > existing.qualityScore) {
+        seen.set(key, {
+          text: candidate,
+          role,
+          qualityScore: assessment.finalScore,
+        });
       }
     }
   }
 
-  return candidates;
+  return [...seen.values()]
+    .sort((left, right) => right.qualityScore - left.qualityScore)
+    .slice(0, 8);
 }
 
 async function auditAutoMemoryDecision(params: {
@@ -420,7 +321,9 @@ async function auditAutoMemoryDecision(params: {
 }
 
 export async function storeAutoMemory(params: {
+  captureMode?: "auto" | "explicit";
   namespaceId?: string | null;
+  role?: string | null;
   sessionId?: string | null;
   text: string;
   userId: string;
@@ -480,8 +383,24 @@ export async function storeAutoMemory(params: {
     };
   }
 
+  const captureAssessment =
+    params.captureMode === "auto"
+      ? evaluateAutoMemoryCandidate(text, params.role ?? "user")
+      : evaluateExplicitMemoryCandidate(text);
+
+  if (!captureAssessment.keep) {
+    return {
+      action: "skipped",
+      warning: `Skipped low-signal memory (${captureAssessment.reason})`,
+    };
+  }
+
   const memoryType: MemoryKind = classifyMemoryType(text.slice(0, 60), text);
-  const importanceTier = classifyImportance(text);
+  const importanceTier = deriveImportanceTierFromQuality(
+    text,
+    captureAssessment.finalScore,
+    captureAssessment.scoringResult,
+  );
 
   let entities: string[] = [];
   try {
@@ -518,6 +437,16 @@ export async function storeAutoMemory(params: {
   } catch (error) {
     console.error("Memory classification failed:", error);
   }
+
+  structuredMetadata = {
+    ...(structuredMetadata ?? {}),
+    capture: {
+      mode: params.captureMode ?? "explicit",
+      qualityScore: Number(captureAssessment.finalScore.toFixed(2)),
+      qualitySignals: captureAssessment.scoringResult.signals,
+      sourceRole: params.role ?? null,
+    },
+  };
 
   let embedding: number[] | null = null;
   try {
@@ -742,7 +671,9 @@ export async function captureTurnMemories(params: {
       userId: params.userId,
       namespaceId: params.namespaceId,
       sessionId: params.sessionId,
-      text: candidate,
+      captureMode: "auto",
+      role: candidate.role,
+      text: candidate.text,
     });
 
     if (result.id) {

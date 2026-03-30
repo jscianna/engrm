@@ -13,6 +13,11 @@ import { callLLM, LLMError } from "./llm";
 interface RerankableMemory {
   id: string;
   text: string;
+  memoryType?: string;
+  importanceTier?: string;
+  durabilityClass?: string;
+  feedbackScore?: number;
+  accessCount?: number;
 }
 
 type RerankProvider = "voyage" | "llm";
@@ -54,6 +59,12 @@ Score each memory from 0-100 based on:
 - Semantic relevance: Does the memory content directly answer or relate to the query?
 - Intent match: Does the memory address what the user is actually asking for?
 - Information value: Would including this memory help answer the query?
+- Durability and specificity: Prefer stable decisions, preferences, constraints, fixes, and config facts.
+
+Penalize memories that look like:
+- acknowledgements, vague chatter, or progress updates
+- raw tool output, terminal logs, JSON blobs, or copied code
+- transient status notes that do not help answer the query
 
 Scoring guidelines:
 - 90-100: Perfect match - directly answers the query
@@ -249,7 +260,18 @@ export async function rerankMemories<T extends RerankableMemory>(
  */
 function buildRerankPrompt(query: string, candidates: RerankableMemory[]): string {
   const candidateList = candidates
-    .map((m, i) => `\n[${i + 1}] ID: ${m.id}\nContent: ${m.text.slice(0, 500)}${m.text.length > 500 ? "..." : ""}`)
+    .map((m, i) => {
+      const hints = [
+        m.memoryType ? `type=${m.memoryType}` : null,
+        m.importanceTier ? `importance=${m.importanceTier}` : null,
+        m.durabilityClass ? `durability=${m.durabilityClass}` : null,
+        typeof m.feedbackScore === "number" ? `feedback=${m.feedbackScore}` : null,
+        typeof m.accessCount === "number" ? `access=${m.accessCount}` : null,
+      ].filter(Boolean);
+
+      const hintBlock = hints.length > 0 ? `\nHints: ${hints.join(", ")}` : "";
+      return `\n[${i + 1}] ID: ${m.id}${hintBlock}\nContent: ${m.text.slice(0, 500)}${m.text.length > 500 ? "..." : ""}`;
+    })
     .join("\n");
 
   return `Query: "${query}"\n\nEvaluate the relevance of each memory to this query:${candidateList}`;

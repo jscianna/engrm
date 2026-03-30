@@ -45,8 +45,8 @@ import {
   countMissingConstraints,
   recordCompactionSafetySample,
 } from "@/lib/compaction-safety";
+import { rankMemoriesForInjection } from "@/lib/memory-quality";
 import { detectProjectScope } from "@/lib/project-scope";
-import type { MemoryRecord } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -307,7 +307,6 @@ export async function POST(request: Request) {
     const criticalById = new Map(allCritical.map((memory) => [memory.id, memory]));
     
     let criticalMemories: typeof allCritical = [];
-    let hydeDocument: string | undefined;
     if (allCritical.length > 0 && maxCritical > 0) {
       // First pass: get initial embedding (may use legacy HyDE flag)
       const criticalVector = enableHyDE
@@ -330,6 +329,11 @@ export async function POST(request: Request) {
         .filter((h) => h.score > minCriticalRelevance)
         .map((h) => criticalById.get(h.item.id) ?? null)
         .filter((memory): memory is NonNullable<typeof memory> => Boolean(memory));
+
+      candidateMemories = rankMemoriesForInjection(candidateMemories, {
+        temporalQuery: false,
+        minScore: 0.75,
+      }).map((item) => item.memory);
 
       // Confidence-gated reranking for critical memories
       if ((enableRerank || hostedRerankEnabled) && candidateMemories.length > maxCritical) {
@@ -385,7 +389,8 @@ export async function POST(request: Request) {
 
       // Parse temporal references for time-based boosting
       const temporalParse = enableTemporal ? parseTemporalQuery(message) : null;
-      const hasTemporalWindow = temporalParse?.hasTemporalReference && temporalParse?.timeWindow;
+      const hasTemporalWindow = Boolean(temporalParse?.hasTemporalReference && temporalParse?.timeWindow);
+      const timeWindow = temporalParse?.timeWindow;
 
       // Run searches for all query variants in parallel
       const allSearchResults = await Promise.all(
@@ -404,9 +409,6 @@ export async function POST(request: Request) {
                   // Legacy: always use HyDE when flag is set
                   const hydeResult = await embedWithHyDE(queryText, true);
                   vector = hydeResult.embedding;
-                  if (hydeResult.usedHyDE) {
-                    hydeDocument = hydeResult.hypotheticalDocument;
-                  }
                 }
               } else {
                 vector = await embedQuery(queryText);
@@ -504,6 +506,11 @@ export async function POST(request: Request) {
           (m) => m.importanceTier === "high" || m.importanceTier === "normal"
         );
 
+        relevantMemories = rankMemoriesForInjection(relevantMemories, {
+          temporalQuery: hasTemporalWindow,
+          minScore: 0.95,
+        }).map((item) => item.memory);
+
         // Apply type-based boost when query intent matches memory type
         let scoredMemories: Array<{ memory: typeof relevantMemories[0]; score: number; originalIndex: number }> = [];
         if (queryIntent !== 'general' && relevantMemories.length > 1 && typeBoostFactor > 1.0) {
@@ -526,12 +533,12 @@ export async function POST(request: Request) {
         }
 
         // Apply temporal boost when temporal references are detected
-        if (hasTemporalWindow && temporalParse.timeWindow && relevantMemories.length > 0) {
+        if (timeWindow && relevantMemories.length > 0) {
           const memoriesToBoost = scoredMemories.length > 0
             ? scoredMemories
             : relevantMemories.map((m, i) => ({ memory: m, score: 1 / (i + 1), originalIndex: i }));
 
-          const boosted = applyTemporalBoost(memoriesToBoost, temporalParse.timeWindow, 1.4);
+          const boosted = applyTemporalBoost(memoriesToBoost, timeWindow, 1.4);
           boosted.sort((a, b) => b.score - a.score);
           relevantMemories = boosted.map((s) => s.memory);
         }
@@ -550,7 +557,6 @@ export async function POST(request: Request) {
           hostedMetrics.usedHostedHyde = !hydeResult.gated;
           
           if (!hydeResult.gated && hydeResult.hypotheticalDocument) {
-            hydeDocument = hydeResult.hypotheticalDocument;
             // Re-search with HyDE embedding for better recall
             const hydeHits = await semanticSearchVectors({
               userId: identity.userId,

@@ -51,6 +51,7 @@ export async function POST(request: Request) {
     const result = await storeAutoMemory({
       userId: identity.userId,
       namespaceId: resolved.namespaceId,
+      captureMode: "explicit",
       text,
       peer,
       sessionMeta,
